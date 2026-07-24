@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  foundry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout with pinned dependencies
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          submodules: recursive
+
+      - name: Install Foundry 1.7.1
+        uses: foundry-rs/foundry-toolchain@b00af27efadbc7b4ca8b82abbd903b17cc874d2a
+        with:
+          version: v1.7.1
+
+      - name: Build
+        run: forge build
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      - name: Run deterministic local suite
+        env:
+          FOUNDRY_PROFILE: ci
+        run: >-
+          forge test
+          --no-match-path "test/fork/*"
+          --fuzz-seed 0x5245534552564f4952
+
