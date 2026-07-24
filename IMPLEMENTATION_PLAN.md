@@ -616,7 +616,26 @@ Review checklist:
 - v1 has not been deployed or funded on a persistent network; and
 - all documented skips have a mathematical or scope justification.
 
-## 12. Cut order
+## 12. Independent final review
+
+After Gates 0–3 are green, request an independent review from Claude Opus 5.
+The reviewer receives:
+
+- `V1_SCOPE.md`, `SPEC.md`, `IMPLEMENTATION_PLAN.md`, `REVIEW.md`, and
+  `REVIEW_FINDINGS.md`;
+- all Reservoir source, tests, scripts, notices, and dependency pins; and
+- the exact local, fork, and demo acceptance outputs.
+
+The review must cover frozen-architecture compliance, two-pass VM semantics,
+custody and authorization, physical/Aqua accounting, bounded reinvestment,
+callback safety, fork-fixture validity, license compliance, test coverage, and
+demo reproducibility. Record its disposition in `FINAL_REVIEW.md`.
+
+Apply only confirmed findings. Record false positives with evidence, rerun every
+affected gate after fixes, and do not claim completion while a confirmed
+material finding remains open.
+
+## 13. Cut order
 
 Already cut from the hard path:
 
@@ -643,7 +662,7 @@ Do not cut:
 - non-fatal reinvest failure; or
 - same-state quote/swap equality.
 
-## 13. Agent task template
+## 14. Agent task template
 
 Every implementation-agent prompt should include:
 

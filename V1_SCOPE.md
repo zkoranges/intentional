@@ -172,7 +172,14 @@ make demo-aave
 Reservoir v1 is:
 
 - **demo-ready** when Gates 0, 1, and 3 pass from a clean local checkout; and
-- **submission-ready** when Gate 2 also passes against the pinned fork.
+- **submission-ready** when Gate 2 also passes against the pinned fork and the
+  independent final review below is closed.
+
+After development gates are green, a Claude Opus 5 reviewer receives the
+normative documents, implementation, and exact gate outputs. Confirmed findings
+are fixed and the affected gates are rerun; false positives are recorded but do
+not change the implementation. Completion is not claimed until that review is
+closed.
 
 Optional work begins only after both statuses are repeatable. The first
 optional amplification is Morpho Vault V1 replacing the deterministic
