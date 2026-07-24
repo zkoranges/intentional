@@ -37,9 +37,12 @@ test-fork:
 	forge test --match-path "$(AAVE_FORK_TEST)" --fork-url "$(ETH_RPC_URL)"
 
 demo:
-	forge script script/Demo.s.sol:Demo -vv
+	@output="$$(forge script script/Demo.s.sol:Demo -vv 2>&1)" || { \
+		printf '%s\n' "$$output"; \
+		exit 1; \
+	}; \
+	printf '%s\n' "$$output" | sed -n '/== Logs ==/,$$ { /^  /s/^  //p; }'
 
 demo-aave:
 	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required" && exit 1)
 	forge test --match-path "$(AAVE_FORK_TEST)" --fork-url "$(ETH_RPC_URL)" -vv
-
