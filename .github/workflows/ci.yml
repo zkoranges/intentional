@@ -36,3 +36,5 @@ jobs:
           --no-match-path "test/fork/*"
           --fuzz-seed 0x5245534552564f4952
 
+      - name: Run judge demo
+        run: make demo

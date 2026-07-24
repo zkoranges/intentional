@@ -14,3 +14,17 @@ Each dependency retains its upstream license and notice files inside its
 submodule. SwapVM and Aqua have source-available licenses rather than a generic
 permissive license; their complete terms control use and distribution.
 
+## Reservoir modifications
+
+Reservoir adds new files that extend SwapVM
+`0817db4a618d975648e018222aedcdeb1206959e`; no upstream file is modified in
+place. First authored on 2026-07-24 and licensed under
+`LicenseRef-Degensoft-SwapVM-1.1`:
+
+- `src/instructions/ReserveClamp.sol`
+- `src/opcodes/ReservoirOpcodes.sol`
+- `src/routers/ReservoirSwapVMRouter.sol`
+- `src/interfaces/IAquaReserveAdapter.sol`
+- `src/interfaces/IAquaReserveResolver.sol`
+- `src/accounts/ReservoirMakerAccount.sol`
+- `src/adapters/ERC4626ReserveAdapter.sol`

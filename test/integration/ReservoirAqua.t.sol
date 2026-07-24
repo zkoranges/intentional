@@ -337,7 +337,7 @@ contract ReservoirAquaIntegrationTest is Test {
         (uint256 aquaInBefore, uint256 aquaOutBefore) =
             aqua.safeBalances(address(maker), address(router), orderHash, tokenIn, tokenOut);
 
-        vm.expectRevert();
+        vm.expectPartialRevert(RevertingERC4626.ForcedVaultRevert.selector);
         router.swap(order, REQUESTED_INPUT, _takerTraits(true, true, abi.encode(quotedOutput)));
 
         assertEq(input.balanceOf(address(this)), takerInputBefore);
@@ -363,7 +363,11 @@ contract ReservoirAquaIntegrationTest is Test {
         uint256 takerInputBefore = input.balanceOf(address(this));
         uint256 takerOutputBefore = _token(tokenOut).balanceOf(address(this));
 
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TakerTraitsLib.TakerTraitsInsufficientMinOutputAmount.selector, SAFE_CAPACITY, quotedOutput
+            )
+        );
         router.swap(order, REQUESTED_INPUT, _takerTraits(true, true, abi.encode(quotedOutput)));
 
         assertEq(input.balanceOf(address(this)), takerInputBefore);

@@ -42,6 +42,16 @@ contract ERC4626ReserveAdapterTest is Test {
         assertEq(cost, 0);
     }
 
+    function test_AvailableForClampsExactlyAtBufferedCapacityBoundary() public view {
+        (uint256 below,) = adapter.availableFor(address(asset), 1989);
+        (uint256 atCapacity,) = adapter.availableFor(address(asset), 1990);
+        (uint256 above,) = adapter.availableFor(address(asset), 1991);
+
+        assertEq(below, 1989);
+        assertEq(atCapacity, 1990);
+        assertEq(above, 1990);
+    }
+
     function test_AvailableForClampsWantedAtZeroAndOne() public view {
         (uint256 zero,) = adapter.availableFor(address(asset), 0);
         (uint256 one,) = adapter.availableFor(address(asset), 1);

@@ -916,33 +916,33 @@ yield-only NAV delta or the Morpho clamp fixture.
 
 ### Essential PoC
 
-- [ ] dependencies pinned and project builds reproducibly;
-- [ ] the minimal `0x92` / nested-loop / two-pass mechanism spike passes before
+- [x] dependencies pinned and project builds reproducibly;
+- [x] the minimal `0x92` / nested-loop / two-pass mechanism spike passes before
   the production architecture is frozen;
-- [ ] disposable-account constraint is documented; no persistent deployment is used;
-- [ ] vanilla Aqua swap passes;
-- [ ] adapter unit suite passes;
-- [ ] the deterministic exact-in hero swap begins with zero maker idle
+- [x] disposable-account constraint is documented; no persistent deployment is used;
+- [x] vanilla Aqua swap passes;
+- [x] adapter unit suite passes;
+- [x] the deterministic exact-in hero swap begins with zero maker idle
   underlying for both assets and settles end to end;
-- [ ] oversized candidate output clamps, with `actualInput <= requestedInput`
+- [x] oversized candidate output clamps, with `actualInput <= requestedInput`
   universally and strict reduction in the hero fixture;
-- [ ] exact-out unit and local integration correctness tests pass outside the
+- [x] exact-out unit and local integration correctness tests pass outside the
   demo path;
-- [ ] the same hero flow with failed reinvest still settles and leaves input
+- [x] the same hero flow with failed reinvest still settles and leaves input
   idle;
-- [ ] exact physical and Aqua accounting assertions pass;
-- [ ] non-binding core invariants pass; and
-- [ ] binding/additivity exceptions are documented.
+- [x] exact physical and Aqua accounting assertions pass;
+- [x] non-binding core invariants pass; and
+- [x] binding/additivity exceptions are documented.
 
 ### Submission hard cut
 
-- [ ] Aave Stata USDC fork swap passes;
-- [ ] `vm.warp` shows increased maker NAV;
-- [ ] real-vault reinvest gas is measured and a positive Aave reinvest smoke
+- [x] Aave Stata USDC fork swap passes;
+- [x] `vm.warp` shows increased maker NAV;
+- [x] real-vault reinvest gas is measured and a positive Aave reinvest smoke
   succeeds under its sealed gas limit;
-- [ ] the six hero values are printed without requiring VM knowledge;
-- [ ] one-command demo is deterministic; and
-- [ ] README explains interfaces, custody, invariants, quote consistency, licenses, and cut scope.
+- [x] the six hero values are printed without requiring VM knowledge;
+- [x] one-command demo is deterministic; and
+- [x] README explains interfaces, custody, invariants, quote consistency, licenses, and cut scope.
 
 ### Optional stretch
 

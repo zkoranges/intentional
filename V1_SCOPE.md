@@ -1,6 +1,6 @@
 # Reservoir v1 scope lock
 
-> Status: implementation-ready
+> Status: submission-ready — Gates 0–3 and the independent final review are green
 >
 > Scope frozen: 2026-07-24
 >

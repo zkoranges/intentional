@@ -24,6 +24,7 @@ runs = 128
 runs = 128
 depth = 32
 fail_on_revert = true
+timeout = 120
 
 [fmt]
 single_line_statement_blocks = "multi"
@@ -32,4 +33,3 @@ override_spacing = false
 bracket_spacing = true
 int_types = "long"
 number_underscore = "thousands"
-
