@@ -7,7 +7,7 @@ flowchart TB
     Q["1 · Quote<br/>factor signs off-chain<br/>valid ≤ 15 minutes"]
     A["2 · Accept<br/>seller sends the only transaction"]
     S["3 · Settle<br/>claim acquired, then payment released"]
-    C["4 · Collect<br/>factor redeems at par when the queue finalizes"]
+    C["4 · Collect<br/>factor collects the payout when the queue finalizes"]
 
     Q --> A --> S --> C
     S -.->|"any step fails"| R(["revert — nothing settles"])
@@ -48,12 +48,12 @@ flowchart TB
     QUEUE ==>|"withdrawal claim, minted to the factor"| FACTOR
     AAVE ==>|"exact payment, nothing more"| FUND
     FUND ==>|"WETH"| SELLER
-    QUEUE ==>|"ETH at par, days later"| FACTOR
+    QUEUE ==>|"eventual ETH after finalization,<br/>impairment risk"| FACTOR
 ```
 
 ## 4. Collect
 
-When the queue finalizes, the factor redeems the claim at full value. The difference between face value and the quoted price is its return.
+When the queue finalizes, the factor collects what the queue actually pays — normally close to face value, but impairment is possible and stays with the factor. The difference between the collected amount and the quoted price is its return.
 
 ## Two kinds of claim
 
