@@ -1,250 +1,269 @@
-# Reservoir
+# Reservoir v2
 
-> **Maker liquidity earns yield until the exact moment it is traded.**
+> **Future protocol cash flow → immediate WETH, atomically.**
 
-Reservoir separates Aqua's virtual trading liquidity from idle custody.
-Between trades, a disposable maker account owns ERC-4626 shares instead of
-underlying tokens. At settlement, a SwapVM instruction limits output to what
-the vault can safely deliver now, the maker materializes exactly that output,
-and the received input is reinvested on a bounded best-effort path.
+Reservoir v2 is a state-contingent settlement engine for asynchronous claims.
+A seller receives an exact, factor-signed payment if and only if the complete
+quoted claim is irrevocably acquired in the same transaction. The factor's
+standby WETH stays productive in Aave StataWETH until that payment is needed.
 
-The v1 proof is intentionally narrow: one constrained exact-in trade, one
-generic ERC-4626 adapter, and one real Aave StataTokenV2 USDC fork integration.
-It is a production-style proof of the custody and settlement mechanism, not an
-audited production deployment.
+The first live product is Lido:
 
-## See it in one command
+```text
+seller stETH
+    -> canonical Lido withdrawal request minted directly to factor
+    -> exact WETH materialized from canonical Aave StataWETH
+    -> seller paid atomically
+```
 
-Requirements: Git, GNU Make, and
-[Foundry v1.7.1](https://github.com/foundry-rs/foundry/releases/tag/v1.7.1).
+The standards-hard reference path handles an ERC-7540/ERC-8161 request that
+changes after quote signing:
+
+```text
+quote:       100 Pending +  0 Claimable
+fill:         60 Pending + 40 Claimable
+settlement:   transfer 60 + redeem 40 + verify both
+payment:      exact fixed WETH, only after complete acquisition
+```
+
+Reservoir v1—the earlier Aqua/SwapVM ERC-4626 reserve engine—remains in this
+repository and green. v2 is a separate settlement kernel that reuses v1's
+generic ERC-4626 reserve adapter.
+
+This is an unaudited hackathon beta. Mainnet funding is deliberately separate
+from deployment and occurs only after the exact chain-1 rehearsal, full test
+matrix, frontend checks, and final independent review.
+
+**Current deployment status:** no Reservoir contract is deployed or funded on
+a persistent network. The public build enables the canonical Lido
+originate/claim flows and keeps instant Reservoir fills disabled. After the
+reviewed kernel and Lido adapter are deployed, their exact public addresses
+must be compiled into the frontend before that route can request approval.
+
+## What is working
+
+- Non-upgradeable EIP-712 settlement kernel with EOA and ERC-1271 signatures.
+- Seller-called, fill-or-kill execution with nonce, nonce-floor, cancellation,
+  15-minute maximum quote lifetime, pause, and mutable adapter allowlist.
+- Productive WETH funding with pause, top-up, exact materialization, and
+  paused asset/share recovery.
+- Lido adapter that measures stETH transfer rounding, reads live queue bounds
+  and pause state, reconciles the minted unstETH, and leaves no flow dust.
+- ERC-7540/8161 adapter that acquires Pending and Claimable legs in one fill
+  using measured deltas and signed rate floors.
+- Canonical mainnet-fork tests for Lido, stETH, WETH, Aave V3 StataWETH/
+  StataUSDC, Aqua, and SwapVM. Fork acceptance imports no protocol mock.
+- Public dark frontend with injected-wallet connection and canonical Lido
+  originate/claim flows. Signed Reservoir quote execution is implemented but
+  fail-closed until the reviewed kernel/adapter addresses are build-pinned.
+- Offline factor quote CLI; no factor key is present in the browser or repo.
+
+No production ERC-8161 endpoint is claimed. That adapter remains a
+standards-conformant reference until a reviewed live vault implements the
+required interfaces.
+
+## The live product rehearsal
+
+Requirements:
+
+- Foundry v1.7.1;
+- Node.js 22.13 or newer;
+- GNU Make; and
+- an archive-capable Ethereum RPC.
+
+Initialize the exact pinned dependencies:
 
 ```sh
 git submodule update --init --recursive
-make demo
+npm --prefix frontend ci
 ```
 
-The RPC-free demo runs the same asserted scenario as the integration suite and
-prints exactly:
-
-```text
-Vault NAV before -> after 1000000000000000000000 1099999999999999999999
-Requested input 1000000000000000000000
-Candidate output 500000000000000000000
-Safely deliverable output 100000000000000000000
-Actual input / output 111111111111111111112 100000000000000000000
-Reinvestment result success; forced failure survived
-```
-
-Those values tell the complete story:
-
-1. maker inventory starts entirely in vault shares;
-2. the fixed shares gain NAV without changing Aqua's balance;
-3. the XYC curve proposes 500 tokens of output;
-4. current vault liquidity safely supports only 100;
-5. Reservoir gives the taker 100 and charges about 111.11 instead of the
-   requested 1,000; and
-6. normal reinvestment succeeds, while a clean-fixture repeat with a broken
-   vault still settles and leaves the input safely idle.
-
-All local gates run with:
+Run the exact release contracts on a disposable chain-1 fork:
 
 ```sh
-make build
-make fmt
-make test
+ETH_RPC_URL="https://your-archive-mainnet-rpc.example" make live-product-e2e
 ```
+
+The rehearsal refuses any chain other than chain 1 and any block other than
+`25,604,561`. It generates fresh disposable signers, deploys the release
+contracts, wraps and deposits real WETH into canonical Aave StataWETH, obtains
+real stETH through canonical Lido, generates a target-chain-timestamped quote,
+and fills it through the same ABI/envelope used by the web app.
+
+The asserted output is intentionally short:
+
+```text
+canonical Aqua reserve swap passed
+exact stETH approval
+canonical unstETH minted to factor
+Lido shares acquired
+exact WETH seller payment
+remaining productive reserve NAV
+```
+
+This is not a mocked simulation. The only disposable pieces are the newly
+deployed Reservoir contracts and user accounts. Protocol calls target
+production bytecode and state.
+
+## Complete verification
+
+```sh
+forge fmt --check
+forge build
+make test
+ETH_RPC_URL="$ETH_RPC_URL" make test-fork
+npm --prefix frontend run lint
+npm --prefix frontend test
+npm --prefix frontend run build:vercel
+```
+
+Release record on 2026-07-25:
+
+| Surface | Result |
+|---|---:|
+| Deterministic Foundry suites | 186 passed, 0 failed, 0 skipped |
+| Production-contract fork suites | 9 passed, 0 failed, 0 skipped |
+| Exact deploy/sign/approve/fill rehearsal | passed |
+| Frontend rendered tests | 5 passed |
+| Vinext/Sites build | passed |
+| Native Next.js/Vercel build | passed |
+
+Fork methodology and every canonical/disposable boundary are documented in
+[`docs/V2_FORK_REALISM.md`](docs/V2_FORK_REALISM.md).
+
+## Web app
+
+The frontend connects an injected wallet and enforces Ethereum mainnet. It:
+
+- reads canonical Aqua, SwapVM, stETH, WETH, Lido queue, and StataWETH code and
+  state;
+- shows the wallet's balances and recent unstETH requests;
+- uses exact approval and simulation before canonical Lido origination;
+- claims finalized unstETH through the canonical queue;
+- parses a factor-signed quote JSON envelope only after a reviewed deployment
+  is build-pinned;
+- requires the exact pinned kernel/adapter, then validates hashes, signature,
+  seller, nonce, deadline, funding capacity, allowance, and balance; and
+- simulates before fill, then independently checks the seller's canonical WETH
+  delta and canonical Lido request owner/share amount in addition to the bound
+  `ClaimSettled` event.
+
+The factor creates quotes outside the browser:
+
+```sh
+ETH_RPC_URL=... \
+FACTOR_PRIVATE_KEY=... \
+KERNEL_ADDRESS=... \
+LIDO_ADAPTER_ADDRESS=... \
+SELLER_ADDRESS=... \
+REQUESTED_STETH=0.9 \
+PAYMENT_WETH=0.89775 \
+npm --prefix frontend run quote:lido > /tmp/reservoir-quote.json
+```
+
+Never commit quote files, private keys, RPC URLs, Vercel credentials, or
+deployment environments. See [`frontend/README.md`](frontend/README.md).
 
 ## Architecture
 
 ```text
-quote
-  Taker -> ReservoirSwapVMRouter
-             ReserveClamp -> maker.availableFor -> ERC4626ReserveAdapter
-             XYCSwap      -> candidate output / inverse-recomputed input
-
-output-first settlement
-  maker.preTransferOut -> adapter.materialize -> vault.withdraw -> maker
-  Aqua.pull(maker -> taker)
-  Aqua.push(taker -> maker)
-  maker.postTransferIn -> bounded adapter.reinvest -> vault.deposit shares to maker
+factor signs exact quote
+          |
+seller --+--> AsyncClaimSettlement
+                    |
+          acquire first, pay second
+             +------+------------------+
+             |                         |
+      IClaimAdapter          ProductiveFundingAccount
+       |        |                       |
+   ERC-8161   Lido             ERC4626ReserveAdapter
+   reference  live                       |
+                                   Aave StataWETH
 ```
 
-The components are:
+[`AsyncClaimSettlement`](src/claims/AsyncClaimSettlement.sol) validates the
+sealed configuration, seller, signature, hashes, deadline, nonce, adapter, and
+full payment capacity. It consumes the nonce before external calls, acquires
+and verifies the claim, then materializes and pays exactly. Any later failure
+rolls the entire transaction back.
 
-- [`ReservoirSwapVMRouter`](src/routers/ReservoirSwapVMRouter.sol), which
-  extends the pinned Aqua router and handles raw opcode `0x92`;
-- [`ReserveClamp`](src/instructions/ReserveClamp.sol), a zero-argument wrapper
-  whose tail must be exactly one pure `XYCSwap`;
-- [`ReservoirMakerAccount`](src/accounts/ReservoirMakerAccount.sol), the Aqua
-  maker, share owner, reserve resolver, and authenticated hook target; and
-- [`ERC4626ReserveAdapter`](src/adapters/ERC4626ReserveAdapter.sol), one
-  immutable maker/vault/asset binding per reserve.
+[`ProductiveFundingAccount`](src/claims/ProductiveFundingAccount.sol) holds
+only WETH or StataWETH shares. It exposes view-safe capacity, exact
+materialization, reinvestment/top-up, pause, and paused recovery.
 
-The canonical program is:
+[`LidoWithdrawalClaimAdapter`](src/claims/adapters/LidoWithdrawalClaimAdapter.sol)
+pulls the signed maximum stETH, requests only the measured receipt, enforces
+live Lido limits and a signed shares floor, mints directly to the factor, and
+returns any transaction-relative residue.
 
-```text
-[Deadline?] [Salt?] [ReserveClamp] [XYCSwap]
-```
+[`ERC8161RedeemClaimAdapter`](src/claims/adapters/ERC8161RedeemClaimAdapter.sol)
+handles both Pending and Claimable balances. It never assumes those states are
+exclusive and never trusts preview functions or return values in place of
+measured postconditions.
 
-Every non-`0x92` opcode delegates to the upstream `AquaOpcodes` dispatcher.
-For binding exact-in trades, `ReserveClamp` evaluates XYC once to get candidate
-output, caps that output, then evaluates the same XYC tail as exact-out to find
-the least input required for the capped amount. It restores the mode and
-program-counter state required by the pinned
-`XYCSwapRecomputeDetected` guards. The hero therefore guarantees
-`actualInput <= requestedInput`, with a visible strict reduction in this
-fixture.
+## Scope and risk
 
-## Reserve interface and custody
+v2 does not build a marketplace, solver network, indexer, price oracle,
+predictive model, quote backend, custody wallet, cross-currency settlement,
+request-ID-zero support, generic multi-ID routing, or live ERC-8161
+integration.
 
-The frozen interface is
-[`IAquaReserveAdapter`](src/interfaces/IAquaReserveAdapter.sol):
+The factor prices queue time, impairment, slashing, gas, and capital cost
+offchain. Lido factoring is expected to be episodic stress liquidity, not an
+always-on replacement for selling stETH. The UI should not imply a fair-price
+guarantee.
 
-```solidity
-function availableFor(address asset, uint256 wanted)
-    external view returns (uint256 canDeliver, uint256 exitCostWad);
-function materialize(address asset, uint256 amount)
-    external returns (uint256 delivered);
-function reinvest(address asset) external;
-function idleThreshold(address asset) external view returns (uint256);
-```
+The beta is non-upgradeable and operator-managed. Use a capped reserve, short
+quotes, active pause/revocation monitoring, and preferably an ERC-1271 smart
+account. The Lido queue is an upgradeable proxy; canonical address binding
+does not freeze its implementation.
 
-For v1:
+Normative v2 documents:
 
-```text
-canDeliver =
-  min(wanted, max(0, maker idle + vault.maxWithdraw(maker) - asset buffer))
-exitCostWad = 0
-```
+- [`V2_SCOPE.md`](V2_SCOPE.md)
+- [`V2_SPEC.md`](V2_SPEC.md)
+- [`V2_IMPLEMENTATION_PLAN.md`](V2_IMPLEMENTATION_PLAN.md)
+- [`V2_THREAT_MODEL.md`](V2_THREAT_MODEL.md)
+- [`V2_REVIEW_FINDINGS.md`](V2_REVIEW_FINDINGS.md)
 
-A nonzero exit cost is rejected rather than silently ignored.
-`availableFor` is view-safe and conservatively treats a failed vault view as
-zero withdrawable inventory. `materialize` is exact-or-revert; partial filling
-happens before hooks. `reinvest` transfers eligible maker idle assets through
-the adapter, deposits shares directly to the maker, uses zero-first approvals,
-and leaves no adapter dust after success.
-
-The account is deliberately disposable and seals one router, two reserves, one
-strategy hash, and per-asset reinvest gas limits. Hooks authenticate the
-configured router, maker, pair, and order hash. A transient phase machine
-enforces output-first settlement. The pinned SwapVM per-order transient lock
-rejects same-order callback reentrancy; tests also cover caught and propagated
-nested calls, static callback quotes, and inactive different-order calls.
-
-Post-input reinvestment forwards at most the sealed asset limit, retains
-completion gas, and copies zero returndata. A reverting, gas-burning, or
-large-revert-data vault cannot roll back a settled swap. Failure emits
-`ReinvestFailed` and leaves input idle; success emits `ReinvestSucceeded`,
-while `AssetsReinvested` records the asset/share amounts.
-
-## Correctness and quote consistency
-
-The local campaign covers:
-
-- exact physical token, recipient, vault-share, and Aqua virtual-balance
-  deltas;
-- view-safe capacity and exact materialization;
-- maker-favoring XYC floor/ceil rounding;
-- the exact discrete non-binding inverse;
-- monotonic pricing and binding saturation;
-- `actualInput <= requestedInput` for every constrained exact-in fill;
-- exact-out correctness and best-effort partial fill;
-- authorization, output-first ordering, callbacks, and atomic withdrawal
-  failure; and
-- normal, failed, gas-burning, and revert-bomb reinvestment.
-
-Same-state quote and swap returns are exactly equal. Across blocks, vault
-liquidity and share value may change. Exact-in users protect worsening output
-with `minOut`; exact-out users cap absolute spend with `maxIn`, but v1 does not
-promise a minimum exact-out fill or unit rate across blocks. A failed
-materialization reverts atomically.
-
-The intentional non-properties are documented in
-[`SPEC.md §9`](SPEC.md#9-correctness-properties):
-
-- additivity is not expected because capacity is state-dependent;
-- global symmetry is not expected at a saturating clamp, although the
-  non-binding discrete inverse is exact; and
-- cross-block quote equality is not promised.
-
-No Forge test is skipped. The CI profile fixes fuzz runs, invariant depth, and
-the seed used by the gate command.
-
-## Real Aave proof
-
-Gate 2 uses a disposable mainnet fork at block `25,604,561`, hash
-`0x95ca77908413d71bd01cada1ece52b6c2f35467dbbb8f2367144cd0ffbe7888d`.
-It validates the USDC, StataTokenV2, aUSDC, and Aave Pool code and runtime
-links before testing.
-
-```sh
-ETH_RPC_URL="https://your-archive-mainnet-rpc.example" make demo-aave
-```
-
-The fork proof:
-
-- deposits maker USDC into the real StataTokenV2 vault;
-- shows fixed-share NAV growth after a 30-day timestamp warp;
-- restores a clean snapshot and settles a real Stata-backed output;
-- reconciles recipient, maker, share, adapter, and Aqua deltas;
-- runs the reverse USDC-input trade and positively observes real
-  `ReinvestSucceeded`; and
-- measures the complete reinvest path at 293,771 gas first/cold and 151,071
-  repeat/warm, then verifies the sealed 500,000-gas USDC limit.
-
-The fork command needs an archive-capable endpoint. It fails with a clear
-preflight message rather than treating header-only access as proof. Full
-fixture evidence and methodology are in
-[`docs/FORK_FIXTURES.md`](docs/FORK_FIXTURES.md).
+The final post-development Opus 5 release review is recorded in
+[`FINAL_V2_REVIEW.md`](FINAL_V2_REVIEW.md). The previous review remains
+historical until the current live-beta pass is complete.
 
 ## Repository map
 
 ```text
-src/interfaces/       frozen reserve interfaces
-src/instructions/     ReserveClamp VM instruction
-src/opcodes/          opcode dispatch and canonical program builder
-src/routers/          Aqua router extension
-src/accounts/         sealed disposable maker account and hooks
-src/adapters/         generic single-vault ERC-4626 adapter
-test/unit/            targeted instruction, adapter, and account tests
-test/invariants/      deterministic math and quote properties
-test/integration/     local Aqua vertical slice and adversarial paths
-test/fork/            pinned Aave fixture and end-to-end proof
-script/Demo.s.sol     shared-scenario six-line presentation
+src/claims/             v2 kernel, funding account, types and interfaces
+src/claims/adapters/    Lido live adapter and ERC-7540/8161 reference adapter
+src/adapters/           reusable v1 ERC-4626 reserve adapter
+test/unit/claims/       targeted and adversarial contract tests
+test/integration/       atomic v2 vertical slices
+test/invariants/        constant-total and payment/acquisition properties
+test/fork/              production-contract mainnet fixtures
+script/                 exact deployment and terminal demos
+frontend/               wallet product and operator quote tooling
+docs/                   jury, fork, and economics evidence
 ```
 
-The normative documents are
-[`V1_SCOPE.md`](V1_SCOPE.md), [`SPEC.md`](SPEC.md), and
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). [`REVIEW.md`](REVIEW.md)
-and [`REVIEW_FINDINGS.md`](REVIEW_FINDINGS.md) preserve the review trail.
+## Licensing and attribution
 
-## v1 cut scope
+Reservoir's top-level MIT license applies only where a file does not state
+different terms. SwapVM-derived v1 extension files use
+`LicenseRef-Degensoft-SwapVM-1.1`; published ERC interface surfaces preserve
+their upstream SPDX/provenance.
 
-Reservoir v1 does not implement economic exit fees/spreads, gas-price oracles,
-Morpho, borrowing, leverage, pooling, cross-chain support, upgrades, recovery
-for long-lived accounts, a browser UI, or persistent-network deployment.
-Exact-out remains tested but is not the presentation path. Morpho is the first
-optional amplification only after the local and Aave gates remain repeatable.
+Immutable reviewed pins:
 
-## Upstream pins and licensing
-
-The repository vendors immutable Git submodules:
-
-- SwapVM `0817db4a618d975648e018222aedcdeb1206959e`
-- Aqua `7a5972a6b562e3e622f6e6b2a0befef659cd5386`
-- Solidity Utils `2d91bb67665467afc06907a69513b0fa66c46f0d`
-- OpenZeppelin Contracts `c64a1edb67b6e3f4a15cca8909c9482ad33a02b0`
-- Forge Standard Library `8e40513d678f392f398620b3ef2b418648b33e89`
+| Dependency | Commit |
+|---|---|
+| SwapVM | `0817db4a618d975648e018222aedcdeb1206959e` |
+| Aqua | `7a5972a6b562e3e622f6e6b2a0befef659cd5386` |
+| Solidity Utils | `2d91bb67665467afc06907a69513b0fa66c46f0d` |
+| OpenZeppelin Contracts | `c64a1edb67b6e3f4a15cca8909c9482ad33a02b0` |
+| Forge Standard Library | `8e40513d678f392f398620b3ef2b418648b33e89` |
 
 **Powered by SwapVM — © Degensoft Ltd 2025**
 
-Aqua — © Degensoft Ltd 2025
+**Powered by Aqua — © Degensoft Ltd 2025**
 
-Reservoir's SwapVM-derived extension files use
-`LicenseRef-Degensoft-SwapVM-1.1`. Complete upstream licenses, notices, and
-corresponding source remain in the pinned submodules. See
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for details. These terms,
-not a generic permissive-license assumption, govern use and distribution.
-
-No contract in this repository has been deployed or funded on a persistent
-network.
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) before redistribution.

@@ -18,8 +18,6 @@ import { ReservoirMakerAccount } from "../../src/accounts/ReservoirMakerAccount.
 import { ERC4626ReserveAdapter } from "../../src/adapters/ERC4626ReserveAdapter.sol";
 import { ReservoirProgramLib } from "../../src/opcodes/ReservoirOpcodes.sol";
 import { ReservoirSwapVMRouter } from "../../src/routers/ReservoirSwapVMRouter.sol";
-import { MockERC20 } from "../mocks/MockERC20.sol";
-import { MockERC4626 } from "../mocks/MockERC4626.sol";
 
 interface IStataTokenV2Integration {
     function aToken() external view returns (address);
@@ -31,7 +29,15 @@ interface IAaveATokenIntegration {
     function POOL() external view returns (address);
 }
 
-/// @notice Gate 2: real StataTokenV2 USDC custody and settlement on a pinned mainnet fork.
+interface IMainnetWETH is IERC20 {
+    function deposit() external payable;
+}
+
+/// @notice Production-contract-only Aqua swap between canonical Aave
+///         StataUSDC and StataWETH custody on a pinned mainnet fork.
+/// @dev Disposable contracts/users and test-funded token balances are local to
+///      the fork. Every external protocol call targets canonical production
+///      code; no protocol or privileged actor is substituted.
 contract AaveStataUSDCForkTest is Test {
     using SafeERC20 for IERC20;
 
@@ -39,19 +45,23 @@ contract AaveStataUSDCForkTest is Test {
     bytes32 private constant PINNED_BLOCK_HASH = 0x95ca77908413d71bd01cada1ece52b6c2f35467dbbb8f2367144cd0ffbe7888d;
 
     address private constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address private constant STATA_USDC = 0xD4fa2D31b7968E448877f69A96DE69f5de8cD23E;
+    address private constant STATA_WETH = 0x0bfc9d54Fc184518A81162F8fB99c2eACa081202;
     address private constant A_USDC = 0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c;
+    address private constant A_WETH = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
     address private constant AAVE_V3_POOL = 0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2;
+    address private constant CANONICAL_AQUA = 0x499943E74FB0cE105688beeE8Ef2ABec5D936d31;
 
     uint256 private constant ONE_USDC = 1_000_000;
-    uint256 private constant STARTING_ASSETS = 10_000 * ONE_USDC;
-    uint256 private constant REQUESTED_INPUT = 100 * ONE_USDC;
-    uint256 private constant CALIBRATION_DEPOSIT = 1000 * ONE_USDC;
+    uint256 private constant STARTING_USDC = 10_000 * ONE_USDC;
+    uint256 private constant STARTING_WETH = 5 ether;
+    uint256 private constant REQUESTED_USDC_INPUT = 100 * ONE_USDC;
+    uint256 private constant REQUESTED_WETH_INPUT = 0.05 ether;
+    uint256 private constant USDC_CALIBRATION_DEPOSIT = 1000 * ONE_USDC;
+    uint256 private constant WETH_CALIBRATION_DEPOSIT = 1 ether;
 
-    // Sealed only for USDC after the calibration test below. The mock reserve
-    // keeps its independently exercised local-test limit.
     uint32 private constant AAVE_REINVEST_GAS_LIMIT = 500_000;
-    uint32 private constant MOCK_REINVEST_GAS_LIMIT = 1_000_000;
     string private constant ARCHIVE_FAILURE = "archive RPC required for block 25,604,561";
 
     bytes32 private constant RESERVE_CLAMPED_TOPIC =
@@ -62,44 +72,45 @@ contract AaveStataUSDCForkTest is Test {
     bytes32 private constant DEPOSIT_TOPIC = keccak256("Deposit(address,address,uint256,uint256)");
     bytes32 private constant WITHDRAW_TOPIC = keccak256("Withdraw(address,address,address,uint256,uint256)");
 
-    IERC20 private constant UNDERLYING = IERC20(USDC);
-    IERC4626 private constant STATA = IERC4626(STATA_USDC);
+    IERC20 private constant USDC_TOKEN = IERC20(USDC);
+    IMainnetWETH private constant WETH_TOKEN = IMainnetWETH(WETH);
+    IERC4626 private constant USDC_VAULT = IERC4626(STATA_USDC);
+    IERC4626 private constant WETH_VAULT = IERC4626(STATA_WETH);
 
     Aqua private aqua;
     ReservoirSwapVMRouter private router;
     ReservoirMakerAccount private maker;
-    ERC4626ReserveAdapter private aaveAdapter;
-    MockERC20 private mockAsset;
-    MockERC4626 private mockVault;
-    ERC4626ReserveAdapter private mockAdapter;
+    ERC4626ReserveAdapter private usdcAdapter;
+    ERC4626ReserveAdapter private wethAdapter;
     ISwapVM.Order private order;
     bytes32 private orderHash;
 
     function setUp() public {
         _pinAndValidateFork();
 
-        aqua = new Aqua();
+        assertGt(CANONICAL_AQUA.code.length, 0, "canonical Aqua code missing");
+        aqua = Aqua(CANONICAL_AQUA);
         router = new ReservoirSwapVMRouter(address(aqua), address(0), address(this), "Reservoir", "1");
         maker = new ReservoirMakerAccount(address(this), aqua);
-        mockAsset = new MockERC20("Fork Mock USD", "fmUSD", 6);
-        mockVault = new MockERC4626(IERC20(address(mockAsset)), "Fork Mock Vault", "vfmUSD");
-
-        aaveAdapter = new ERC4626ReserveAdapter(address(maker), STATA, 0, 0);
-        mockAdapter = new ERC4626ReserveAdapter(address(maker), IERC4626(address(mockVault)), 0, 0);
+        usdcAdapter = new ERC4626ReserveAdapter(address(maker), USDC_VAULT, 0, 0);
+        wethAdapter = new ERC4626ReserveAdapter(address(maker), WETH_VAULT, 0, 0);
 
         maker.configureRouter(ISwapVM(address(router)));
-        maker.configureReserve(USDC, aaveAdapter, AAVE_REINVEST_GAS_LIMIT);
-        maker.configureReserve(address(mockAsset), mockAdapter, MOCK_REINVEST_GAS_LIMIT);
+        maker.configureReserve(USDC, usdcAdapter, AAVE_REINVEST_GAS_LIMIT);
+        maker.configureReserve(WETH, wethAdapter, AAVE_REINVEST_GAS_LIMIT);
 
-        deal(USDC, address(maker), STARTING_ASSETS);
-        mockAsset.mint(address(maker), STARTING_ASSETS);
+        deal(USDC, address(maker), STARTING_USDC);
+        vm.deal(address(this), STARTING_WETH);
+        WETH_TOKEN.deposit{ value: STARTING_WETH }();
+        assertTrue(WETH_TOKEN.transfer(address(maker), STARTING_WETH));
+
         maker.prepareInventory(USDC);
-        maker.prepareInventory(address(mockAsset));
+        maker.prepareInventory(WETH);
 
-        assertEq(UNDERLYING.balanceOf(address(maker)), 0, "Aave inventory must start entirely in shares");
-        assertEq(mockAsset.balanceOf(address(maker)), 0, "mock inventory must start entirely in shares");
-        assertGt(STATA.balanceOf(address(maker)), 0, "maker received no Stata shares");
-        assertGt(mockVault.balanceOf(address(maker)), 0, "maker received no mock shares");
+        assertEq(USDC_TOKEN.balanceOf(address(maker)), 0, "USDC inventory must start entirely in shares");
+        assertEq(WETH_TOKEN.balanceOf(address(maker)), 0, "WETH inventory must start entirely in shares");
+        assertGt(USDC_VAULT.balanceOf(address(maker)), 0, "maker received no StataUSDC shares");
+        assertGt(WETH_VAULT.balanceOf(address(maker)), 0, "maker received no StataWETH shares");
 
         uint256 balanceA = maker.navOf(maker.tokenA());
         uint256 balanceB = maker.navOf(maker.tokenB());
@@ -109,23 +120,23 @@ contract AaveStataUSDCForkTest is Test {
         orderHash = shippedHash;
     }
 
-    function test_AaveStataUSDCNonBindingSwapAndTimestampYield() public {
-        address tokenIn = address(mockAsset);
+    function test_ProductionAaveWETHToUSDCSwapAndTimestampYield() public {
+        address tokenIn = WETH;
         address tokenOut = USDC;
         bool aToB = _isAToB(tokenIn, tokenOut);
 
         uint256 postShipSnapshot = vm.snapshotState();
-        uint256 fixedShares = STATA.balanceOf(address(maker));
-        uint256 navBefore = STATA.convertToAssets(fixedShares);
+        uint256 fixedShares = USDC_VAULT.balanceOf(address(maker));
+        uint256 navBefore = USDC_VAULT.convertToAssets(fixedShares);
         (uint256 aquaInBeforeYield, uint256 aquaOutBeforeYield) =
             aqua.safeBalances(address(maker), address(router), orderHash, tokenIn, tokenOut);
 
         vm.warp(block.timestamp + 30 days);
 
-        uint256 navAfter = STATA.convertToAssets(fixedShares);
+        uint256 navAfter = USDC_VAULT.convertToAssets(fixedShares);
         (uint256 aquaInAfterYield, uint256 aquaOutAfterYield) =
             aqua.safeBalances(address(maker), address(router), orderHash, tokenIn, tokenOut);
-        assertEq(STATA.balanceOf(address(maker)), fixedShares, "yield warp changed maker shares");
+        assertEq(USDC_VAULT.balanceOf(address(maker)), fixedShares, "yield warp changed maker shares");
         assertGt(navAfter, navBefore, "yield warp did not increase fixed-share NAV");
         assertEq(aquaInAfterYield, aquaInBeforeYield, "yield warp changed Aqua input balance");
         assertEq(aquaOutAfterYield, aquaOutBeforeYield, "yield warp changed Aqua output balance");
@@ -134,56 +145,55 @@ contract AaveStataUSDCForkTest is Test {
 
         (uint256 aquaInBefore, uint256 aquaOutBefore) =
             aqua.safeBalances(address(maker), address(router), orderHash, tokenIn, tokenOut);
-        uint256 candidateOutput = REQUESTED_INPUT * aquaOutBefore / (aquaInBefore + REQUESTED_INPUT);
+        uint256 candidateOutput = REQUESTED_WETH_INPUT * aquaOutBefore / (aquaInBefore + REQUESTED_WETH_INPUT);
         (uint256 safeCapacity, uint256 exitCostWad) = maker.availableFor(tokenOut, candidateOutput);
         assertEq(exitCostWad, 0, "v1 Aave exit cost must be zero");
-        assertEq(safeCapacity, candidateOutput, "Aave path unexpectedly binds at demo size");
-        assertGe(STATA.maxWithdraw(address(maker)), safeCapacity, "Stata cannot cover quoted output");
+        assertEq(safeCapacity, candidateOutput, "StataUSDC path unexpectedly binds");
+        assertGe(USDC_VAULT.maxWithdraw(address(maker)), safeCapacity, "StataUSDC cannot cover quoted output");
 
-        bytes memory quoteTraits = _takerTraits(true, aToB, "");
         (uint256 quotedInput, uint256 quotedOutput, bytes32 quotedHash) =
-            router.asView().quote(order, REQUESTED_INPUT, quoteTraits);
+            router.asView().quote(order, REQUESTED_WETH_INPUT, _takerTraits(true, aToB, ""));
         assertEq(quotedHash, orderHash, "quote returned wrong order hash");
-        assertEq(quotedInput, REQUESTED_INPUT, "non-binding quote changed exact input");
-        assertEq(quotedOutput, candidateOutput, "non-binding quote changed XYC output");
+        assertEq(quotedInput, REQUESTED_WETH_INPUT, "quote changed exact WETH input");
+        assertEq(quotedOutput, candidateOutput, "quote changed XYC output");
 
-        mockAsset.mint(address(this), REQUESTED_INPUT);
-        IERC20(address(mockAsset)).forceApprove(address(router), type(uint256).max);
+        vm.deal(address(this), REQUESTED_WETH_INPUT);
+        WETH_TOKEN.deposit{ value: REQUESTED_WETH_INPUT }();
+        IERC20(WETH).forceApprove(address(router), type(uint256).max);
 
-        uint256 takerInputBefore = mockAsset.balanceOf(address(this));
-        uint256 takerOutputBefore = UNDERLYING.balanceOf(address(this));
-        uint256 inputSharesBefore = mockVault.balanceOf(address(maker));
-        uint256 outputSharesBefore = STATA.balanceOf(address(maker));
-        uint256 expectedInputShares = mockVault.previewDeposit(quotedInput);
-        uint256 expectedOutputShares = STATA.previewWithdraw(quotedOutput);
-        assertEq(UNDERLYING.balanceOf(address(maker)), 0, "USDC became idle before settlement");
+        uint256 takerInputBefore = WETH_TOKEN.balanceOf(address(this));
+        uint256 takerOutputBefore = USDC_TOKEN.balanceOf(address(this));
+        uint256 inputSharesBefore = WETH_VAULT.balanceOf(address(maker));
+        uint256 outputSharesBefore = USDC_VAULT.balanceOf(address(maker));
+        uint256 expectedInputShares = WETH_VAULT.previewDeposit(quotedInput);
+        uint256 expectedOutputShares = USDC_VAULT.previewWithdraw(quotedOutput);
 
         vm.recordLogs();
         (uint256 actualInput, uint256 actualOutput, bytes32 actualHash) =
-            router.swap(order, REQUESTED_INPUT, _takerTraits(true, aToB, abi.encode(quotedOutput)));
+            router.swap(order, REQUESTED_WETH_INPUT, _takerTraits(true, aToB, abi.encode(quotedOutput)));
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(actualHash, orderHash, "swap returned wrong order hash");
         assertEq(actualInput, quotedInput, "same-state quote/swap input mismatch");
         assertEq(actualOutput, quotedOutput, "same-state quote/swap output mismatch");
-        assertEq(takerInputBefore - mockAsset.balanceOf(address(this)), actualInput, "taker input delta");
-        assertEq(UNDERLYING.balanceOf(address(this)) - takerOutputBefore, actualOutput, "recipient output delta");
+        assertEq(takerInputBefore - WETH_TOKEN.balanceOf(address(this)), actualInput, "WETH taker delta");
+        assertEq(USDC_TOKEN.balanceOf(address(this)) - takerOutputBefore, actualOutput, "USDC recipient delta");
         assertEq(
-            mockVault.balanceOf(address(maker)) - inputSharesBefore,
+            WETH_VAULT.balanceOf(address(maker)) - inputSharesBefore,
             expectedInputShares,
-            "mock input share mint rounding"
+            "StataWETH input share mint rounding"
         );
         assertEq(
-            outputSharesBefore - STATA.balanceOf(address(maker)),
+            outputSharesBefore - USDC_VAULT.balanceOf(address(maker)),
             expectedOutputShares,
-            "Stata output share burn rounding"
+            "StataUSDC output share burn rounding"
         );
-        assertEq(mockAsset.balanceOf(address(maker)), 0, "successful input reinvest left idle mock asset");
-        assertEq(UNDERLYING.balanceOf(address(maker)), 0, "materialized USDC was not fully pulled");
-        assertEq(mockAsset.balanceOf(address(mockAdapter)), 0, "mock adapter retained dust");
-        assertEq(UNDERLYING.balanceOf(address(aaveAdapter)), 0, "Aave adapter retained dust");
-        assertTrue(_hasEvent(logs, address(maker), REINVEST_SUCCEEDED_TOPIC), "missing mock ReinvestSucceeded");
-        assertTrue(_hasEvent(logs, STATA_USDC, WITHDRAW_TOPIC), "missing real Stata withdrawal");
+        _assertNoIdleOrAdapterDust();
+        assertTrue(_hasEvent(logs, address(maker), REINVEST_SUCCEEDED_TOPIC), "missing ReinvestSucceeded");
+        assertFalse(_hasEvent(logs, address(maker), REINVEST_FAILED_TOPIC), "reinvest hit sealed limit");
+        assertTrue(_hasEvent(logs, address(wethAdapter), ASSETS_REINVESTED_TOPIC), "missing WETH reinvest event");
+        assertTrue(_hasEvent(logs, STATA_WETH, DEPOSIT_TOPIC), "missing real StataWETH deposit");
+        assertTrue(_hasEvent(logs, STATA_USDC, WITHDRAW_TOPIC), "missing real StataUSDC withdrawal");
         assertFalse(_hasEvent(logs, address(router), RESERVE_CLAMPED_TOPIC), "non-binding path emitted clamp");
 
         (uint256 aquaInAfter, uint256 aquaOutAfter) =
@@ -192,82 +202,111 @@ contract AaveStataUSDCForkTest is Test {
         assertEq(aquaOutAfter, aquaOutBefore - actualOutput, "Aqua output delta");
     }
 
-    function test_AaveInputReinvestSucceedsUnderSealedLimit() public {
+    function test_ProductionAaveUSDCToWETHSwapAndReinvest() public {
         address tokenIn = USDC;
-        address tokenOut = address(mockAsset);
+        address tokenOut = WETH;
         bool aToB = _isAToB(tokenIn, tokenOut);
 
         (uint256 quotedInput, uint256 quotedOutput,) =
-            router.asView().quote(order, REQUESTED_INPUT, _takerTraits(true, aToB, ""));
-        assertEq(quotedInput, REQUESTED_INPUT, "Aave-input quote changed exact input");
+            router.asView().quote(order, REQUESTED_USDC_INPUT, _takerTraits(true, aToB, ""));
+        assertEq(quotedInput, REQUESTED_USDC_INPUT, "quote changed exact USDC input");
+        assertGe(WETH_VAULT.maxWithdraw(address(maker)), quotedOutput, "StataWETH cannot cover quoted output");
 
-        deal(USDC, address(this), REQUESTED_INPUT);
-        UNDERLYING.forceApprove(address(router), type(uint256).max);
+        deal(USDC, address(this), REQUESTED_USDC_INPUT);
+        USDC_TOKEN.forceApprove(address(router), type(uint256).max);
 
-        uint256 takerInputBefore = UNDERLYING.balanceOf(address(this));
-        uint256 takerOutputBefore = mockAsset.balanceOf(address(this));
-        uint256 aaveSharesBefore = STATA.balanceOf(address(maker));
-        uint256 expectedAaveShares = STATA.previewDeposit(quotedInput);
-        assertEq(UNDERLYING.balanceOf(address(maker)), 0, "Aave input must not be idle before swap");
+        uint256 takerInputBefore = USDC_TOKEN.balanceOf(address(this));
+        uint256 takerOutputBefore = WETH_TOKEN.balanceOf(address(this));
+        uint256 inputSharesBefore = USDC_VAULT.balanceOf(address(maker));
+        uint256 outputSharesBefore = WETH_VAULT.balanceOf(address(maker));
+        uint256 expectedInputShares = USDC_VAULT.previewDeposit(quotedInput);
+        uint256 expectedOutputShares = WETH_VAULT.previewWithdraw(quotedOutput);
 
         vm.recordLogs();
         (uint256 actualInput, uint256 actualOutput,) =
-            router.swap(order, REQUESTED_INPUT, _takerTraits(true, aToB, abi.encode(quotedOutput)));
+            router.swap(order, REQUESTED_USDC_INPUT, _takerTraits(true, aToB, abi.encode(quotedOutput)));
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(actualInput, quotedInput, "Aave-input quote/swap mismatch");
-        assertEq(actualOutput, quotedOutput, "Aave-input output mismatch");
-        assertEq(takerInputBefore - UNDERLYING.balanceOf(address(this)), actualInput, "USDC taker delta");
-        assertEq(mockAsset.balanceOf(address(this)) - takerOutputBefore, actualOutput, "mock output delta");
+        assertEq(actualInput, quotedInput, "USDC quote/swap mismatch");
+        assertEq(actualOutput, quotedOutput, "WETH output mismatch");
+        assertEq(takerInputBefore - USDC_TOKEN.balanceOf(address(this)), actualInput, "USDC taker delta");
+        assertEq(WETH_TOKEN.balanceOf(address(this)) - takerOutputBefore, actualOutput, "WETH recipient delta");
         assertEq(
-            STATA.balanceOf(address(maker)) - aaveSharesBefore, expectedAaveShares, "Aave input share mint rounding"
+            USDC_VAULT.balanceOf(address(maker)) - inputSharesBefore,
+            expectedInputShares,
+            "StataUSDC input share mint rounding"
         );
-        assertEq(UNDERLYING.balanceOf(address(maker)), 0, "Aave reinvest left maker USDC idle");
-        assertEq(UNDERLYING.balanceOf(address(aaveAdapter)), 0, "Aave adapter retained USDC");
-        assertTrue(_hasEvent(logs, address(maker), REINVEST_SUCCEEDED_TOPIC), "missing Aave ReinvestSucceeded");
-        assertFalse(_hasEvent(logs, address(maker), REINVEST_FAILED_TOPIC), "Aave reinvest hit sealed limit");
-        assertTrue(_hasEvent(logs, address(aaveAdapter), ASSETS_REINVESTED_TOPIC), "missing adapter reinvest event");
-        assertTrue(_hasEvent(logs, STATA_USDC, DEPOSIT_TOPIC), "missing real Stata deposit");
+        assertEq(
+            outputSharesBefore - WETH_VAULT.balanceOf(address(maker)),
+            expectedOutputShares,
+            "StataWETH output share burn rounding"
+        );
+        _assertNoIdleOrAdapterDust();
+        assertTrue(_hasEvent(logs, address(maker), REINVEST_SUCCEEDED_TOPIC), "missing ReinvestSucceeded");
+        assertFalse(_hasEvent(logs, address(maker), REINVEST_FAILED_TOPIC), "reinvest hit sealed limit");
+        assertTrue(_hasEvent(logs, address(usdcAdapter), ASSETS_REINVESTED_TOPIC), "missing USDC reinvest event");
+        assertTrue(_hasEvent(logs, STATA_USDC, DEPOSIT_TOPIC), "missing real StataUSDC deposit");
+        assertTrue(_hasEvent(logs, STATA_WETH, WITHDRAW_TOPIC), "missing real StataWETH withdrawal");
     }
 
-    function test_AaveAdapterFullReinvestGasCalibration() public {
-        ReservoirMakerAccount calibrationMaker = new ReservoirMakerAccount(address(this), aqua);
-        ERC4626ReserveAdapter calibrationAdapter = new ERC4626ReserveAdapter(address(calibrationMaker), STATA, 0, 0);
-        calibrationMaker.configureReserve(USDC, calibrationAdapter, AAVE_REINVEST_GAS_LIMIT);
+    function test_ProductionAaveAdaptersFullReinvestGasCalibration() public {
+        _calibrateReinvest(USDC_TOKEN, USDC_VAULT, A_USDC, USDC_CALIBRATION_DEPOSIT, "USDC");
+        _calibrateReinvest(IERC20(WETH), WETH_VAULT, A_WETH, WETH_CALIBRATION_DEPOSIT, "WETH");
+    }
 
-        deal(USDC, address(calibrationMaker), CALIBRATION_DEPOSIT);
+    function _calibrateReinvest(
+        IERC20 asset,
+        IERC4626 vault,
+        address aToken,
+        uint256 depositAssets,
+        string memory symbol
+    )
+        private
+    {
+        ReservoirMakerAccount calibrationMaker = new ReservoirMakerAccount(address(this), aqua);
+        ERC4626ReserveAdapter calibrationAdapter = new ERC4626ReserveAdapter(address(calibrationMaker), vault, 0, 0);
+        calibrationMaker.configureReserve(address(asset), calibrationAdapter, AAVE_REINVEST_GAS_LIMIT);
+
+        deal(address(asset), address(calibrationMaker), depositAssets);
         vm.cool(address(calibrationMaker));
         vm.cool(address(calibrationAdapter));
-        vm.cool(USDC);
-        vm.cool(STATA_USDC);
-        vm.cool(A_USDC);
+        vm.cool(address(asset));
+        vm.cool(address(vault));
+        vm.cool(aToken);
         vm.cool(AAVE_V3_POOL);
 
-        uint256 firstSharesBefore = STATA.balanceOf(address(calibrationMaker));
+        uint256 firstSharesBefore = vault.balanceOf(address(calibrationMaker));
         uint256 gasBeforeFirst = gasleft();
-        calibrationMaker.prepareInventory(USDC);
+        calibrationMaker.prepareInventory(address(asset));
         uint256 firstFullPathGas = gasBeforeFirst - gasleft();
-        uint256 firstShares = STATA.balanceOf(address(calibrationMaker)) - firstSharesBefore;
+        uint256 firstShares = vault.balanceOf(address(calibrationMaker)) - firstSharesBefore;
 
-        deal(USDC, address(calibrationMaker), CALIBRATION_DEPOSIT);
-        uint256 repeatSharesBefore = STATA.balanceOf(address(calibrationMaker));
+        deal(address(asset), address(calibrationMaker), depositAssets);
+        uint256 repeatSharesBefore = vault.balanceOf(address(calibrationMaker));
         uint256 gasBeforeRepeat = gasleft();
-        calibrationMaker.prepareInventory(USDC);
+        calibrationMaker.prepareInventory(address(asset));
         uint256 repeatFullPathGas = gasBeforeRepeat - gasleft();
-        uint256 repeatShares = STATA.balanceOf(address(calibrationMaker)) - repeatSharesBefore;
+        uint256 repeatShares = vault.balanceOf(address(calibrationMaker)) - repeatSharesBefore;
 
-        assertGt(firstShares, 0, "first full reinvest minted no shares");
-        assertGt(repeatShares, 0, "repeat full reinvest minted no shares");
-        assertEq(UNDERLYING.balanceOf(address(calibrationMaker)), 0, "calibration maker retained USDC");
-        assertEq(UNDERLYING.balanceOf(address(calibrationAdapter)), 0, "calibration adapter retained USDC");
-        assertLt(firstFullPathGas, AAVE_REINVEST_GAS_LIMIT, "sealed limit lacks first-path margin");
-        assertLt(repeatFullPathGas, AAVE_REINVEST_GAS_LIMIT, "sealed limit lacks repeat-path margin");
+        assertGt(firstShares, 0, string.concat(symbol, " first reinvest minted no shares"));
+        assertGt(repeatShares, 0, string.concat(symbol, " repeat reinvest minted no shares"));
+        assertEq(asset.balanceOf(address(calibrationMaker)), 0, string.concat(symbol, " maker retained underlying"));
+        assertEq(asset.balanceOf(address(calibrationAdapter)), 0, string.concat(symbol, " adapter retained underlying"));
+        assertLt(firstFullPathGas, AAVE_REINVEST_GAS_LIMIT, string.concat(symbol, " first path exceeds limit"));
+        assertLt(repeatFullPathGas, AAVE_REINVEST_GAS_LIMIT, string.concat(symbol, " repeat path exceeds limit"));
 
-        emit log_named_uint("full adapter first reinvest gas (cold named accounts)", firstFullPathGas);
-        emit log_named_uint("full adapter repeat reinvest gas (same tx warm)", repeatFullPathGas);
-        emit log_named_uint("sealed Aave reinvest gas limit", AAVE_REINVEST_GAS_LIMIT);
-        emit log_named_uint("first full-path shares", firstShares);
-        emit log_named_uint("repeat full-path shares", repeatShares);
+        emit log_named_string("production reserve", symbol);
+        emit log_named_uint("full adapter first reinvest gas", firstFullPathGas);
+        emit log_named_uint("full adapter repeat reinvest gas", repeatFullPathGas);
+    }
+
+    function _assertNoIdleOrAdapterDust() private view {
+        assertEq(USDC_TOKEN.balanceOf(address(maker)), 0, "maker retained idle USDC");
+        assertEq(WETH_TOKEN.balanceOf(address(maker)), 0, "maker retained idle WETH");
+        assertEq(USDC_TOKEN.balanceOf(address(usdcAdapter)), 0, "USDC adapter retained dust");
+        assertEq(WETH_TOKEN.balanceOf(address(wethAdapter)), 0, "WETH adapter retained dust");
+        assertEq(USDC_VAULT.balanceOf(address(usdcAdapter)), 0, "USDC adapter retained vault shares");
+        assertEq(WETH_VAULT.balanceOf(address(wethAdapter)), 0, "WETH adapter retained vault shares");
     }
 
     function __rollAaveFork(uint256 blockNumber) external {
@@ -304,14 +343,19 @@ contract AaveStataUSDCForkTest is Test {
         }
         assertEq(block.number, PINNED_BLOCK, "fork did not restore pinned state");
 
-        assertGt(USDC.code.length, 0, "USDC code missing");
-        assertGt(STATA_USDC.code.length, 0, "Stata code missing");
-        assertGt(A_USDC.code.length, 0, "aUSDC code missing");
+        _assertVaultBinding(USDC, STATA_USDC, A_USDC);
+        _assertVaultBinding(WETH, STATA_WETH, A_WETH);
         assertGt(AAVE_V3_POOL.code.length, 0, "Aave Pool code missing");
-        assertEq(STATA.asset(), USDC, "unexpected Stata asset");
-        assertEq(IStataTokenV2Integration(STATA_USDC).aToken(), A_USDC, "unexpected Stata aToken");
-        assertEq(IAaveATokenIntegration(A_USDC).UNDERLYING_ASSET_ADDRESS(), USDC, "unexpected aUSDC underlying");
-        assertEq(IAaveATokenIntegration(A_USDC).POOL(), AAVE_V3_POOL, "unexpected aUSDC Pool");
+    }
+
+    function _assertVaultBinding(address asset, address vault, address aToken) private view {
+        assertGt(asset.code.length, 0, "underlying code missing");
+        assertGt(vault.code.length, 0, "Stata code missing");
+        assertGt(aToken.code.length, 0, "aToken code missing");
+        assertEq(IERC4626(vault).asset(), asset, "unexpected Stata asset");
+        assertEq(IStataTokenV2Integration(vault).aToken(), aToken, "unexpected Stata aToken");
+        assertEq(IAaveATokenIntegration(aToken).UNDERLYING_ASSET_ADDRESS(), asset, "unexpected aToken underlying");
+        assertEq(IAaveATokenIntegration(aToken).POOL(), AAVE_V3_POOL, "unexpected aToken Pool");
     }
 
     function _isAToB(address tokenIn, address tokenOut) private view returns (bool aToB) {

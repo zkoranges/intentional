@@ -28,6 +28,9 @@ jobs:
       - name: Check formatting
         run: forge fmt --check
 
+      - name: Lint Solidity
+        run: forge lint
+
       - name: Run deterministic local suite
         env:
           FOUNDRY_PROFILE: ci
@@ -38,3 +41,22 @@ jobs:
 
       - name: Run judge demo
         run: make demo
+
+      - name: Run Reservoir v2 judge demo
+        run: make demo-v2
+
+      - name: Install Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.18.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked frontend dependencies
+        run: npm --prefix frontend ci
+
+      - name: Run frontend build, lint, and truthfulness tests
+        run: |
+          npm --prefix frontend run lint
+          npm --prefix frontend test
+          npm --prefix frontend run build:vercel

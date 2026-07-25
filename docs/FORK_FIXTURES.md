@@ -122,14 +122,17 @@ funding are excluded.
 
 | Measurement | Gas / result |
 |---|---:|
-| First full reinvest, cold named accounts/new receiver | `293,771` gas |
-| Repeat full reinvest, same-transaction warm receiver | `151,071` gas |
+| USDC first full reinvest, cold named accounts/new receiver | `293,807` gas |
+| USDC repeat full reinvest, same-transaction warm receiver | `151,107` gas |
+| WETH first full reinvest, cold named accounts/new receiver | `258,665` gas |
+| WETH repeat full reinvest, same-transaction warm receiver | `156,065` gas |
 | Sealed USDC hook limit | `500,000` gas |
 | Absolute margin over measured first path | `206,229` gas |
 | Shares minted by each `1,000 USDC` reinvest | `847,767,165` |
 
-The `500,000` value is sealed only for the USDC reserve. The fork suite also
-executes an output-first swap with USDC as the input and positively asserts:
+The `500,000` value is exercised against both production reserves. The fork
+suite also executes production-contract-only swaps in both directions and
+positively asserts:
 
 ```text
 maker idle USDC decreases to zero
@@ -140,9 +143,8 @@ ReinvestSucceeded is emitted by the maker
 ReinvestFailed is not emitted
 ```
 
-The full-path first measurement remains below the limit with substantial
-absolute and percentage margin. The mock-asset reserve uses its separately
-tested local limit.
+Both full-path first measurements remain below the limit with substantial
+absolute and percentage margin.
 
 ## Commands
 
