@@ -1,9 +1,11 @@
 # Quote desk — operations
 
-> **Status: the desk is stopped.** Mainnet settlement proof completed. Demo
-> contracts safely retired after reserve recovery, and cannot be reactivated —
-> the immutable signer key was exposed. Existing-unstETH acquisition and
-> public firm quotes are under development.
+> **Status: release candidate ready; fresh activation pending.** The previous
+> mainnet proof contracts are safely retired after reserve recovery and cannot
+> be reactivated because their immutable signer key was exposed. Existing
+> unstETH acquisition and the HTTP firm-quote flow are implemented and pass
+> the canonical mainnet-fork product rehearsal. They are not publicly live
+> until the fresh deployment, funding, activation, DNS and signer gates pass.
 >
 > This document remains the operating reference for the desk when it relaunches
 > against a **fresh deployment with a fresh key**. See
@@ -14,7 +16,7 @@ firm quote over HTTP and lands directly on Approve.
 
 ```text
 browser → Vercel /api/quote/lido      (validates; holds NO key)
-        → HTTPS tunnel
+        → HTTPS at quotes.intentional.so
         → VPS impatience-signer        (factor key, ceiling, single-flight, audit)
 ```
 
@@ -26,21 +28,21 @@ browser → Vercel /api/quote/lido      (validates; holds NO key)
 | Deploy | `scripts/deploy-quote-signer.sh` (idempotent) |
 | Fork proof | `scripts/rehearse-quote-signer.sh` |
 | On the VPS | user `impatience`, app `/home/impatience/app`, logs `/home/impatience/logs` |
-| Units | `impatience-signer.service` (127.0.0.1:8791), `impatience-tunnel.service` |
+| Unit | `impatience-signer.service` (127.0.0.1:8791) |
 | Vercel (server-only) | `SIGNER_URL`, `SIGNER_SECRET` — never `NEXT_PUBLIC_*` |
 
 ## Co-tenancy rules on the shared VPS
 
-The box also runs **cryptominute** (12 docker containers, postgres, nginx on
-80/443) and **outreach** (systemd + its own tunnel, ~50k contact records).
+The box is shared with unrelated Docker and systemd workloads. Caddy owns the
+public HTTP/TLS entry point; the quote signer owns only loopback port 8791.
 
-- **Never** touch the docker stack, nginx, or any database that isn't ours.
-- Our footprint is one user, one app dir, two systemd units, ~150 MB.
-- Nothing we run binds a public port; 80/443 belong to cryptominute's nginx,
-  which is why the public path is a tunnel and not Caddy.
-- Disk was **93% full** at deploy time (13 GiB free), almost entirely
-  cryptominute's `/opt` and `/var/lib/docker`. `deploy-quote-signer.sh`
-  aborts below 2 GiB free. Watch `df -h /`.
+- **Never** touch the Docker stack, unrelated Caddy sites, databases, nginx,
+  or unrelated systemd units.
+- Our footprint is one legacy isolated user, one app directory, one systemd
+  unit, and one dedicated Caddy site.
+- The Node process binds only `127.0.0.1:8791`; Caddy proxies only
+  `quotes.intentional.so`.
+- `deploy-quote-signer.sh` aborts below 2 GiB free. Watch `df -h /`.
 
 ## Day-to-day
 
@@ -55,26 +57,17 @@ ssh $DEPLOY_HOST systemctl restart impatience-signer
 Redeploy after a code change: `scripts/deploy-quote-signer.sh` (re-runs
 safely; only rewrites our own files).
 
-## The tunnel URL is currently ephemeral
+## Stable public ingress
 
-`impatience-tunnel.service` runs a **quick tunnel**, so the hostname is random
-and **changes on every restart**. After any restart:
-
-```sh
-ssh $DEPLOY_HOST "journalctl -u impatience-tunnel -n 40 --no-pager | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | tail -1"
-# then update Vercel and redeploy
-printf '%s' "<new url>" | npx vercel env add SIGNER_URL production --force
-npx vercel --prod --yes
-```
-
-**Upgrade path (recommended before judging):** put a domain in Cloudflare and
-run a *named* tunnel, which pins the hostname permanently — the same pattern
-`outreach` already uses. That needs a zone the owner controls; it must not
-reuse the `outreach.sh` zone (owner's separation rule).
+Create DNS `A quotes 62.171.182.177`, then add only the dedicated
+`quotes.intentional.so` Caddy site from
+[`LIVE_ACTIVATION.md`](LIVE_ACTIVATION.md). Back up and validate the full
+Caddyfile before a reload. Do not restart Caddy and do not edit another
+service's site.
 
 ## Safety properties (why this is safe to expose)
 
-1. Signer binds `127.0.0.1`; the tunnel is the only ingress.
+1. Signer binds `127.0.0.1`; Caddy is the only ingress.
 2. Shared secret, constant-time compared; the browser never sees it.
 3. **Hard `MAX_QUOTE_WEI` ceiling** independent of measured capacity.
 4. **Single-flight** — one outstanding unexpired quote at a time.
@@ -110,10 +103,11 @@ immutable, so unpausing or re-funding would hand control of any restored
 reserve to whoever holds the exposed key. No re-arming runbook exists or will
 exist.
 
-The desk itself is stopped: `impatience-signer` and `impatience-tunnel` are
-stopped and disabled on the VPS, the key material was shredded from the host,
-and the Vercel `SIGNER_URL`/`SIGNER_SECRET` variables were removed. With the
-desk down, the app has no firm-quote path — by design.
+The retired desk is stopped, its old key material was shredded, and the Vercel
+`SIGNER_URL`/`SIGNER_SECRET` variables were removed. The fresh candidate key
+and shared secret are staged outside the repository but the service remains
+offline until the new deployment is active. With the desk down, the app has no
+firm-quote path — by design.
 
 Relaunching the desk means a **fresh deployment with a fresh key**, following
 `docs/LIVE_ACTIVATION.md` from scratch. Never point the desk at the retired

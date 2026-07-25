@@ -28,11 +28,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — production pins are configured in Vercel from the reviewed
+# deployment manifest; never commit a live or retired hosting environment.
 .env*
 !.env.example
-# public mainnet address pins only — no secrets (docs/LIVE_ACTIVATION.md §7)
-!.env.production
 
 # vercel
 .vercel

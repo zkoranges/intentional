@@ -328,7 +328,8 @@ flowchart TB
     SELLER(["seller sends the only transaction"])
     KERNEL["AsyncClaimSettlement<br/>acquire first, pay second<br/>holds no tokens"]
     ADAPTERS["allowlisted IClaimAdapter"]
-    LIDO["LidoWithdrawalClaimAdapter<br/>mainnet-proven"]
+    LIDO["LidoWithdrawalClaimAdapter<br/>originate from liquid stETH"]
+    UNSTETH["LidoUnstETHExitAdapter<br/>buy an existing canonical claim"]
     E8161["ERC8161RedeemClaimAdapter<br/>reference"]
     FUND["ProductiveFundingAccount<br/>holds WETH and vault shares"]
     RESERVE["ERC4626ReserveAdapter<br/>reused from v1"]
@@ -339,6 +340,7 @@ flowchart TB
     KERNEL --> ADAPTERS
     KERNEL --> FUND
     ADAPTERS --> LIDO
+    ADAPTERS --> UNSTETH
     ADAPTERS --> E8161
     FUND --> RESERVE --> AAVE
 ```

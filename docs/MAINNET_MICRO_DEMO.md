@@ -3,7 +3,9 @@
 > Status (2026-07-25, past-tense proof record): **Mainnet settlement proof
 > completed. Demo contracts safely retired after reserve recovery, and cannot
 > be reactivated — the immutable signer key was exposed. Existing-unstETH
-> acquisition and public firm quotes are under development.**
+> acquisition and the real HTTP firm-quote path are now implemented and
+> canonical-mainnet-fork proven; their fresh public deployment is tracked in
+> [`LIVE_ACTIVATION.md`](LIVE_ACTIVATION.md).**
 > Both objective proofs exist on Ethereum mainnet:
 > Aqua intent fill `0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37`
 > (block 25611688; 48380478256900 wei wstETH → 57142857142857 wei WETH, output
