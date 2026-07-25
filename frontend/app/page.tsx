@@ -675,46 +675,6 @@ export default function Home() {
           </span>
         </section>
 
-        <section className="marketsSection" id="markets" aria-label="Factoring markets">
-          <div className="marketHeader">
-            <span>Factoring markets</span>
-            <small>One market open · More adapters coming</small>
-          </div>
-          <div className="marketGrid">
-            {MARKETS.map((market) => (
-              <a
-                className={`marketCard ${market.active ? "active" : ""}`}
-                href={market.active ? "#exit" : "#markets"}
-                aria-label={`${market.name} ${market.asset} market — ${market.status}`}
-                key={market.name}
-              >
-                <div className="marketIdentity">
-                  <span className={`tokenIcon ${market.iconClass}`}>
-                    <img src={market.icon} alt={market.iconAlt} width={18} height={18} />
-                  </span>
-                  <div>
-                    <strong>{market.name}</strong>
-                    <small>{market.asset}</small>
-                  </div>
-                </div>
-                <dl>
-                  <div>
-                    <dt>Claim</dt>
-                    <dd>{market.claim}</dd>
-                  </div>
-                  <div>
-                    <dt>Payout</dt>
-                    <dd>{market.payout}</dd>
-                  </div>
-                </dl>
-                <span className={`marketStatus ${market.active ? "open" : ""}`}>
-                  {market.status}
-                </span>
-              </a>
-            ))}
-          </div>
-        </section>
-
         <section className="exitCard" id="exit" aria-label="Withdrawal interface">
           <div className="cardHeader">
             <div>
@@ -1004,6 +964,46 @@ export default function Home() {
               Need to withdraw today? Join the Lido queue →
             </button>
           )}
+        </section>
+
+        <section className="marketsSection" id="markets" aria-label="Factoring markets">
+          <div className="marketHeader">
+            <span>Factoring markets</span>
+            <small>One market open · More adapters coming</small>
+          </div>
+          <div className="marketGrid">
+            {MARKETS.map((market) => (
+              <a
+                className={`marketCard ${market.active ? "active" : ""}`}
+                href={market.active ? "#exit" : "#markets"}
+                aria-label={`${market.name} ${market.asset} market — ${market.status}`}
+                key={market.name}
+              >
+                <div className="marketIdentity">
+                  <span className={`tokenIcon ${market.iconClass}`}>
+                    <img src={market.icon} alt={market.iconAlt} width={18} height={18} />
+                  </span>
+                  <div>
+                    <strong>{market.name}</strong>
+                    <small>{market.asset}</small>
+                  </div>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Claim</dt>
+                    <dd>{market.claim}</dd>
+                  </div>
+                  <div>
+                    <dt>Payout</dt>
+                    <dd>{market.payout}</dd>
+                  </div>
+                </dl>
+                <span className={`marketStatus ${market.active ? "open" : ""}`}>
+                  {market.status}
+                </span>
+              </a>
+            ))}
+          </div>
         </section>
 
         <section className="positionsSection" id="positions">

@@ -49,6 +49,11 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     assert.match(page, new RegExp(expected));
   }
 
+  assert.ok(
+    page.indexOf('className="exitCard"') <
+      page.indexOf('className="marketsSection"'),
+    "the primary withdrawal interface must appear before factoring markets",
+  );
   assert.doesNotMatch(page, /jury|ETHGlobal|fork replay|Run on local Anvil/i);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });
