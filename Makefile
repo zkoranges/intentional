@@ -6,7 +6,7 @@ AAVE_FORK_TEST := test/fork/AaveStataUSDC.t.sol
 LIDO_V2_FORK_TEST := test/fork/LidoWithdrawalClaim.t.sol
 AQUA_INTENT_FORK_TEST := test/fork/AquaIntentWstETH.t.sol
 
-.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-aqua-intent demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e rehearse-live-activation preflight-mainnet-v2 verify-live-v2
+.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-aqua-intent demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e existing-unsteth-e2e rehearse-live-activation preflight-mainnet-v2 verify-live-v2
 
 build:
 	forge build
@@ -85,6 +85,10 @@ demo-lido-v2: jury-demo
 live-product-e2e:
 	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required for the chain-1 production rehearsal" && exit 1)
 	./scripts/run-live-product-e2e.sh
+
+existing-unsteth-e2e:
+	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required for the existing-unstETH production rehearsal" && exit 1)
+	./scripts/rehearse-existing-unsteth-flow.sh
 
 jury-ui:
 	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required for the chain-1 browser demo" && exit 1)

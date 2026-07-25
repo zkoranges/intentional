@@ -57,3 +57,6 @@ jobs:
 
       - name: Run exact deploy, quote, approve, and fill rehearsal
         run: make live-product-e2e
+
+      - name: Run existing-unstETH firm-offer, approval, and sale rehearsal
+        run: make existing-unsteth-e2e
