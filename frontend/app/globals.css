@@ -475,6 +475,26 @@ main {
   white-space: nowrap;
 }
 
+.marketCard dd.queueTime {
+  color: #d4d4d8;
+  font-variant-numeric: tabular-nums;
+}
+
+.marketCard dd.queueTime.live {
+  color: #cbb7ff;
+}
+
+.marketCard dd.queueTime.live::before {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin: 0 5px 1px 0;
+  border-radius: 50%;
+  background: #8b5cf6;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.7);
+  content: "";
+}
+
 .marketStatus {
   position: absolute;
   top: 15px;

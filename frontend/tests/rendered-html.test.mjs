@@ -25,6 +25,9 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Get paid now.",
     "Someone else waits.",
     "Factoring markets",
+    "Queue time",
+    "~10 days",
+    "Checking live…",
     "Lido",
     "Ether.fi",
     "ERC-7540",
@@ -57,6 +60,22 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
   );
   assert.doesNotMatch(page, /jury|ETHGlobal|fork replay|Run on local Anvil/i);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
+});
+
+test("market queue times distinguish live estimates from typical values", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+  const lidoWaitRoute = await readFile(
+    new URL("app/api/wait/lido/route.ts", projectRoot),
+    "utf8",
+  );
+
+  assert.match(page, /api\/wait\/lido/);
+  assert.match(page, /lido-withdrawals-api/);
+  assert.match(page, /Typical queued withdrawal/);
+  assert.match(lidoWaitRoute, /wq-api\.lido\.fi\/v2\/request-time\/calculate\?amount=1/);
+  assert.match(lidoWaitRoute, /Number\.isSafeInteger/);
+  assert.match(lidoWaitRoute, /stale-while-revalidate=300/);
+  assert.match(lidoWaitRoute, /Live Lido queue estimate unavailable/);
 });
 
 test("wallet writes are simulated, receipt-backed, and chain-bound", async () => {

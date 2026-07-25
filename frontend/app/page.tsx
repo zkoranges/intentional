@@ -46,6 +46,13 @@ type CompletedAction = {
   hash: Hash;
 };
 
+type LidoWaitEstimate = {
+  market: "lido";
+  amountStEth: "1";
+  estimatedWaitMs: number;
+  source: "lido-withdrawals-api";
+};
+
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
 const DOCS_URL = `${GITHUB_URL}#readme`;
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
@@ -58,6 +65,8 @@ const MARKETS = [
     asset: "stETH",
     claim: "Withdrawal claim",
     payout: "ETH",
+    queueTime: null,
+    queueDetail: "Live Lido estimate for a representative 1 stETH withdrawal",
     status: "Open",
     active: true,
     icon: "/icons/steth.png",
@@ -69,6 +78,9 @@ const MARKETS = [
     asset: "eETH",
     claim: "Withdrawal request",
     payout: "ETH",
+    queueTime: "~10 days",
+    queueDetail:
+      "Typical queued withdrawal; instant redemption may be available when Ether.fi has sufficient liquidity",
     status: "Next",
     active: false,
     icon: "/icons/etherfi.png",
@@ -80,6 +92,8 @@ const MARKETS = [
     asset: "ERC-7540",
     claim: "Redemption request",
     payout: "Vault asset",
+    queueTime: "Vault-specific",
+    queueDetail: "Each asynchronous vault defines its own settlement schedule",
     status: "Planned",
     active: false,
     icon: "/icons/vault.svg",
@@ -153,6 +167,13 @@ function formatWait(milliseconds: number) {
   return `${(hours / 24).toFixed(1)} days`;
 }
 
+function formatMarketWait(milliseconds: number) {
+  const hours = milliseconds / (60 * 60 * 1_000);
+  if (hours < 48) return `~${Math.max(1, Math.round(hours))} hours`;
+  const days = hours / 24;
+  return `~${days < 10 ? days.toFixed(1) : Math.round(days)} days`;
+}
+
 export default function Home() {
   const [account, setAccount] = useState<Address | null>(null);
   const [snapshot, setSnapshot] = useState<LiveWalletSnapshot | null>(null);
@@ -174,6 +195,8 @@ export default function Home() {
   const [quoteInput, setQuoteInput] = useState("");
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const [lidoWaitEstimate, setLidoWaitEstimate] =
+    useState<LidoWaitEstimate | null>(null);
   const walletMenuRef = useRef<HTMLDivElement>(null);
 
   const busy = action !== "idle";
@@ -278,6 +301,35 @@ export default function Home() {
       injected.removeListener?.("chainChanged", onChain);
     };
   }, [account, refresh]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/wait/lido", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Lido wait estimate unavailable");
+        const result = (await response.json()) as Partial<LidoWaitEstimate>;
+        if (
+          result.market !== "lido" ||
+          result.amountStEth !== "1" ||
+          result.source !== "lido-withdrawals-api" ||
+          typeof result.estimatedWaitMs !== "number" ||
+          !Number.isSafeInteger(result.estimatedWaitMs) ||
+          result.estimatedWaitMs < 0
+        ) {
+          throw new Error("Invalid Lido wait estimate");
+        }
+        if (!controller.signal.aborted) {
+          setLidoWaitEstimate(result as LidoWaitEstimate);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setLidoWaitEstimate(null);
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!walletMenuOpen) return;
@@ -1112,6 +1164,23 @@ export default function Home() {
                   <div>
                     <dt>Payout</dt>
                     <dd>{market.payout}</dd>
+                  </div>
+                  <div>
+                    <dt>Queue time</dt>
+                    <dd
+                      className={
+                        market.name === "Lido" && lidoWaitEstimate
+                          ? "queueTime live"
+                          : "queueTime"
+                      }
+                      title={market.queueDetail}
+                    >
+                      {market.name === "Lido"
+                        ? lidoWaitEstimate
+                          ? formatMarketWait(lidoWaitEstimate.estimatedWaitMs)
+                          : "Checking live…"
+                        : market.queueTime}
+                    </dd>
                   </div>
                 </dl>
                 <span className={`marketStatus ${market.active ? "open" : ""}`}>
