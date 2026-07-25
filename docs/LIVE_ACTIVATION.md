@@ -1,7 +1,12 @@
 # Reservoir v2 live activation runbook
 
-> Status: prepared and rehearsed on disposable chain-1 forks; **not deployed
-> or funded on a persistent network**.
+> Status: this procedure **was executed on Ethereum mainnet on 2026-07-25**.
+> The resulting v2 deployment completed its settlement proof and has since
+> been **retired** (`retired-paused`): it cannot be reactivated, because the
+> immutable factor signer key was exposed. The proof record is in
+> [`docs/MAINNET_MICRO_DEMO.md`](MAINNET_MICRO_DEMO.md). This document
+> remains the authoritative procedure for any **fresh** deployment, which
+> requires a **fresh** key.
 >
 > Deployment, funding, and activation are separate decisions. Deploying cannot
 > move reserve capital. Funding cannot enable settlement. Activation cannot
@@ -152,6 +157,14 @@ The verifier checks:
 - zero idle threshold and zero liquidity buffer;
 - canonical WETH/StataWETH/stETH/queue endpoints; and
 - paused state, zero WETH, zero shares, and zero capacity.
+
+`EXPECTED_RELEASE_STATE` uses the manifest lifecycle vocabulary:
+`paused-unfunded` → `funded-paused` → `active` → `retired-paused` →
+`claim-collected`. The first three are the activation path in this runbook.
+`retired-paused` marks a deployment permanently taken out of service (paused,
+unfunded, never to be re-armed — the state of the v2 deployment), and
+`claim-collected` is the terminal state once its last outstanding withdrawal
+claim has been collected.
 
 ## 5. Fund while settlement stays paused
 

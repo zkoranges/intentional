@@ -1,7 +1,10 @@
 # Mainnet micro-demo — locked objective
 
-> Status: **MAINNET END-TO-END PROOF COMPLETE — 2026-07-25.** Both objective
-> proofs exist on Ethereum mainnet:
+> Status (2026-07-25, past-tense proof record): **Mainnet settlement proof
+> completed. Demo contracts safely retired after reserve recovery, and cannot
+> be reactivated — the immutable signer key was exposed. Existing-unstETH
+> acquisition and public firm quotes are under development.**
+> Both objective proofs exist on Ethereum mainnet:
 > Aqua intent fill `0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37`
 > (block 25611688; 48380478256900 wei wstETH → 57142857142857 wei WETH, output
 > exactly equal to the router's historical quote, minimum bound at quote minus
@@ -23,9 +26,12 @@
 > price discovery. The exact successful quote envelope (queue snapshot at
 > signing: 999.568750531812229648 stETH unfinalized across 19 requests) is
 > archived at `deployments/quote-envelope-unsteth-130880.json`.
-> Outstanding: reserve recovery + unstETH claim after Lido finalization
-> (tracked in G-M), router/maker explorer verification (bytecode attestation
-> published in the README), final review reconciliation.
+> Outstanding: the unstETH #130880 claim after Lido finalization (reserve
+> recovery is complete — tracked in G-M), router/maker explorer verification
+> (bytecode attestation published in the README), final review reconciliation.
+> The retired contracts stay paused and unfunded permanently; the factor
+> signer key was exposed and `factorSigner` is immutable, so reactivation is
+> prohibited — any future demo uses a fresh deployment with a fresh key.
 > This document is the single source of truth for the production demo. Any
 > change to a frozen parameter must be edited here first, then applied.
 
@@ -181,7 +187,7 @@ broadcast phase in both the complete rehearsal and the mainnet sequence.
 | G-F | `FACTOR_PRIVATE_KEY` deriving `0x894E…fc99` in `.env` | user | **DONE** (verified; an empty duplicate template line in `.env` was removed) |
 | G-G | Factor funding for gas solvency | user | **DONE** (0.04 ETH at nonce 0) |
 | G-H | Commit clean tree; preflight (`EXPECTED_DEPLOYER_NONCE=0`) | user go, agent | **DONE** (`693cb85`, preflight PASS at nonce 0) |
-| G-I | **v2 leg first (nonce 0)**: deploy paused `--verify` → verifier → manifest → fund 0.01 → activate → verifier | simulate agent / broadcast user-authorized | **DONE on mainnet** — all four contracts live at predicted addresses, Etherscan-verified, ACTIVE; manifest `deployments/mainnet-v2.json` |
+| G-I | **v2 leg first (nonce 0)**: deploy paused `--verify` → verifier → manifest → fund 0.01 → activate → verifier | simulate agent / broadcast user-authorized | **DONE on mainnet** — all four contracts deployed at predicted addresses, Etherscan-verified, and activated for the proof window (since retired — see G-M); manifest `deployments/mainnet-v2.json` |
 | G-J | **Aqua leg second**: router via `cast send --create`, then deploy/seed/ship script, then the quote-bound fill | simulate agent / broadcast user-authorized | **DONE on mainnet** — strategy `0x80ccae4c…02be` on canonical Aqua; fill `0xdfb6b280…f64d37` (block 25611688), output exactly equal to the router quote |
 | G-K | Frontend gate: pin `NEXT_PUBLIC_*` in Vercel, redeploy, then **accept**: public URL renders both pinned addresses with explorer links, `verify:deployment` passes against a production RPC, a wallet connects on chain 1, and the quote/fill card simulates | user + agent verification | **DONE** — pins committed in `frontend/.env.production`, confirmed inside the served production bundle by in-browser probe; zero console errors; firm-quote endpoint deliberately fail-closed (operator-assisted beta) |
 | G-L | Seller staged (staked + exact 0.005 approval on-chain); operator firm quote (CLI-validated Aqua proof); fill; receipts + envelope archived | user-authorized | **DONE on mainnet** — fill `0x6c7dfd20…71d611` (block 25611746); first attempt `0xe2b579…69984e` exhausted its gas limit during the final WETH payment (after the Aave withdrawal path) and was fixed with an explicit ×1.5 gas cushion |

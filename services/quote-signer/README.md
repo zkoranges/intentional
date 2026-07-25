@@ -1,5 +1,11 @@
 # Reservoir quote signer
 
+> **Status: stopped.** The v2 mainnet deployment this desk served is
+> permanently retired (the immutable factor key was exposed), the service and
+> tunnel units are stopped and disabled, and the key material was removed from
+> the host. The desk relaunches only against a fresh deployment with a fresh
+> key — see "Key handling" below.
+
 The underwriting desk as a small HTTP service, so the app can request a
 seller-bound firm quote instead of a human pasting a signed envelope.
 
@@ -24,8 +30,9 @@ contracts and the executor script are unchanged.
 1. **Binds `127.0.0.1` only.** The public edge is Vercel; the tunnel is the
    only path in, and the tunnel hostname never reaches the client bundle.
 2. **Hard ceiling.** `MAX_QUOTE_WEI` bounds every quote *independently of*
-   measured reserve capacity. Even with the key, no single quote can authorize
-   more than the configured ceiling.
+   measured reserve capacity, so a bug elsewhere in the service cannot issue
+   an oversized quote. This bounds the **service**, not the key — see "Key
+   handling" below.
 3. **Single-flight.** One outstanding unexpired quote at a time. Concurrent
    requests cannot oversubscribe the reserve and hand a user a valid-looking
    quote that reverts at fill time (`409 SINGLE_FLIGHT`).
@@ -38,23 +45,25 @@ contracts and the executor script are unchanged.
 7. **Internal errors do not leak.** 5xx responses return a generic message;
    the detail goes to the audit log only.
 
-## Key handling — a documented, deliberate decision
+## Key handling — why the v2 instance is retired
 
 The mainnet factor key **was exposed in a working session transcript** and must
-be treated as burned. `AsyncClaimSettlement.factorSigner` is immutable, so
-rotating the key means redeploying the whole v2 stack (kernel, funding account,
+be treated as burned. `AsyncClaimSettlement.factorSigner` is immutable, so the
+exposed key can never be rotated out of the v2 stack (kernel, funding account,
 reserve adapter, Lido adapter).
 
 Consequences that are **operating rules, not suggestions**:
 
-- The deployed mainnet instance is a **demo instance, permanently**.
-- Keep the reserve small; do not add funds beyond demo scale.
-- `MAX_QUOTE_WEI` is the real bound on exposure — set it at demo scale.
-- A production deployment means a **fresh key and a fresh deployment**, and
-  that key should not live on a shared host.
+- The v2 mainnet deployment is **permanently retired** — paused, unfunded,
+  and never to be re-armed, re-funded, or unpaused.
+- `MAX_QUOTE_WEI` and the other guards above bound the *service* only. They
+  are **no protection** against someone who holds the key and signs outside
+  the service — nothing in this service constrains an exposed key.
+- The desk relaunches only against a **fresh deployment with a fresh key**,
+  and that key never lives on a shared host.
 
-Hosting the burned key on the VPS does not worsen its exposure, but it does
-make the ceiling and single-flight guards load-bearing rather than decorative.
+The key material was removed from the VPS and the service units were stopped
+and disabled when the deployment was retired.
 
 ## Run locally (against a fork)
 

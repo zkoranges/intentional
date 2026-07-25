@@ -105,15 +105,27 @@ The public Vercel page provides:
 - live canonical Lido originate/claim operations for connected mainnet
   wallets; and
 - the reviewed mainnet kernel and Lido adapter build-pinned into the frontend
-  (`frontend/.env.production`), with automated public firm-quote issuance
-  deliberately disabled: operator-signed quotes are pasted into the app and
-  executed (operator-assisted beta).
+  (`frontend/.env.production`). During the proof, firm quotes were served by
+  an operator-run quote service (`docs/QUOTE_DESK_OPS.md`); that desk is now
+  stopped and public firm-quote issuance is unavailable.
 
 For final judging, the primary evidence is the pair of real Ethereum mainnet
 receipts above, executed with controlled team wallets and operator pricing —
 proving machinery, atomicity, and real protocol integration, not market
 demand. `make live-product-e2e` additionally reproduces the complete flow on a
 disposable chain-1 fork (within the explicit local-fork allowance) as the
-interactive stage demo. Mainnet demo contracts are live and active; automated
-public firm-quote issuance is disabled; recovery and the unstETH #130880 claim
-are tracked in `docs/MAINNET_MICRO_DEMO.md` G-M.
+interactive stage demo.
+
+## Deployment status disclosure
+
+Mainnet settlement proof completed. Demo contracts safely retired after
+reserve recovery, and cannot be reactivated — the immutable signer key was
+exposed. Existing-unstETH acquisition and public firm quotes are under
+development.
+
+The factor signer key of the v2 deployment was exposed in a working session
+transcript. Because `AsyncClaimSettlement.factorSigner` is immutable, the
+deployment cannot be rotated to a new key: it is permanently retired —
+paused and unfunded, with re-arming prohibited. Public firm-quote issuance
+is disabled; recovery and the pending unstETH #130880 claim are tracked in
+`docs/MAINNET_MICRO_DEMO.md` G-M.

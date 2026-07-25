@@ -1,7 +1,16 @@
 # Quote desk — operations
 
-The paste box is gone. The app requests a seller-bound firm quote over HTTP
-and lands directly on Approve.
+> **Status: the desk is stopped.** Mainnet settlement proof completed. Demo
+> contracts safely retired after reserve recovery, and cannot be reactivated —
+> the immutable signer key was exposed. Existing-unstETH acquisition and
+> public firm quotes are under development.
+>
+> This document remains the operating reference for the desk when it relaunches
+> against a **fresh deployment with a fresh key**. See
+> "Current state — retired, never to be re-armed" below.
+
+The paste box is gone. When the desk runs, the app requests a seller-bound
+firm quote over HTTP and lands directly on Approve.
 
 ```text
 browser → Vercel /api/quote/lido      (validates; holds NO key)
@@ -77,31 +86,35 @@ reuse the `outreach.sh` zone (owner's separation rule).
 ## Key handling — a permanent operating constraint
 
 The mainnet factor key was exposed in a session transcript and is **burned**.
-`factorSigner` is immutable, so rotating it means redeploying the whole v2
-stack. Therefore:
+`factorSigner` is immutable, so the exposed key can never be rotated out of
+the v2 deployment. Therefore:
 
-- this mainnet instance is a **demo instance, permanently**;
-- keep the reserve at demo scale and set `MAX_QUOTE_WEI` accordingly;
-- a real deployment means a fresh key that does **not** live on a shared host.
+- the v2 deployment is **permanently retired** — paused, unfunded, and never
+  to be re-armed;
+- service-side guards (`MAX_QUOTE_WEI`, single-flight, expiry) bound the
+  *service*, not the key — they are **no protection** against a key holder
+  who signs outside the service;
+- any future desk runs against a **fresh deployment with a fresh key** that
+  never lives on a shared host.
 
-## Current state and the one remaining step
+## Current state — retired, never to be re-armed
 
-The mainnet kernel and funding account are **paused** and the reserve was
-recovered after the demo settlement, so the desk correctly answers
-`503 SETTLEMENT_PAUSED` — fail-closed behavior verified end to end against
-real mainnet state.
+The v2 mainnet deployment (recorded in `deployments/mainnet-v2.json`)
+completed its settlement proof and is **retired**: settlement and funding are
+paused, the reserve was recovered, and only unstETH #130880 remains, pending
+Lido finalization.
 
-To make the public flow fillable again, **re-arm the demo instance** (two
-factor transactions, user-authorized):
+**Do not re-arm this deployment. There is no safe way to do it, and it must
+never be attempted.** The factor key was exposed and `factorSigner` is
+immutable, so unpausing or re-funding would hand control of any restored
+reserve to whoever holds the exposed key. No re-arming runbook exists or will
+exist.
 
-```sh
-# 1. return WETH to the funding account and unpause it, then reinvest
-cast send $WETH "transfer(address,uint256)" $FUNDING <amount> --private-key $FACTOR_PRIVATE_KEY --rpc-url $ETH_RPC_URL
-cast send $FUNDING "setPaused(bool)" false ...
-cast send $FUNDING "reinvestInventory()" ...
-# 2. unpause settlement
-cast send $KERNEL "setPaused(bool)" false ...
-```
+The desk itself is stopped: `impatience-signer` and `impatience-tunnel` are
+stopped and disabled on the VPS, the key material was shredded from the host,
+and the Vercel `SIGNER_URL`/`SIGNER_SECRET` variables were removed. With the
+desk down, the app has no firm-quote path — by design.
 
-Verify with `curl $SIGNER/health` and a live quote request. Re-pause and
-recover after the demo window.
+Relaunching the desk means a **fresh deployment with a fresh key**, following
+`docs/LIVE_ACTIVATION.md` from scratch. Never point the desk at the retired
+deployment.

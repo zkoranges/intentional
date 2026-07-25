@@ -27,10 +27,13 @@
   never the swapper. This enables our third-party-payout settlement shape.
 - **Exact pull**: the proxy pulled exactly the approved input in every run —
   zero residue — which lets our executor enforce strict entry/exit
-  dustlessness (`test/spikes/UniswapPayoutSpike.t.sol` assertions 2 and 5).
-- **Quote accuracy**: in both the spike and the canonical fork proof, the
-  delivered output equaled the `/quote` output to the unit (9348354 and
-  9349109 micro-USDC respectively) when replayed at the fetch block.
+  dustlessness (`test/fork/UniswapPayoutSpike.t.sol` assertions 2 and 5).
+- **Quote accuracy**: the spike prints the `/quote` output and the measured
+  delivered amount side by side, and in both the spike and the canonical fork
+  proof the printed values matched to the unit (9348354 and 9349109
+  micro-USDC respectively) when replayed at the fetch block. That equality is
+  an observation, not an assertion — the asserted bounds are delivered > 0 in
+  the spike and at least 99% of the quote in the fork suite.
 
 ## Friction worth fixing
 
@@ -57,6 +60,6 @@
 - `src/payouts/UniswapPayoutSettlement.sol` — fill-or-kill factoring kernel
   whose payout leg routes through the API; payout asset is a signed quote
   field behind a factor-controlled allowlist (any-asset by design).
-- Live-route proofs: `test/spikes/UniswapPayoutSpike.t.sol` (7 assertions)
+- Live-route proofs: `test/fork/UniswapPayoutSpike.t.sol` (10 assertions)
   and `test/fork/UniswapPayoutMainnet.t.sol` (success + atomic forced
   failure) replay retained fixtures deterministically without a live key.

@@ -2,9 +2,18 @@
 
 ## For liquid assets, use an exchange
 
-We sampled a year of settlement data: 308,160 CoW settlements, 568 comparable stETH→ETH executions, and 42,074 Lido withdrawal requests across 364 finalization batches. Factoring beat the open market on 4.6% of trades and 5.3% of volume.
+An externally produced sample suggested that economically attractive factoring
+opportunities were episodic rather than continuous. The raw dataset and
+analysis pipeline are not in this repository, so the public product does not
+present those reported figures as reproduced evidence. The appendix in
+[`docs/V2_ECONOMICS.md`](https://github.com/zkoranges/reservoir-v2-eth-lisbon/blob/main/docs/V2_ECONOMICS.md)
+records the assumptions and reported results with that limitation.
 
-The rest of the time, a direct stETH sale is the better route: stETH has deep pools, competing market makers, and purpose-built exit products. Factoring applies when there is no market — a claim that is not an ERC-20, a position too large to sell without slippage, or a stressed market where the queue still pays par and the order book does not.
+For liquid stETH, a direct market sale will often be the better route because
+stETH has deep pools, competing market makers, and purpose-built exit products.
+Factoring is aimed at a different object: a claim that is not an ERC-20, a
+position too large to sell without slippage, or stressed conditions where the
+factor is willing to accept queue timing and impairment risk.
 
 ## Not built
 
@@ -23,7 +32,11 @@ Quotes are built from disclosed inputs: funding rate, risk margin, gas. There is
 
 ## Deployment status
 
-Unaudited hackathon software. Contracts deploy paused and unfunded; funding and activation are separate steps with read-only verification between them.
+Unaudited hackathon software. The mainnet proof deployment is retired: both
+pausable contracts are paused and its reserve was recovered. A future
+deployment must use a fresh signer and starts paused and unfunded; funding and
+activation remain separate, human-authorized steps with read-only verification
+between them.
 
 ---
 

@@ -13,15 +13,15 @@ While a claim waits in a queue it cannot be spent, and it cannot be sold on a no
 
 ## What Reservoir does
 
-A factor — a buyer with capital — signs a priced offer for the claim. The seller accepts it, and in a single transaction the claim moves to the factor and payment moves to the seller. The factor waits out the queue and redeems the claim at full value; the discount is its return.
+A factor — a buyer with capital — signs a priced offer for the claim. The seller accepts it, and in a single transaction the claim moves to the factor and payment moves to the seller. The factor waits out the queue and collects the eventual payout — subject to finalization timing and impairment risk, which stay with the factor; the discount is its return.
 
 ```
 You hold:     a claim on 2.6 ETH, arriving in ~5 days
 You get:      ~2.59 ETH now
-The factor:   waits, then redeems 2.6 ETH
+The factor:   waits, then collects the payout — ~2.6 ETH if no impairment
 ```
 
-The production demo factors Lido withdrawals. The settlement kernel is claim-agnostic: supporting a new claim type means writing an adapter, not changing the kernel. An ERC-7540/8161 adapter ships alongside the Lido one to demonstrate this.
+The production demo factored Lido withdrawals on Ethereum mainnet; that deployment is now retired — see [Status](status.md). The settlement kernel is claim-agnostic: supporting a new claim type means writing an adapter, not changing the kernel. An ERC-7540/8161 adapter ships alongside the Lido one to demonstrate this.
 
 ## The invariant
 
