@@ -12,6 +12,8 @@ test("the app includes a restrained gavel line-art backdrop", async () => {
   );
 
   assert.match(page, /className="gavelBackdrop"/);
+  assert.match(page, /createPortal\(/);
+  assert.match(page, /document\.body/);
   assert.match(stylesheet, /\.gavelBackdrop \{/);
   assert.match(stylesheet, /position: fixed/);
   assert.match(stylesheet, /bottom: 0/);
