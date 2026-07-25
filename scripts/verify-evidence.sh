@@ -36,6 +36,19 @@ eq() { # label expected actual
   fi
 }
 
+# Tolerant zero-balance check for RETIREMENT claims only. Exact-zero equality
+# would be donation-griefable: anyone can send 1 wei of the asset to the
+# funding account and permanently fail this run, and clearing the dust would
+# require the burned factor key. A nonzero residual is reported as a NOTE
+# (possible donation dust; not a live-capital claim), never as a FAIL.
+tolerant_zero() { # label actual
+  if [[ "$2" == "0" ]]; then
+    ok "$1"
+  else
+    note "$1 — nonzero residual (${2}): possible donation dust; not a live-capital claim"
+  fi
+}
+
 j() { # file jsonpath
   node --input-type=module -e \
     'import fs from "node:fs"; let o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); for (const k of process.argv[2].split(".")) o=o?.[k]; console.log(o ?? "");' \
@@ -79,14 +92,24 @@ else
   eq "lido adapter is bound to the kernel" "$KERNEL" \
     "$(cast call "$LIDO_ADAPTER" 'settlement()(address)' --rpc-url "$RPC")"
 
-  # Retirement claims: paused, drained, no capacity.
+  # Retirement claims. HARD: a terminal manifest state and both pausable
+  # contracts paused — facts an outside donor cannot fake. TOLERANT: residual
+  # balances, via tolerant_zero above (exact zero is donation-griefable).
+  STATE="$(j "$M" releaseState)"
+  case "$STATE" in
+    retired-paused | claim-collected)
+      ok "manifest releaseState is a terminal retirement state (${STATE})" ;;
+    *)
+      bad "manifest releaseState is a terminal retirement state" \
+        "retired-paused or claim-collected" "$STATE" ;;
+  esac
   eq "settlement is PAUSED (retired)" "true" \
     "$(cast call "$KERNEL" 'isPaused()(bool)' --rpc-url "$RPC")"
   eq "funding account is PAUSED (retired)" "true" \
     "$(cast call "$FUNDING" 'isPaused()(bool)' --rpc-url "$RPC")"
-  eq "reserve is drained (zero StataWETH shares)" "0" \
+  tolerant_zero "reserve is drained (zero StataWETH shares)" \
     "$(cast call "$STATA_WETH" 'balanceOf(address)(uint256)' "$FUNDING" --rpc-url "$RPC" | awk '{print $1}')"
-  eq "reserve reports zero deliverable capacity" "0" \
+  tolerant_zero "reserve reports zero deliverable capacity" \
     "$(cast call "$FUNDING" 'availableFor(uint256)(uint256)' 1 --rpc-url "$RPC" | awk '{print $1}')"
 fi
 
