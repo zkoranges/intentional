@@ -175,11 +175,12 @@ Cutover order:
 1. Deploy the renamed frontend to the existing Vercel project.
 2. Confirm the deployment through its immutable Vercel URL.
 3. Confirm `https://intentional.so/` and `https://intentional.so/docs`.
-4. Test an indicative quote without a wallet.
-5. Connect and disconnect a wallet.
-6. Verify metadata and the social-card image from the custom domain.
-7. Rename the Vercel project in project settings.
-8. Keep the previous Vercel alias for at least one release.
+4. Connect a wallet that owns unstETH and request a real firm offer.
+5. Verify the exact NFT approval and atomic sale flow.
+6. Connect and disconnect a wallet.
+7. Verify metadata and the social-card image from the custom domain.
+8. Rename the Vercel project in project settings.
+9. Keep the previous Vercel alias for at least one release.
 
 ## Validation gates
 
@@ -200,7 +201,8 @@ identifiers in source files.
 
 Run the existing frontend lint, unit tests and production build. Then verify:
 
-- Indicative Lido quoting still works without a wallet.
+- No synthetic payout is shown before the quote desk signs a seller- and
+  request-bound firm offer.
 - Firm quote validation still uses the unchanged EIP-712 domain.
 - Wallet connect and disconnect still work.
 - `/docs` renders.

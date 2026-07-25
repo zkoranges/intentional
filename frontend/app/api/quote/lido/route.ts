@@ -1,9 +1,10 @@
-import { isAddress } from "viem";
+import { isAddress, parseEther } from "viem";
 
 import { MAX_LIDO_REQUEST } from "../../../../lib/ethereum";
-import { MIN_LIVE_LIDO_QUOTE } from "../../../../lib/lido-quote";
 
 export const dynamic = "force-dynamic";
+
+const MIN_LIVE_LIDO_QUOTE = parseEther("0.001");
 
 function json(body: unknown, status: number) {
   return Response.json(body, {

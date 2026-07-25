@@ -100,14 +100,13 @@ professional audit.
 
 The public Vercel page provides:
 
-- a wallet-free replay of the exact green fork proof;
 - links to the public source and reproducible CI run;
 - live canonical Lido originate/claim operations for connected mainnet
-  wallets; and
-- the reviewed mainnet kernel and Lido adapter build-pinned into the frontend
-  (`frontend/.env.production`). During the proof, firm quotes were served by
-  an operator-run quote service (`docs/QUOTE_DESK_OPS.md`); that desk is now
-  stopped and public firm-quote issuance is unavailable.
+  wallets;
+- discovery of seller-owned unstETH positions; and
+- a fail-closed owned-claim sale flow that becomes actionable only when a
+  fresh reviewed kernel, both Lido adapters, funded reserve, and operator
+  quote desk are active and build-pinned.
 
 For final judging, the primary evidence is the pair of real Ethereum mainnet
 receipts above, executed with controlled team wallets and operator pricing —
@@ -120,8 +119,10 @@ interactive stage demo.
 
 Mainnet settlement proof completed. Demo contracts safely retired after
 reserve recovery, and cannot be reactivated — the immutable signer key was
-exposed. Existing-unstETH acquisition and public firm quotes are under
-development.
+exposed. Existing-unstETH acquisition and the browser firm-offer flow are
+implemented and pass the canonical mainnet-fork release rehearsal. Public
+firm offers remain disabled until the fresh `pre-alpha-001` deployment and
+fresh signer are activated.
 
 The factor signer key of the v2 deployment was exposed in a working session
 transcript. Because `AsyncClaimSettlement.factorSigner` is immutable, the

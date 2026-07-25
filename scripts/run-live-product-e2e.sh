@@ -4,7 +4,7 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_RPC_URL="${ETH_RPC_URL:-}"
 LOCAL_RPC_URL="http://127.0.0.1:8545"
-FORK_BLOCK="25604561"
+FORK_BLOCK="25612678"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/reservoir-live-e2e.XXXXXX")"
 ANVIL_LOG="${TEMP_DIR}/anvil.log"
 DEPLOYMENT_LOG="${TEMP_DIR}/deployment.log"
@@ -151,12 +151,14 @@ deployment_value() {
 
 kernel_address="$(deployment_value kernel)"
 lido_adapter_address="$(deployment_value lidoAdapter)"
+lido_unsteth_adapter_address="$(deployment_value lidoUnstETHExitAdapter)"
 funding_account="$(deployment_value fundingAccount)"
 reserve_adapter_address="$(deployment_value reserveAdapter)"
 funding_codehash="$(deployment_value fundingCodeHash)"
 reserve_codehash="$(deployment_value reserveCodeHash)"
 kernel_codehash="$(deployment_value kernelCodeHash)"
 lido_adapter_codehash="$(deployment_value lidoAdapterCodeHash)"
+lido_unsteth_adapter_codehash="$(deployment_value lidoUnstETHExitAdapterCodeHash)"
 
 ETH_RPC_URL="${LOCAL_RPC_URL}" \
 FACTOR_ADDRESS="${factor_address}" \
@@ -164,10 +166,12 @@ KERNEL_ADDRESS="${kernel_address}" \
 FUNDING_ACCOUNT_ADDRESS="${funding_account}" \
 RESERVE_ADAPTER_ADDRESS="${reserve_adapter_address}" \
 LIDO_ADAPTER_ADDRESS="${lido_adapter_address}" \
+LIDO_UNSTETH_ADAPTER_ADDRESS="${lido_unsteth_adapter_address}" \
 EXPECTED_FUNDING_CODEHASH="${funding_codehash}" \
 EXPECTED_RESERVE_CODEHASH="${reserve_codehash}" \
 EXPECTED_KERNEL_CODEHASH="${kernel_codehash}" \
 EXPECTED_LIDO_ADAPTER_CODEHASH="${lido_adapter_codehash}" \
+EXPECTED_LIDO_UNSTETH_ADAPTER_CODEHASH="${lido_unsteth_adapter_codehash}" \
 EXPECTED_RELEASE_STATE="active" \
 MIN_CAPACITY_WEI="1000000000000000000" \
 node frontend/scripts/verify-live-deployment.mjs >/dev/null
@@ -198,6 +202,7 @@ if [[ "${JURY_BROWSER_MODE:-0}" == "1" ]]; then
 
   NEXT_PUBLIC_RESERVOIR_KERNEL="${kernel_address}" \
   NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER="${lido_adapter_address}" \
+  NEXT_PUBLIC_RESERVOIR_LIDO_UNSTETH_ADAPTER="${lido_unsteth_adapter_address}" \
   npm --prefix frontend run dev
   exit 0
 fi
@@ -209,4 +214,5 @@ FUNDING_ACCOUNT="${funding_account}" \
 AQUA_PROOF_PASSED="1" \
 node frontend/scripts/execute-lido-quote.mjs
 
-echo "LIVE E2E PASS | exact release bytecode exercised against canonical Lido and Aave contracts at pinned fork state"
+echo "ORIGINATION E2E PASS | exact release bytecode exercised against canonical Lido and Aave contracts at pinned fork state"
+echo "SCOPE | this is the stETH-origination contract path plus a companion Aqua proof; run scripts/rehearse-existing-unsteth-flow.sh for the existing-claim product path"

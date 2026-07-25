@@ -22,7 +22,7 @@ attribution this repository already carries.
 | Page titles, meta descriptions, social cards | **Intentional** | This is the product a visitor found |
 | Headings, body copy, button labels | **Intentional** | Product voice |
 | Status messages and errors shown in the app | **neither, by default** | Errors should name what the person controls, not the system underneath |
-| Footer attribution | **Reservoir** | "Powered by Reservoir", deliberate, like "Powered by SwapVM" |
+| Public footer | **Intentional** | Product identity only; technical attribution lives in protocol documentation |
 | Protocol documentation (`/docs`) | **Reservoir** | It genuinely documents the protocol |
 | Contracts, specs, threat model, this repository | **Reservoir** | Technical register throughout |
 | Code identifiers, env vars, API enums, wire formats | **Reservoir** | Internal; renaming buys nothing and breaks things |
@@ -47,40 +47,19 @@ There are now **three signers** — the browser-side verifier, the operator CLI,
 and the quote-desk service — and one on-chain verifier. Every one of them has to
 spell the domain identically. Add a fourth and it goes in the test below too.
 | `NEXT_PUBLIC_RESERVOIR_KERNEL`, `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` | Build-pinned env vars | Vercel and CI configuration, and the pinned-build check |
-| `"reservoir-indicative+lido-live"`, `"reservoir-indicative+lido-fallback"` | Quote API `source` enum | The public indicative quote route's response contract, pinned by `frontend/tests/disconnected-quote.test.mjs` |
 | `zkoranges/reservoir-v2-eth-lisbon` | Repository and links | Every published URL, including the ETHGlobal submission |
 
 The EIP-712 domain is the dangerous one. It reads like display text and is not.
 
 ## What the scan found
 
-65 references to "Reservoir" across 10 frontend source files, as of the
-2026-07-25 audit:
-
-| File | Refs | Kind |
-|---|---:|---|
-| `lib/ethereum.ts` | 19 | identifiers, EIP-712 domain, envelope version, 4 user-facing errors |
-| `app/page.tsx` | 16 | imported identifiers, repo URL, 1 footer attribution |
-| `app/docs/page.tsx` | 7 | protocol documentation prose — correct usage |
-| `lib/lido-quote.ts` | 7 | API enums and field names |
-| `tests/rendered-html.test.mjs` | 6 | assertions on the above |
-| `app/api/quote/lido/indicative/route.ts` | 4 | API enums |
-| `scripts/create-lido-quote.mjs` | 2 | EIP-712 domain, envelope version |
-| `tests/disconnected-quote.test.mjs` | 2 | assertions on API enums |
-| `scripts/execute-lido-quote.mjs` | 1 | operator-only error text |
-| `worker/index.ts` | 1 | source comment |
-
-The split is already respected almost everywhere. Marketing metadata in
+The split is enforced in source and rendered-output tests. Marketing metadata in
 [`app/layout.tsx`](../frontend/app/layout.tsx) is Intentional throughout, the
 wordmark is Intentional, and in-app copy that addresses the user by name already
 says things like "Intentional verifies its amount, signature, contracts, expiry".
 
-### The exception, and it is deliberate
-
-`Powered by Reservoir` appears in the footer of both the app and the docs, and
-is asserted by
-[`tests/rendered-html.test.mjs`](../frontend/tests/rendered-html.test.mjs). That
-is attribution, not a product name. It stays.
+Technical pages may name Reservoir when they explain the settlement protocol.
+The public app and its footer use the Intentional product identity.
 
 ### What violated the rule
 

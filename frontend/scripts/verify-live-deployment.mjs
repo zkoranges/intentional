@@ -16,10 +16,7 @@ const CANONICAL = {
   queue: getAddress("0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"),
   stataWeth: getAddress("0x0bfc9d54Fc184518A81162F8fB99c2eACa081202"),
 };
-// v2 allowlists exactly one adapter (the Lido withdrawal adapter). v3 is
-// expected to allowlist a second (existing-unstETH exit) adapter — when that
-// lands this must become 2n or configurable; do not treat 1n as an invariant.
-const EXPECTED_ADAPTER_COUNT = 1n;
+const EXPECTED_ADAPTER_COUNT = 2n;
 const EXPECTED_NONCE_FLOOR = 0n;
 
 const settlementAbi = parseAbi([
@@ -115,11 +112,13 @@ const kernel = requiredAddress("KERNEL_ADDRESS");
 const expectedFunding = requiredAddress("FUNDING_ACCOUNT_ADDRESS");
 const expectedReserve = requiredAddress("RESERVE_ADAPTER_ADDRESS");
 const lidoAdapter = requiredAddress("LIDO_ADAPTER_ADDRESS");
+const lidoUnstETHAdapter = requiredAddress("LIDO_UNSTETH_ADAPTER_ADDRESS");
 const expectedCodeHashes = {
   fundingAccount: requiredCodeHash("EXPECTED_FUNDING_CODEHASH"),
   reserveAdapter: requiredCodeHash("EXPECTED_RESERVE_CODEHASH"),
   kernel: requiredCodeHash("EXPECTED_KERNEL_CODEHASH"),
   lidoAdapter: requiredCodeHash("EXPECTED_LIDO_ADAPTER_CODEHASH"),
+  lidoUnstETHAdapter: requiredCodeHash("EXPECTED_LIDO_UNSTETH_ADAPTER_CODEHASH"),
 };
 const probe =
   expectedState === "paused-unfunded" || isRetired
@@ -144,6 +143,7 @@ const codeAddresses = {
   fundingAccount: expectedFunding,
   reserveAdapter: expectedReserve,
   lidoAdapter,
+  lidoUnstETHAdapter,
 };
 const codeEntries = await Promise.all(
   Object.entries(codeAddresses).map(async ([name, address]) => {
@@ -169,6 +169,7 @@ const [
   settlementSealed,
   settlementPaused,
   adapterAllowed,
+  unstETHAdapterAllowed,
   adapterCount,
   nonceFloor,
 ] = await Promise.all([
@@ -201,6 +202,12 @@ const [
   client.readContract({
     address: kernel,
     abi: settlementAbi,
+    functionName: "isAdapterAllowed",
+    args: [lidoUnstETHAdapter],
+  }),
+  client.readContract({
+    address: kernel,
+    abi: settlementAbi,
     functionName: "adapterCount",
   }),
   client.readContract({
@@ -213,8 +220,8 @@ if (!same(factor, expectedFactor)) throw new Error("Kernel factor mismatch");
 if (!same(fundingAccount, expectedFunding)) {
   throw new Error("Kernel funding-account mismatch");
 }
-if (!settlementSealed || !adapterAllowed) {
-  throw new Error("Kernel is not sealed with the Lido adapter allowed");
+if (!settlementSealed || !adapterAllowed || !unstETHAdapterAllowed) {
+  throw new Error("Kernel is not sealed with both Lido adapters allowed");
 }
 if (
   adapterCount !== EXPECTED_ADAPTER_COUNT ||
@@ -309,6 +316,9 @@ const [
   adapterSettlement,
   adapterStEth,
   adapterQueue,
+  unstETHAdapterSettlement,
+  unstETHAdapterStEth,
+  unstETHAdapterQueue,
   vaultAsset,
 ] = await Promise.all([
   client.readContract({
@@ -353,6 +363,21 @@ const [
     functionName: "queue",
   }),
   client.readContract({
+    address: lidoUnstETHAdapter,
+    abi: lidoAdapterAbi,
+    functionName: "settlement",
+  }),
+  client.readContract({
+    address: lidoUnstETHAdapter,
+    abi: lidoAdapterAbi,
+    functionName: "stETH",
+  }),
+  client.readContract({
+    address: lidoUnstETHAdapter,
+    abi: lidoAdapterAbi,
+    functionName: "queue",
+  }),
+  client.readContract({
     address: CANONICAL.stataWeth,
     abi: vaultAbi,
     functionName: "asset",
@@ -367,6 +392,9 @@ if (
   !same(adapterSettlement, kernel) ||
   !same(adapterStEth, CANONICAL.stEth) ||
   !same(adapterQueue, CANONICAL.queue) ||
+  !same(unstETHAdapterSettlement, kernel) ||
+  !same(unstETHAdapterStEth, CANONICAL.stEth) ||
+  !same(unstETHAdapterQueue, CANONICAL.queue) ||
   !same(vaultAsset, CANONICAL.weth)
 ) {
   throw new Error("Reserve, Lido adapter, or canonical vault binding mismatch");
@@ -419,10 +447,19 @@ if (expectedState === "paused-unfunded") {
   if (
     fundingPaused ||
     capacity !== probe ||
-    idleWeth !== 0n ||
     vaultShares === 0n
   ) {
-    throw new Error("Deployment is not funded with exact probed capacity");
+    throw new Error(
+      "Deployment is not active/funded with productive shares and exact probed capacity",
+    );
+  }
+  // Idle WETH is not a safety failure and exact-zero enforcement would make
+  // this verifier donation-griefable. Productive shares plus availableFor()
+  // covering the explicit probe are the release properties that matter.
+  if (idleWeth !== 0n) {
+    warnings.push(
+      `funding account holds ${idleWeth} wei idle WETH — possible donation dust; productive capacity remains independently verified`,
+    );
   }
   if (
     (expectedState === "funded-paused" && !settlementPaused) ||
@@ -458,6 +495,7 @@ console.log(
       fundingAccount: expectedFunding,
       reserveAdapter: expectedReserve,
       lidoAdapter,
+      lidoUnstETHAdapter,
       adapterCount: adapterCount.toString(),
       nonceFloor: nonceFloor.toString(),
       capacityProbeWei: probe.toString(),

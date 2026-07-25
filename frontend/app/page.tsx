@@ -32,15 +32,8 @@ import {
   type ReservoirQuoteCheck,
   type WithdrawalStatus,
 } from "../lib/ethereum";
-import {
-  formatQuoteAmount,
-  MIN_LIVE_LIDO_QUOTE,
-  requestLidoQuote,
-  type LidoQuoteResponse,
-} from "../lib/lido-quote";
-
 type ActionState = "idle" | "connecting" | "reading" | "signing" | "mining";
-type ExitMode = "instant" | "queue";
+type ExitMode = "claim" | "queue";
 type NavSection = "markets" | "positions" | "faq";
 
 type CompletedAction = {
@@ -173,12 +166,6 @@ function quoteDiscount(check: ReservoirQuoteCheck | null) {
   return `${(Number(basisPoints) / 100).toFixed(2)}%`;
 }
 
-function formatWait(milliseconds: number) {
-  const hours = milliseconds / (60 * 60 * 1_000);
-  if (hours < 48) return `${hours.toFixed(1)} hours`;
-  return `${(hours / 24).toFixed(1)} days`;
-}
-
 function formatMarketWait(milliseconds: number) {
   const hours = milliseconds / (60 * 60 * 1_000);
   if (hours < 48) return `~${Math.max(1, Math.round(hours))} hours`;
@@ -193,19 +180,15 @@ export default function Home() {
   const [status, setStatus] = useState(
     "Connect your wallet to start an exit.",
   );
-  const [mode, setMode] = useState<ExitMode>("instant");
+  const [mode, setMode] = useState<ExitMode>("claim");
+  const [selectedClaimId, setSelectedClaimId] = useState<bigint | null>(null);
   const [amountInput, setAmountInput] = useState("0.00");
   const [actions, setActions] = useState<CompletedAction[]>([]);
   const [lastMintedRequest, setLastMintedRequest] = useState<bigint | null>(
     null,
   );
-  const [quoteCheck, setQuoteCheck] = useState<ReservoirQuoteCheck | null>(null);
   const [claimQuoteCheck, setClaimQuoteCheck] =
     useState<ReservoirQuoteCheck | null>(null);
-  const [lidoQuote, setLidoQuote] = useState<LidoQuoteResponse | null>(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [activeSection, setActiveSection] =
     useState<NavSection>("markets");
@@ -223,6 +206,18 @@ export default function Home() {
 
   const busy = action !== "idle";
   const marketLive = marketStatus.firmQuotesEnabled;
+  const sellableClaims = useMemo(
+    () => snapshot?.requests.filter((request) => !request.isClaimed) ?? [],
+    [snapshot],
+  );
+  const selectedClaim =
+    sellableClaims.find((request) => request.requestId === selectedClaimId) ??
+    sellableClaims[0] ??
+    null;
+  const selectedClaimOffer =
+    claimQuoteCheck?.requestId === selectedClaim?.requestId
+      ? claimQuoteCheck
+      : null;
   const amount = useMemo(() => {
     try {
       return parseEther(amountInput || "0");
@@ -232,10 +227,8 @@ export default function Home() {
   }, [amountInput]);
   const amountWithinLidoLimits =
     amount >= MIN_LIDO_REQUEST && amount <= MAX_LIDO_REQUEST;
-  const amountWithinMarketLimits =
-    amount >= MIN_LIVE_LIDO_QUOTE && amount <= MAX_LIDO_REQUEST;
   const amountValid =
-    (mode === "instant" ? amountWithinMarketLimits : amountWithinLidoLimits) &&
+    amountWithinLidoLimits &&
     Boolean(snapshot && amount <= snapshot.stEthBalance);
   const queueApproved = Boolean(
     snapshot && amount > 0n && snapshot.queueAllowance === amount,
@@ -245,8 +238,6 @@ export default function Home() {
       ? "Enter an amount"
       : amount < MIN_LIDO_REQUEST
         ? "Amount below minimum"
-        : mode === "instant" && amount < MIN_LIVE_LIDO_QUOTE
-          ? "Live quote minimum is 0.001 stETH"
         : amount > MAX_LIDO_REQUEST
           ? "Amount above maximum"
           : snapshot && amount > snapshot.stEthBalance
@@ -417,46 +408,6 @@ export default function Home() {
     };
   }, [walletMenuOpen]);
 
-  useEffect(() => {
-    if (mode !== "instant" || !amountWithinMarketLimits) {
-      setLidoQuote(null);
-      setQuoteCheck(null);
-      setQuoteError(null);
-      setQuoteLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      setQuoteLoading(true);
-      setQuoteError(null);
-      setLidoQuote(null);
-      setQuoteCheck(null);
-      void requestLidoQuote(amountInput, controller.signal)
-        .then((nextQuote) => {
-          if (controller.signal.aborted) return;
-          setLidoQuote(nextQuote);
-        })
-        .catch((error) => {
-          if (controller.signal.aborted) return;
-          setQuoteError(errorMessage(error));
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setQuoteLoading(false);
-        });
-    }, 350);
-
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [
-    amountInput,
-    amountWithinMarketLimits,
-    mode,
-    quoteRefreshKey,
-  ]);
-
   async function connect() {
     const injected = getInjectedProvider();
     if (!injected) {
@@ -482,7 +433,6 @@ export default function Home() {
     setWalletMenuOpen(false);
     setAccount(null);
     setSnapshot(null);
-    setQuoteCheck(null);
     setClaimQuoteCheck(null);
     setActions([]);
     setLastMintedRequest(null);
@@ -524,7 +474,7 @@ export default function Home() {
         ...current,
         { label, hash: error.transactionHash },
       ]);
-      if (clearQuote) setQuoteCheck(null);
+      if (clearQuote) setClaimQuoteCheck(null);
       if (account) await refresh(account);
     }
     setStatus(errorMessage(error));
@@ -605,68 +555,8 @@ export default function Home() {
     }
   }
 
-  /// Requests a seller-bound firm quote from the desk and verifies it against
-  /// the pinned deployment before showing terms. No envelope ever passes
-  /// through a human: the desk signs, this verifies, the wallet fills.
-  async function requestFirmQuote() {
-    const injected = getInjectedProvider();
-    if (!injected || !account || !amountValid) {
-      return;
-    }
-    if (!marketLive) {
-      setStatus(marketStatus.detail);
-      return;
-    }
-    if (!RESERVOIR_DEPLOYMENT) {
-      setStatus("The firm quote deployment is not pinned in this app build");
-      return;
-    }
-
-    setAction("reading");
-    setQuoteCheck(null);
-    setStatus("Requesting a firm quote from the desk.");
-    try {
-      const response = await fetch("/api/quote/lido", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          mode: "originate",
-          seller: account,
-          requestedStEth: amount.toString(),
-        }),
-      });
-      const payload: unknown = await response.json();
-      if (!response.ok) {
-        const message =
-          typeof payload === "object" &&
-          payload !== null &&
-          typeof (payload as { error?: unknown }).error === "string"
-            ? (payload as { error: string }).error
-            : "Firm quotes are unavailable right now";
-        throw new Error(message);
-      }
-
-      const checked = await verifyReservoirQuote(
-        injected,
-        account,
-        JSON.stringify(payload),
-      );
-      if (checked.requestedStEth !== amount) {
-        throw new Error("The firm quote amount does not match the entered amount");
-      }
-      setQuoteCheck(checked);
-      setStatus(
-        `Firm quote ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH. Approve to continue.`,
-      );
-    } catch (error) {
-      setStatus(errorMessage(error));
-    } finally {
-      setAction("idle");
-    }
-  }
-
   async function approveReservoir(
-    selectedCheck: ReservoirQuoteCheck | null = quoteCheck,
+    selectedCheck: ReservoirQuoteCheck | null = claimQuoteCheck,
   ) {
     const injected = getInjectedProvider();
     if (!injected || !account || !selectedCheck) return;
@@ -707,11 +597,7 @@ export default function Home() {
         account,
         JSON.stringify(selectedCheck.envelope),
       );
-      if (checked.envelope.mode === "existing-unsteth") {
-        setClaimQuoteCheck(checked);
-      } else {
-        setQuoteCheck(checked);
-      }
+      setClaimQuoteCheck(checked);
       setStatus("Approval confirmed. The same firm quote is ready to fill.");
     } catch (error) {
       await handleMinedActionError(
@@ -739,6 +625,7 @@ export default function Home() {
       return;
     }
 
+    setSelectedClaimId(request.requestId);
     setAction("reading");
     setClaimQuoteCheck(null);
     setStatus(`Requesting a firm offer for unstETH #${request.requestId}.`);
@@ -787,12 +674,12 @@ export default function Home() {
   }
 
   async function fillQuote(
-    selectedCheck: ReservoirQuoteCheck | null = quoteCheck,
+    selectedCheck: ReservoirQuoteCheck | null = claimQuoteCheck,
   ) {
     const injected = getInjectedProvider();
     if (!injected || !account || !selectedCheck) return;
     setAction("signing");
-    setStatus("Confirm your instant exit.");
+    setStatus("Confirm the atomic claim sale.");
     try {
       const result = await fillReservoirQuote(injected, account, selectedCheck);
       setActions((current) => [
@@ -810,11 +697,7 @@ export default function Home() {
           ? `Sale complete. unstETH #${result.requestId} moved to the buyer and ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`
           : `Exit complete. ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`,
       );
-      if (selectedCheck.envelope.mode === "existing-unsteth") {
-        setClaimQuoteCheck(null);
-      } else {
-        setQuoteCheck(null);
-      }
+      setClaimQuoteCheck(null);
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
@@ -831,10 +714,10 @@ export default function Home() {
   function selectMode(nextMode: ExitMode) {
     setMode(nextMode);
     setStatus(
-      nextMode === "instant"
+      nextMode === "claim"
         ? marketLive
-          ? "Enter an amount to request a firm Lido factoring quote."
-          : "Indicative estimates are available; public firm quotes are not."
+          ? "Choose an owned unstETH claim to request a firm offer."
+          : "Connect to inspect claims; public firm offers are not active."
         : "Use Lido directly and keep the withdrawal claim in your wallet.",
     );
   }
@@ -843,19 +726,7 @@ export default function Home() {
     if (!snapshot) return;
     const nextAmount = (snapshot.stEthBalance * BigInt(percent)) / 100n;
     setAmountInput(formatEther(nextAmount));
-    setQuoteCheck(null);
   }
-
-  const instantPayment = quoteCheck
-    ? formatQuoteAmount(quoteCheck.envelope.quote.paymentAmount)
-    : lidoQuote
-      ? formatQuoteAmount(lidoQuote.paymentAmount)
-      : "0.00";
-  const discount = quoteCheck
-    ? quoteDiscount(quoteCheck)
-    : lidoQuote
-      ? `${(lidoQuote.discountBps / 100).toFixed(2)}%`
-      : "—";
 
   return (
     <>
@@ -990,16 +861,20 @@ export default function Home() {
         <section className="exitCard" id="exit" aria-label="Withdrawal interface">
           <div className="cardHeader">
             <div>
-              <span className="cardEyebrow">Lido · stETH → ETH</span>
+              <span className="cardEyebrow">
+                {mode === "claim"
+                  ? "Lido · unstETH → WETH"
+                  : "Lido · stETH → unstETH"}
+              </span>
               <h2>
-                {mode === "instant"
-                  ? "Factor a withdrawal"
+                {mode === "claim"
+                  ? "Sell an unstETH claim"
                   : "Withdraw through Lido"}
               </h2>
               <p>
-                {mode === "instant"
-                  ? "Sell the future payout for liquidity now."
-                  : "Keep the withdrawal claim yourself."}
+                {mode === "claim"
+                  ? "Transfer an owned withdrawal NFT and get paid now."
+                  : "Keep the withdrawal claim in your wallet."}
               </p>
             </div>
             <a className="helpLink" href="#faq" aria-label="Learn about exits">
@@ -1010,11 +885,11 @@ export default function Home() {
           <div className="modeTabs" role="tablist" aria-label="Exit route">
             <button
               role="tab"
-              aria-selected={mode === "instant"}
-              className={mode === "instant" ? "selected" : ""}
-              onClick={() => selectMode("instant")}
+              aria-selected={mode === "claim"}
+              className={mode === "claim" ? "selected" : ""}
+              onClick={() => selectMode("claim")}
             >
-              Sell now
+              Sell claim
             </button>
             <button
               role="tab"
@@ -1027,264 +902,346 @@ export default function Home() {
           </div>
 
           <p className="modeNote">
-            {mode === "instant"
-              ? "A liquidity provider buys your future ETH payout and takes over the wait."
-              : "Join the official queue and claim ETH after finalization."}
+            {mode === "claim"
+              ? "Choose an unstETH NFT you own. The claim and WETH payment move atomically."
+              : "Join the official Lido queue and claim ETH after finalization."}
           </p>
 
-          <div className="tokenPanel inputPanel">
-            <div className="tokenPanelLabel">
-              <span>You sell</span>
-              <span>
-                Balance:{" "}
-                {snapshot
-                  ? formatMainnetAmount(snapshot.stEthBalance, 6)
-                  : "—"}
-              </span>
-            </div>
-            <div className="tokenRow">
-              <input
-                inputMode="decimal"
-                value={amountInput}
-                onChange={(event) => {
-                  setAmountInput(event.target.value);
-                  setQuoteCheck(null);
-                }}
-                aria-label="stETH amount"
-                placeholder="0.00"
-              />
-              <div className="tokenSelect">
-                <span className="tokenIcon stethIcon">
-                  <img src="/icons/steth.png" alt="stETH" width={18} height={18} />
-                </span>
-                stETH
-              </div>
-            </div>
-            <div className="amountActions" aria-label="Amount shortcuts">
-              <button
-                type="button"
-                onClick={() => setBalancePercent(25)}
-                disabled={!snapshot || busy}
-              >
-                25%
-              </button>
-              <button
-                type="button"
-                onClick={() => setBalancePercent(50)}
-                disabled={!snapshot || busy}
-              >
-                50%
-              </button>
-              <button
-                className="maxButton"
-                type="button"
-                onClick={() => setBalancePercent(100)}
-                disabled={!snapshot || busy}
-              >
-                Max
-              </button>
-            </div>
-            {amountIssue && amount > 0n && (
-              <p className="amountError">{amountIssue}</p>
-            )}
-          </div>
-
-          <div className="routeArrow" aria-hidden="true">
-            ↓
-          </div>
-
-          <div className="tokenPanel outputPanel">
-            <div className="tokenPanelLabel">
-              <span>You receive</span>
-              <span>
-                {mode === "instant"
-                  ? quoteCheck
-                    ? "Firm quote"
-                    : quoteLoading
-                      ? "Finding quote"
-                      : lidoQuote
-                        ? "Indicative quote"
-                        : "Policy estimate"
-                  : "Claim notional"}
-              </span>
-            </div>
-            <div className="tokenRow">
-              <output>
-                {mode === "instant"
-                  ? instantPayment
-                  : amountValid
-                    ? formatMainnetAmount(amount, 6)
-                    : "—"}
-              </output>
-              <div className="tokenSelect static">
-                <span
-                  className={`tokenIcon ${mode === "instant" ? "wethIcon" : "nftIcon"}`}
-                >
-                  <img
-                    src={mode === "instant" ? "/icons/weth.svg" : "/icons/unsteth.svg"}
-                    alt={mode === "instant" ? "WETH" : "unstETH"}
-                    width={18}
-                    height={18}
-                  />
-                </span>
-                {mode === "instant" ? "WETH" : "ETH claim"}
-              </div>
-            </div>
-          </div>
-
-          <div className="routeSummary">
-            <div>
-              <span>{mode === "instant" ? "Receive" : "Claim token"}</span>
-              <strong>
-                <i className={mode === "instant" ? "instantRoute" : "lidoRoute"} />
-                {mode === "instant" ? "Now" : "1 unstETH NFT"}
-              </strong>
-            </div>
-            <div>
-              <span>{mode === "instant" ? "Factoring discount" : "Claim notional"}</span>
-              <strong>
-                {mode === "instant"
-                  ? discount
-                  : amountValid
-                    ? `~${formatMainnetAmount(amount, 6)} ETH`
-                    : "—"}
-              </strong>
-            </div>
-            <div>
-              <span>Who waits</span>
-              <strong>
-                {mode === "instant" ? "Liquidity provider" : "You"}
-              </strong>
-            </div>
-            {mode === "instant" && (lidoQuote || quoteCheck) && (
-              <div>
-                <span>Quote status</span>
-                <strong
-                  className={
-                    quoteCheck
-                      ? "quoteStatus firm"
-                      : "quoteStatus indicative"
-                  }
-                >
-                  {quoteCheck && marketLive
-                    ? "Firm · fillable"
-                    : account
-                      ? "Indicative · preview"
-                      : "Indicative · no wallet needed"}
-                </strong>
-              </div>
-            )}
-            {mode === "instant" && lidoQuote && (
-              <>
-                <div>
-                  <span>Lido estimated wait</span>
-                  <strong>{formatWait(lidoQuote.estimatedWaitMs)}</strong>
+          {mode === "claim" ? (
+            <>
+              <div className="tokenPanel inputPanel">
+                <div className="tokenPanelLabel">
+                  <span>You sell</span>
+                  <span>
+                    {snapshot
+                      ? `${sellableClaims.length} owned claim${sellableClaims.length === 1 ? "" : "s"}`
+                      : "Connect wallet"}
+                  </span>
                 </div>
-              </>
-            )}
-          </div>
+                <div className="tokenRow">
+                  <select
+                    className="claimSelect"
+                    aria-label="Owned unstETH claim"
+                    disabled={!selectedClaim || busy}
+                    value={selectedClaim?.requestId.toString() ?? ""}
+                    onChange={(event) => {
+                      const requestId = BigInt(event.target.value);
+                      setSelectedClaimId(requestId);
+                      setClaimQuoteCheck(null);
+                      setStatus(`Selected unstETH #${requestId}.`);
+                    }}
+                  >
+                    {selectedClaim ? (
+                      sellableClaims.map((request) => (
+                        <option
+                          key={request.requestId.toString()}
+                          value={request.requestId.toString()}
+                        >
+                          #{request.requestId} ·{" "}
+                          {formatMainnetAmount(request.amountOfStETH, 6)} stETH
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">No unstETH claim found</option>
+                    )}
+                  </select>
+                  <div className="tokenSelect static">
+                    <span className="tokenIcon nftIcon">
+                      <img
+                        src="/icons/unsteth.svg"
+                        alt="unstETH"
+                        width={18}
+                        height={18}
+                      />
+                    </span>
+                    unstETH
+                  </div>
+                </div>
+              </div>
 
-          <div className="primaryAction">
-            {mode === "instant" ? (
-              !marketLive ? (
-                <button className="actionButton" disabled>
-                  {marketStatus.state === "Retired"
-                    ? "Firm quotes paused · proof deployment retired"
-                    : "Firm quotes unavailable"}
-                </button>
-              ) : !amountWithinMarketLimits ? (
-                <button className="actionButton" disabled>
-                  {amountIssue}
-                </button>
-              ) : quoteLoading ? (
-                <button className="actionButton" disabled>
-                  Finding your quote…
-                </button>
-              ) : quoteError || !lidoQuote ? (
-                <button
-                  className="actionButton"
-                  onClick={() => setQuoteRefreshKey((value) => value + 1)}
-                  disabled={busy}
-                >
-                  Try quote again
-                </button>
-              ) : !account ? (
-                <button
-                  className="actionButton"
-                  onClick={connect}
-                  disabled={busy}
-                >
-                  Connect wallet to continue
-                </button>
-              ) : !snapshot ? (
-                <button
-                  className="actionButton"
-                  onClick={switchToMainnet}
-                  disabled={busy}
-                >
-                  Switch to Ethereum
-                </button>
-              ) : !amountValid ? (
-                <button className="actionButton" disabled>
-                  {amountIssue}
-                </button>
-              ) : !quoteCheck ? (
-                <button
-                  className="actionButton indicativeAction"
-                  onClick={requestFirmQuote}
-                  disabled={busy}
-                >
-                  {action === "reading" ? "Getting your quote…" : "Get firm quote"}
-                </button>
-              ) : !quoteCheck.approvalSatisfied ? (
-                <button
-                  className="actionButton"
-                  onClick={() => approveReservoir()}
-                  disabled={busy}
-                >
-                  Approve stETH
-                </button>
-              ) : (
-                <button
-                  className="actionButton"
-                  onClick={() => fillQuote()}
-                  disabled={busy}
-                >
-                  Get {instantPayment} WETH now
-                </button>
-              )
-            ) : !account ? (
-              <button className="actionButton" onClick={connect} disabled={busy}>
-                Connect wallet
-              </button>
-            ) : !snapshot ? (
-              <button
-                className="actionButton"
-                onClick={switchToMainnet}
-                disabled={busy}
-              >
-                Switch to Ethereum
-              </button>
-            ) : !queueApproved ? (
-              <button
-                className="actionButton"
-                onClick={approveQueue}
-                disabled={!amountValid || snapshot.queuePaused || busy}
-              >
-                {snapshot.queuePaused
-                  ? "Lido withdrawals paused"
-                  : amountIssue ?? "Approve stETH"}
-              </button>
-            ) : (
-              <button
-                className="actionButton"
-                onClick={requestWithdrawal}
-                disabled={!amountValid || snapshot.queuePaused || busy}
-              >
-                Request withdrawal
-              </button>
-            )}
-          </div>
+              <div className="routeArrow" aria-hidden="true">
+                ↓
+              </div>
+
+              <div className="tokenPanel outputPanel">
+                <div className="tokenPanelLabel">
+                  <span>You receive</span>
+                  <span>{selectedClaimOffer ? "Signed firm offer" : "No estimate shown"}</span>
+                </div>
+                <div className="tokenRow">
+                  <output>
+                    {selectedClaimOffer
+                      ? formatMainnetAmount(
+                          BigInt(
+                            selectedClaimOffer.envelope.quote.paymentAmount,
+                          ),
+                          6,
+                        )
+                      : "—"}
+                  </output>
+                  <div className="tokenSelect static">
+                    <span className="tokenIcon wethIcon">
+                      <img
+                        src="/icons/weth.svg"
+                        alt="WETH"
+                        width={18}
+                        height={18}
+                      />
+                    </span>
+                    WETH
+                  </div>
+                </div>
+              </div>
+
+              <div className="routeSummary">
+                <div>
+                  <span>Claim</span>
+                  <strong>
+                    <i className="instantRoute" />
+                    {selectedClaim
+                      ? `unstETH #${selectedClaim.requestId}`
+                      : "Connect to inspect"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Claim notional</span>
+                  <strong>
+                    {selectedClaim
+                      ? `${formatMainnetAmount(selectedClaim.amountOfStETH, 6)} stETH`
+                      : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Claim state</span>
+                  <strong>
+                    {selectedClaim
+                      ? selectedClaim.isFinalized
+                        ? "Finalized"
+                        : "Pending"
+                      : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Factoring discount</span>
+                  <strong>
+                    {selectedClaimOffer
+                      ? quoteDiscount(selectedClaimOffer)
+                      : "Set by signed offer"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Who waits</span>
+                  <strong>Liquidity provider</strong>
+                </div>
+              </div>
+
+              <div className="primaryAction">
+                {!account ? (
+                  <button className="actionButton" onClick={connect} disabled={busy}>
+                    Connect wallet
+                  </button>
+                ) : !snapshot ? (
+                  <button
+                    className="actionButton"
+                    onClick={switchToMainnet}
+                    disabled={busy}
+                  >
+                    Switch to Ethereum
+                  </button>
+                ) : !marketLive ? (
+                  <button className="actionButton" disabled>
+                    {marketStatus.state === "Retired"
+                      ? "Firm offers paused · deployment retired"
+                      : "Firm offers unavailable"}
+                  </button>
+                ) : !selectedClaim ? (
+                  <button
+                    className="actionButton"
+                    onClick={() => selectMode("queue")}
+                    disabled={busy}
+                  >
+                    Create a Lido claim first
+                  </button>
+                ) : !selectedClaimOffer ? (
+                  <button
+                    className="actionButton"
+                    onClick={() => requestExistingClaimQuote(selectedClaim)}
+                    disabled={busy}
+                  >
+                    {action === "reading" ? "Getting firm offer…" : "Get firm offer"}
+                  </button>
+                ) : !selectedClaimOffer.approvalSatisfied ? (
+                  <button
+                    className="actionButton"
+                    onClick={() => approveReservoir(selectedClaimOffer)}
+                    disabled={busy}
+                  >
+                    Approve unstETH #{selectedClaim.requestId}
+                  </button>
+                ) : (
+                  <button
+                    className="actionButton"
+                    onClick={() => fillQuote(selectedClaimOffer)}
+                    disabled={busy}
+                  >
+                    Sell for{" "}
+                    {formatMainnetAmount(
+                      BigInt(selectedClaimOffer.envelope.quote.paymentAmount),
+                      6,
+                    )}{" "}
+                    WETH
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="tokenPanel inputPanel">
+                <div className="tokenPanelLabel">
+                  <span>You deposit</span>
+                  <span>
+                    Balance:{" "}
+                    {snapshot
+                      ? formatMainnetAmount(snapshot.stEthBalance, 6)
+                      : "—"}
+                  </span>
+                </div>
+                <div className="tokenRow">
+                  <input
+                    inputMode="decimal"
+                    value={amountInput}
+                    onChange={(event) => setAmountInput(event.target.value)}
+                    aria-label="stETH amount"
+                    placeholder="0.00"
+                  />
+                  <div className="tokenSelect">
+                    <span className="tokenIcon stethIcon">
+                      <img
+                        src="/icons/steth.png"
+                        alt="stETH"
+                        width={18}
+                        height={18}
+                      />
+                    </span>
+                    stETH
+                  </div>
+                </div>
+                <div className="amountActions" aria-label="Amount shortcuts">
+                  <button
+                    type="button"
+                    onClick={() => setBalancePercent(25)}
+                    disabled={!snapshot || busy}
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBalancePercent(50)}
+                    disabled={!snapshot || busy}
+                  >
+                    50%
+                  </button>
+                  <button
+                    className="maxButton"
+                    type="button"
+                    onClick={() => setBalancePercent(100)}
+                    disabled={!snapshot || busy}
+                  >
+                    Max
+                  </button>
+                </div>
+                {amountIssue && amount > 0n && (
+                  <p className="amountError">{amountIssue}</p>
+                )}
+              </div>
+
+              <div className="routeArrow" aria-hidden="true">
+                ↓
+              </div>
+
+              <div className="tokenPanel outputPanel">
+                <div className="tokenPanelLabel">
+                  <span>You receive</span>
+                  <span>Canonical Lido claim</span>
+                </div>
+                <div className="tokenRow">
+                  <output>
+                    {amountValid ? formatMainnetAmount(amount, 6) : "—"}
+                  </output>
+                  <div className="tokenSelect static">
+                    <span className="tokenIcon nftIcon">
+                      <img
+                        src="/icons/unsteth.svg"
+                        alt="unstETH"
+                        width={18}
+                        height={18}
+                      />
+                    </span>
+                    ETH claim
+                  </div>
+                </div>
+              </div>
+
+              <div className="routeSummary">
+                <div>
+                  <span>Claim token</span>
+                  <strong>
+                    <i className="lidoRoute" />1 unstETH NFT
+                  </strong>
+                </div>
+                <div>
+                  <span>Claim notional</span>
+                  <strong>
+                    {amountValid
+                      ? `~${formatMainnetAmount(amount, 6)} ETH`
+                      : "—"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Liquidity fee</span>
+                  <strong>None</strong>
+                </div>
+                <div>
+                  <span>Who waits</span>
+                  <strong>You</strong>
+                </div>
+              </div>
+
+              <div className="primaryAction">
+                {!account ? (
+                  <button className="actionButton" onClick={connect} disabled={busy}>
+                    Connect wallet
+                  </button>
+                ) : !snapshot ? (
+                  <button
+                    className="actionButton"
+                    onClick={switchToMainnet}
+                    disabled={busy}
+                  >
+                    Switch to Ethereum
+                  </button>
+                ) : !queueApproved ? (
+                  <button
+                    className="actionButton"
+                    onClick={approveQueue}
+                    disabled={!amountValid || snapshot.queuePaused || busy}
+                  >
+                    {snapshot.queuePaused
+                      ? "Lido withdrawals paused"
+                      : amountIssue ?? "Approve stETH"}
+                  </button>
+                ) : (
+                  <button
+                    className="actionButton"
+                    onClick={requestWithdrawal}
+                    disabled={!amountValid || snapshot.queuePaused || busy}
+                  >
+                    Request withdrawal
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="statusBar" aria-live="polite">
             <span
@@ -1296,34 +1253,13 @@ export default function Home() {
                     : "statusDot"
               }
             />
-            <p>
-              {mode === "instant" && quoteError
-                ? quoteError
-                : mode === "instant" && lidoQuote
-                  ? account
-                    ? marketLive
-                      ? "Indicative preview. Request a firm quote to settle."
-                      : marketStatus.detail
-                    : "Indicative preview. Connect your wallet only when you are ready to continue."
-                  : status}
-            </p>
+            <p>{status}</p>
             {account && (
               <button onClick={() => refresh()} disabled={busy}>
                 Refresh
               </button>
             )}
           </div>
-
-          {mode === "instant" && lidoQuote && (
-            <div className="quoteAlternatives">
-              <button
-                className="fallbackLink"
-                onClick={() => selectMode("queue")}
-              >
-                Prefer to wait? Join the Lido queue →
-              </button>
-            </div>
-          )}
         </section>
 
         <section className="marketsSection" id="markets" aria-label="Factoring markets">

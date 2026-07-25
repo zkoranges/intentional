@@ -75,9 +75,9 @@ settlement:   transfer 60 + redeem 40 + verify both
 payment:      exact fixed WETH, only after complete acquisition
 ```
 
-Reservoir v1—the earlier Aqua/SwapVM ERC-4626 reserve engine—remains in this
-repository and green. v2 is a separate settlement kernel that reuses v1's
-generic ERC-4626 reserve adapter.
+Both versions were built during this hackathon. Reservoir v1 is the
+Aqua/SwapVM ERC-4626 reserve engine; v2 is a separate claim-settlement kernel
+that reuses v1's generic ERC-4626 reserve adapter.
 
 This is an unaudited hackathon beta. Mainnet funding is deliberately separate
 from deployment and occurs only after the exact chain-1 rehearsal, full test
@@ -86,8 +86,10 @@ matrix, frontend checks, and AI-assisted release review.
 **Current deployment status (2026-07-25):** Mainnet settlement proof
 completed. Demo contracts safely retired after reserve recovery, and cannot
 be reactivated — the immutable signer key was exposed. Existing-unstETH
-acquisition and public firm quotes are under development. The proof record is
-in
+acquisition and the real firm-offer browser flow are implemented and pass the
+canonical mainnet-fork release rehearsal. A fresh active deployment and fresh
+signer are still required before the public CTA can be enabled. The historical
+proof record is in
 [`docs/MAINNET_MICRO_DEMO.md`](docs/MAINNET_MICRO_DEMO.md) and the manifests
 in [`deployments/`](deployments/):
 
@@ -178,17 +180,22 @@ The payout stack is fork-proven and not yet deployed to a persistent network.
   15-minute maximum quote lifetime, pause, and mutable adapter allowlist.
 - Productive WETH funding with pause, top-up, exact materialization, and
   paused asset/share recovery.
-- Lido adapter that measures stETH transfer rounding, reads live queue bounds
-  and pause state, reconciles the minted unstETH, and leaves no flow dust.
+- Lido origination adapter that measures stETH transfer rounding, reads live
+  queue bounds and pause state, reconciles the minted unstETH, and leaves no
+  flow dust.
+- Existing-unstETH adapter that acquires the seller's exact canonical Lido NFT
+  and verifies owner, request amounts, share amounts, and claimed state before
+  payment.
 - ERC-7540/8161 adapter that acquires Pending and Claimable legs in one fill
   using measured deltas and signed rate floors.
 - Canonical mainnet-fork tests for Lido, stETH, WETH, Aave V3 StataWETH/
   StataUSDC, and official Aqua through the modified Reservoir SwapVM router.
   Canonical SwapVM runtime presence is checked separately. Fork acceptance
   imports no protocol mock.
-- Public dark frontend with injected-wallet connection and canonical Lido
-  originate/claim flows. Signed Reservoir quote execution is implemented but
-  fail-closed while the pinned deployment is retired.
+- Public dark frontend with injected-wallet connection, canonical Lido
+  originate/claim operations, and an owned-unstETH sale flow from real firm
+  offer through exact NFT approval and atomic settlement. It fails closed
+  unless a fresh active deployment and quote desk are pinned.
 - Offline factor quote CLI; no factor key is present in the browser or repo.
 
 No production ERC-8161 endpoint is claimed. That adapter remains a
@@ -267,11 +274,12 @@ Release record on 2026-07-25:
 
 | Surface | Result |
 |---|---:|
-| Deterministic Foundry suites | 215 passed, 0 failed, 0 skipped |
-| Production-contract fork suites | fail loudly if misconfigured; run via `make test-fork` |
+| Deterministic Foundry suites | 252 passed, 0 failed, 0 skipped |
+| Production-contract fork suites | 21 passed against canonical contracts; fail loudly if misconfigured |
 | Exact deploy/sign/approve/fill rehearsal | passed |
-| Frontend rendered tests | 5 passed |
-| `npm test` Vinext build and rendered assertions | passed |
+| Frontend rendered/source tests | 18 passed |
+| Quote-desk tests | 29 passed |
+| Existing-unstETH deploy/sign/approve/fill rehearsal | passed |
 | Native Next.js/Vercel build | passed |
 
 Fork methodology and every canonical/disposable boundary are documented in
@@ -286,10 +294,11 @@ The frontend connects an injected wallet and enforces Ethereum mainnet. It:
 - shows the wallet's balances and recent unstETH requests;
 - uses exact approval and simulation before canonical Lido origination;
 - claims finalized unstETH through the canonical queue;
-- parses a factor-signed quote JSON envelope only after a reviewed deployment
-  is build-pinned;
+- lists seller-owned unstETH and requests a seller- and request-bound firm
+  offer from the operator desk without a JSON handoff;
 - requires the exact pinned kernel/adapter, then validates hashes, signature,
-  seller, nonce, deadline, funding capacity, allowance, and balance; and
+  seller, request economics, nonce, deadline, funding capacity, ownership, and
+  exact NFT approval; and
 - simulates before fill, then independently checks the seller's canonical WETH
   delta and canonical Lido request owner/share amount in addition to the bound
   `ClaimSettled` event.
@@ -365,8 +374,9 @@ measured postconditions.
 v2 does not build a marketplace, solver network, indexer, price oracle,
 predictive model, custody wallet, cross-currency settlement, request-ID-zero
 support, generic multi-ID routing, or live ERC-8161 integration. It includes a
-minimal stateless Lido quote endpoint: indicative pricing by default and
-capacity-checked, factor-signed quotes only after explicit live configuration.
+capacity-checked operator quote desk that signs short-lived firm offers for
+specific seller-owned unstETH claims. The public app shows no synthetic or
+indicative payout.
 
 The factor prices queue time, impairment, slashing, gas, and capital cost
 offchain. Lido factoring is expected to be episodic stress liquidity, not an

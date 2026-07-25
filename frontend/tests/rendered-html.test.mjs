@@ -31,18 +31,23 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Lido",
     "Ether.fi",
     "ERC-7540",
-    "Sell now",
+    "Sell claim",
     "Wait & claim",
+    "Owned unstETH claim",
+    "No unstETH claim found",
+    "No estimate shown",
+    "Claim notional",
+    "Factoring discount",
     "0.00",
     "25%",
     "50%",
     "Max",
-    "Finding your quote",
-    "Get firm quote",
-    "Getting your quote…",
-    "Firm · fillable",
+    "Get firm offer",
+    "Getting firm offer…",
+    "Signed firm offer",
+    "Approve unstETH",
+    "Sell for",
     "not pinned in this app build",
-    "Firm quote ready",
     "Request withdrawal",
     "Onchain claims",
     "Claim ETH",
@@ -60,6 +65,10 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
   );
   assert.doesNotMatch(page, /jury|ETHGlobal|fork replay|Run on local Anvil/i);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
+  assert.doesNotMatch(
+    page,
+    /Sell now|Finding your quote|Indicative · no wallet needed|requestLidoQuote/,
+  );
 });
 
 test("market queue times distinguish live estimates from typical values", async () => {
@@ -134,19 +143,23 @@ test("canonical production addresses and selectors are exact", async () => {
   );
 });
 
-test("firm Reservoir quotes fail closed before wallet execution", async () => {
+test("owned unstETH firm offers are independently verified before exact approval and fill", async () => {
   const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
   const ethereum = await readFile(
     new URL("lib/ethereum.ts", projectRoot),
     "utf8",
   );
-  const quoteClient = await readFile(
-    new URL("lib/lido-quote.ts", projectRoot),
-    "utf8",
-  );
   const quoteCli = await readFile(
     new URL("scripts/create-lido-quote.mjs", projectRoot),
     "utf8",
+  );
+  const existingQuoteFlow = page.slice(
+    page.indexOf("async function requestExistingClaimQuote"),
+    page.indexOf("async function fillQuote"),
+  );
+  assert.ok(
+    existingQuoteFlow.length > 0,
+    "existing unstETH quote handler is missing",
   );
 
   for (const guard of [
@@ -168,21 +181,36 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(ethereum, /NEXT_PUBLIC_RESERVOIR_KERNEL/);
   assert.match(ethereum, /sellerWethAfter - sellerWethBefore/);
   assert.match(ethereum, /statuses\[0\]\.owner/);
-  assert.match(page, /snapshot\.queueAllowance === amount/);
-  assert.match(page, /!quoteCheck\.approvalSatisfied/);
+  assert.match(page, /sellableClaims/);
+  assert.match(page, /aria-label="Owned unstETH claim"/);
+  assert.match(page, /!selectedClaimOffer\.approvalSatisfied/);
   assert.match(page, /requestExistingClaimQuote/);
   assert.match(page, /Get firm offer/);
-  assert.match(page, /Approve claim/);
+  assert.match(page, /Approve unstETH/);
   assert.match(page, /Sell for/);
   assert.match(page, /RESERVOIR_DEPLOYMENT/);
-  assert.match(page, /requestLidoQuote/);
-  assert.match(quoteClient, /api\/quote\/lido/);
   assert.match(page, /The firm quote deployment is not pinned in this app build/);
-  // The quote arrives over HTTP from the desk; no envelope passes through a
-  // human, so no paste surface may exist.
-  assert.match(page, /requestFirmQuote/);
+  // The quote arrives over HTTP from the desk and is independently checked
+  // against chain state; no envelope passes through a human.
+  assert.match(
+    existingQuoteFlow,
+    /body:\s*JSON\.stringify\(\{\s*mode: "existing-unsteth",\s*seller: account,\s*requestId: request\.requestId\.toString\(\)/s,
+  );
   assert.match(page, /"\/api\/quote\/lido"/);
+  assert.match(
+    existingQuoteFlow,
+    /const checked = await verifyReservoirQuote\(\s*injected,\s*account,\s*JSON\.stringify\(payload\)/s,
+  );
+  assert.ok(
+    existingQuoteFlow.indexOf("verifyReservoirQuote(") <
+      existingQuoteFlow.indexOf("setClaimQuoteCheck(checked)"),
+    "the HTTP envelope must be independently verified before it becomes actionable",
+  );
   assert.doesNotMatch(page, /Paste signed quote JSON|quoteModalOpen|<textarea/);
+  assert.doesNotMatch(
+    page,
+    /requestLidoQuote|\/api\/quote\/lido\/indicative|reservoir-indicative/,
+  );
   assert.match(ethereum, /requestedStEth < MIN_LIDO_REQUEST/);
   assert.match(ethereum, /claimController\.toLowerCase\(\)/);
   assert.match(ethereum, /claimReceiver\.toLowerCase\(\)/);
@@ -195,6 +223,28 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(ethereum, /approveUnstETH/);
   assert.match(ethereum, /existing-unsteth/);
   assert.match(ethereum, /ownerOf/);
+  assert.match(ethereum, /functionName: "approve",\s*args: \[adapter, requestId\]/s);
+  assert.match(
+    ethereum,
+    /if \(owner !== account\)[\s\S]*if \(approved !== adapter\)/,
+  );
+  assert.match(ethereum, /functionName: "fill"/);
+  assert.match(ethereum, /waitForTransactionReceipt/);
+  assert.match(ethereum, /Settlement receipt is missing ClaimSettled/);
+  assert.match(
+    ethereum,
+    /sellerWethAfter - sellerWethBefore !== settled\.args\.paymentAmount/,
+  );
+  assert.match(
+    ethereum,
+    /statuses\[0\]\.owner !== envelope\.quote\.claimReceiver/,
+  );
+  assert.match(
+    ethereum,
+    /statuses\[0\]\.amountOfShares !== acquiredUnits/,
+  );
+  assert.match(ethereum, /functionName: "getApproved"/);
+  assert.match(ethereum, /!approvalCleared/);
   assert.match(page, /error instanceof MinedTransactionVerificationError/);
   assert.match(page, /Instant exit confirmed with a verification warning/);
   assert.match(ethereum, /event WithdrawalClaimed/);
@@ -221,6 +271,9 @@ test("the quote proxy route is keyless, validating, and fails closed", async () 
   assert.match(route, /force-dynamic/);
   assert.match(route, /no-store, max-age=0/);
   assert.match(route, /MIN_LIVE_LIDO_QUOTE/);
+  assert.match(route, /mode: "existing-unsteth"/);
+  assert.match(route, /requestId: body\.requestId/);
+  assert.ok(route.includes("!/^[1-9]\\d*$/.test(body.requestId)"));
   // The signer hostname and secret must never reach the client bundle.
   assert.doesNotMatch(route, /NEXT_PUBLIC_SIGNER|NEXT_PUBLIC_.*SECRET/);
   assert.doesNotMatch(route, /api\.cow\.fi|cowprotocol|uniswap/i);
@@ -241,12 +294,16 @@ test("market status is derived server-side and gates the complete firm path", as
   assert.match(page, /fetch\("\/api\/status"/);
   assert.match(page, /marketStatus\.firmQuotesEnabled/);
   assert.match(page, /!marketLive/);
-  assert.match(page, /proof deployment retired/);
+  assert.match(page, /Firm offers paused · deployment retired/);
   assert.match(page, /Lido: \{marketStatus\.state\}/);
   assert.doesNotMatch(page, /status:\s*"Open"/);
   assert.doesNotMatch(page, /One market open/);
 
   assert.match(statusRoute, /process\.env\.ETH_RPC_URL/);
+  assert.match(
+    statusRoute,
+    /process\.env\.NEXT_PUBLIC_RESERVOIR_LIDO_UNSTETH_ADAPTER/,
+  );
   assert.match(statusRoute, /functionName: "isPaused"/);
   assert.match(statusRoute, /functionName: "isSealed"/);
   assert.match(statusRoute, /functionName: "isAdapterAllowed"/);
@@ -256,6 +313,11 @@ test("market status is derived server-side and gates the complete firm path", as
   assert.match(statusRoute, /"Retired"/);
   assert.match(statusRoute, /"Unavailable"/);
   assert.match(statusRoute, /state === "Live" && firmQuoteConfigured/);
+  assert.match(statusRoute, /!adapterAllowed \|\|\s*!unstETHAdapterAllowed/);
+  assert.match(
+    statusRoute,
+    /!rpcUrl \|\| !kernel \|\| !expectedAdapter \|\| !expectedUnstETHAdapter/,
+  );
   assert.doesNotMatch(
     statusRoute,
     /return Response\.json\([^)]*(ETH_RPC_URL|SIGNER_SECRET|SIGNER_URL)/s,
@@ -275,10 +337,16 @@ test("the quote signer service holds the key and enforces its guards", async () 
   assert.match(signer, /LIDO_BUNKER/);
   assert.match(signer, /INSUFFICIENT_CAPACITY/);
   assert.match(signer, /SIGNER_SECRET must be at least 32 characters/);
-  assert.match(signer, /QUOTE_TTL_SECONDS must stay inside the kernel/);
+  assert.match(
+    signer,
+    /QUOTE_TTL_SECONDS must be positive and stay inside the kernel/,
+  );
   assert.match(signer, /audit/);
   // Binds localhost by default; the key is never echoed back.
-  assert.match(signer, /HOST\?\.trim\(\) \|\| "127\.0\.0\.1"/);
+  assert.match(
+    signer,
+    /process\.env\.HOST\?\.trim\(\) \|\| "127\.0\.0\.1"/,
+  );
   assert.doesNotMatch(signer, /console\.log\([^)]*FACTOR_PRIVATE_KEY/);
 });
 
@@ -297,9 +365,16 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Connect wallet/);
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
-  assert.match(pageBundle, /Get firm quote/);
+  assert.match(pageBundle, /Owned unstETH claim/);
+  assert.match(pageBundle, /Get firm offer/);
+  assert.match(pageBundle, /Approve unstETH/);
+  assert.match(pageBundle, /Sell for/);
+  assert.match(pageBundle, /existing-unsteth/);
   assert.match(pageBundle, /\/api\/quote\/lido/);
   assert.doesNotMatch(pageBundle, /Paste signed quote JSON/);
+  assert.doesNotMatch(pageBundle, /\/api\/quote\/lido\/indicative/);
+  assert.doesNotMatch(pageBundle, /reservoir-indicative/);
+  assert.doesNotMatch(pageBundle, /Indicative · no wallet needed/);
   assert.match(pageBundle, /Onchain factoring for delayed claims/);
   assert.match(pageBundle, /Insufficient stETH balance/);
   assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);

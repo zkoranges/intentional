@@ -65,7 +65,7 @@ guarantees: reservation survival across restart, consumed-nonce release,
 the 409 condition, unconditional bind refusal, deployment refusal, and the `/health`
 shape with a no-secret-material assertion.
 
-## Ops prerequisite for go-live: a NAMED tunnel on a zone the operator controls
+## Ops prerequisite for go-live: the named `quotes.intentional.so` tunnel
 
 The desk binds `127.0.0.1` only; the public hostname is a Cloudflare tunnel
 in front of it. Two hard requirements, surfaced now rather than at go-live:
@@ -75,37 +75,37 @@ in front of it. Two hard requirements, surfaced now rather than at go-live:
    hostname that CHANGES on every restart — the Vercel proxy's `SIGNER_URL`
    would silently break at the first VPS reboot. The relaunch requires a
    *named* tunnel with a pinned hostname.
-2. **A DNS zone the operator controls — NOT `outreach.sh`.** The co-tenant
-   zone belongs to a different owner; parking the quote desk's hostname on
-   it couples the desk's availability and trust to someone else's zone
-   (owner separation). **If no operator-controlled zone exists today,
-   acquiring one is an unplanned external prerequisite — flagging it here,
-   ahead of go-live.**
+2. **Use the Intentional zone — NOT `outreach.sh`.** The public application
+   already uses `intentional.so`; the reviewed desk hostname is
+   `quotes.intentional.so`. The co-tenant zone belongs to a different owner
+   and is not part of this release.
 
 What is needed from the operator (one-time, on the VPS; credentials never in
 the repo):
 
-- a domain/zone in the operator's own Cloudflare account;
+- access to the `intentional.so` zone in the operator's Cloudflare account;
 - `cloudflared tunnel login` and `cloudflared tunnel create reservoir-quote-desk`
   (writes a credentials JSON on the VPS — keep it 0600, out of the repo);
-- `cloudflared tunnel route dns reservoir-quote-desk quotes.<operator-zone>`
+- `cloudflared tunnel route dns reservoir-quote-desk quotes.intentional.so`
   to pin the hostname;
 - a tunnel config whose ingress points at `http://127.0.0.1:8791`
   (everything else `http_status:404`), run as a systemd unit;
-- update the Vercel proxy's `SIGNER_URL` to `https://quotes.<operator-zone>`
+- update the Vercel proxy's server-only `SIGNER_URL` to
+  `https://quotes.intentional.so`
   once, after which restarts never change it.
 
-The factor key never goes to Vercel, the tunnel config, or this repo; it
-lives only in the signer host's environment file.
+The factor key never goes to Vercel, the tunnel config, or this repo; it lives
+only in the signer host's environment file. Vercel receives the shared
+`SIGNER_SECRET` as a server-only value; the browser receives only the three
+reviewed public contract pins.
 
-## Deferred to lane B4b (after B1 + B3)
+## Fresh pre-alpha release integration
 
-- **v3 manifest repoint.** `scripts/deploy-quote-signer.sh` and
-  `scripts/rehearse-quote-signer.sh` still read `deployments/mainnet-v2.json`;
-  B4b reparameterizes both to `deployments/mainnet-v3.json` and sets
+- **Fresh pre-alpha manifest.** `scripts/deploy-quote-signer.sh` reads
+  `deployments/mainnet-pre-alpha-001.json` by default and sets
   `DEPLOYMENT_MANIFEST` in the service environment so the startup guard binds
-  the desk to the fresh deployment. Until then the guards added here make the
-  stale configuration fail closed: a retired manifest (or the retired kernel
-  over a live RPC) comes up `refused` and never signs.
-- **Go-live rehearsal.** Frontend → VPS quote → approval → fill on a
-  current-head fork with the exact v3 addresses before pointing at mainnet.
+  the desk to the fresh deployment. The stale retired deployment always comes
+  up `refused` and never signs.
+- **Go-live rehearsal.** Frontend → VPS quote → exact ERC-721 approval → fill
+  on a current-head fork with the exact pre-alpha bytecode and both adapter
+  bindings before pointing the desk at mainnet.

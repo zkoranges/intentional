@@ -22,20 +22,20 @@ With an injected wallet on Ethereum mainnet, the page:
    verifies canonical WETH payment plus canonical Lido ownership/share state
    after the receipt.
 
-The same-origin `/api/quote/lido/indicative` endpoint returns immediate
-indicative pricing without requiring a wallet; `/api/quote/lido` is the
-separate keyless firm-quote proxy to the operator desk. The reviewed mainnet kernel and Lido adapter are
-build-pinned into this frontend (`frontend/.env.production`). That proof
-deployment is permanently retired: both contracts are paused, its reserve was
-recovered, and its immutable signer key was exposed. `/api/status` reads this
-state from Ethereum through a server-only RPC and gates the complete firm-quote
-CTA. Canonical Lido queue operations remain available, and no signing key
-enters the browser or Vercel.
+The same-origin `/api/quote/lido` route is a keyless firm-quote proxy to the
+operator desk. The kernel and both Lido adapters are build-pinned from the
+reviewed deployment manifest. `/api/status` independently reads their current
+state through a server-only RPC and exposes the firm path only when the fresh
+deployment is sealed, active, allowlists both adapters, and has real reserve
+capacity. The previous proof deployment is permanently retired and is never a
+valid firm-quote target. Canonical Lido queue operations remain available, and
+no signing key enters the browser or Vercel.
 
 ## Quote validation
 
 Before enabling settlement, the browser requires
-`NEXT_PUBLIC_RESERVOIR_KERNEL` and `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` to be
+`NEXT_PUBLIC_RESERVOIR_KERNEL`, `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER`, and
+`NEXT_PUBLIC_RESERVOIR_LIDO_UNSTETH_ADAPTER` to be
 compiled into the build. Copy `.env.example` to a local `.env.local` only
 after the reviewed mainnet manifest exists. It then checks:
 
@@ -47,7 +47,8 @@ after the reviewed mainnet manifest exists. It then checks:
 - claim and bounds hashes;
 - seller, factor, buyer-controlled claim destinations, nonce, and deadline;
 - productive reserve capacity for the exact payment;
-- the seller's current stETH balance and allowance; and
+- the seller's current stETH balance and exact allowance for origination;
+- ownership, immutable amounts, and ERC-721 approval for an existing unstETH;
 - the signed stETH shortfall and Lido-share floor.
 
 Each wallet write is simulated against current state. Approval is exact, not
@@ -125,6 +126,21 @@ quote desk configured by the server-only `SIGNER_URL` and `SIGNER_SECRET`
 environment variables. With no desk configured, the proxy fails closed with
 503. No signing key exists in the frontend or in Vercel.
 
+## Production environment boundary
+
+For `intentional.so`, configure Vercel with exactly these classes of values:
+
+| Scope | Variables |
+| --- | --- |
+| Public build pins | `NEXT_PUBLIC_RESERVOIR_KERNEL`, `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER`, `NEXT_PUBLIC_RESERVOIR_LIDO_UNSTETH_ADAPTER` |
+| Server only | `ETH_RPC_URL`, `SIGNER_URL=https://quotes.intentional.so`, `SIGNER_SECRET` |
+| Never in Vercel | `FACTOR_PRIVATE_KEY`, deployer keys, SSH keys, raw quote envelopes |
+
+The same `SIGNER_SECRET` is installed on the VPS and in Vercel as a
+server-only value. The VPS signer remains bound to `127.0.0.1`; a named tunnel
+for `quotes.intentional.so` is the only public route to it. Never prefix the
+RPC URL, signer URL, or signer secret with `NEXT_PUBLIC_`.
+
 ## Security boundary
 
 This is an unaudited hackathon beta. The settlement contracts—not the page—are
@@ -142,10 +158,12 @@ KERNEL_ADDRESS=0x... \
 FUNDING_ACCOUNT_ADDRESS=0x... \
 RESERVE_ADAPTER_ADDRESS=0x... \
 LIDO_ADAPTER_ADDRESS=0x... \
+LIDO_UNSTETH_ADAPTER_ADDRESS=0x... \
 EXPECTED_FUNDING_CODEHASH=0x... \
 EXPECTED_RESERVE_CODEHASH=0x... \
 EXPECTED_KERNEL_CODEHASH=0x... \
 EXPECTED_LIDO_ADAPTER_CODEHASH=0x... \
+EXPECTED_LIDO_UNSTETH_ADAPTER_CODEHASH=0x... \
 EXPECTED_RELEASE_STATE=paused-unfunded \
 npm run verify:deployment
 ```
@@ -156,7 +174,9 @@ Use `EXPECTED_RELEASE_STATE=funded-paused` or `active` with a nonzero
 reactivated. See
 [`docs/LIVE_ACTIVATION.md`](../docs/LIVE_ACTIVATION.md).
 
-The quote route is stateless and stores no requests or signatures. Local
-`.env*`, `.vercel`, build outputs, raw broadcast records, and quote files are
-ignored and must not be committed. A sanitized public deployment manifest is
-committed only through the review procedure in the activation runbook.
+The Vercel proxy route is stateless and stores no requests or signatures. The
+VPS desk persists only reservation and audit state; it never exposes the
+factor key. Local `.env*`, `.vercel`, build outputs, raw broadcast records,
+and quote files are ignored and must not be committed. A sanitized public
+deployment manifest is committed only through the review procedure in the
+activation runbook.

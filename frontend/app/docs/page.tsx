@@ -474,10 +474,12 @@ export default function DocsPage() {
             </p>
             <p>
               The completed mainnet proof originated a new Lido withdrawal
-              from liquid stETH and paid the seller atomically. Buying an
-              already-created unstETH is under development. The ERC-7540/8161
-              path is reference-only because no production ERC-8161 vault is
-              used in this repository.
+              from liquid stETH and paid the seller atomically. The
+              seller-owned unstETH path is implemented and rehearsed against
+              canonical Lido contracts on a mainnet fork; its fresh public
+              deployment is a separate release step. The ERC-7540/8161 path
+              is reference-only because no production ERC-8161 vault is used
+              in this repository.
             </p>
 
             <blockquote>
@@ -555,7 +557,7 @@ new Lido withdrawal ticket → factor
 WETH payment               → seller`}</pre>
               </article>
               <article>
-                <span className="docsTag">Under development</span>
+                <span className="docsTag">Canonical fork-proven</span>
                 <h4>Existing unstETH</h4>
                 <p>
                   The seller already owns a Lido withdrawal NFT. The exit
