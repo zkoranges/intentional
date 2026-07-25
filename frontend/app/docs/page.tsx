@@ -426,7 +426,7 @@ export default function DocsPage() {
             <i />
             <span>
               Hackathon software
-              <small>Unaudited · Live mainnet beta · Recovery pending</small>
+              <small>Unaudited · Mainnet demo settled · Reserve recovered</small>
             </span>
           </div>
         </aside>

@@ -119,9 +119,15 @@ The paused deployment, separately capped funding, Etherscan source
 verification, one-operation activation, and read-only binding-verification
 procedure is frozen in
 [`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). That procedure has now
-been executed on Ethereum mainnet (receipts above); the contracts are live and
-active, with reserve recovery and the unstETH #130880 claim tracked as the
-remaining operational steps. This remains unaudited hackathon software.
+been executed on Ethereum mainnet (receipts above), **and the demo instance has
+since been recovered and paused**: settlement and funding are paused, the
+StataWETH reserve was withdrawn to the factor
+([`0xffcce6…4747`](https://etherscan.io/tx/0xffcce68f46bee5857a3b68219210a4c88a0f72e56a5c1954fdec9de7cdfb4747),
+[`0x434023…45cd`](https://etherscan.io/tx/0x43402367b7416ae16d042f68e9a3472f62e3bf6d199e6bb53ad9d68ad4f545cd))
+returning 0.005012537 WETH — the arithmetic remainder **plus Aave yield earned
+while the reserve stood ready. The only open item is claiming unstETH #130880
+after Lido finalization. Re-arming the demo (unpause + refund) is two factor
+transactions. This remains unaudited hackathon software.
 
 ## Uniswap payouts — be paid in the asset you choose
 

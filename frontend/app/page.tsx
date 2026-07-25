@@ -191,8 +191,6 @@ export default function Home() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
-  const [quoteInput, setQuoteInput] = useState("");
-  const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [activeSection, setActiveSection] =
     useState<NavSection>("markets");
@@ -353,21 +351,6 @@ export default function Home() {
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [walletMenuOpen]);
-
-  useEffect(() => {
-    if (!quoteModalOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setQuoteModalOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [quoteModalOpen]);
 
   useEffect(() => {
     if (mode !== "instant" || !amountWithinMarketLimits) {
@@ -577,33 +560,49 @@ export default function Home() {
     }
   }
 
-  async function inspectQuote() {
+  /// Requests a seller-bound firm quote from the desk and verifies it against
+  /// the pinned deployment before showing terms. No envelope ever passes
+  /// through a human: the desk signs, this verifies, the wallet fills.
+  async function requestFirmQuote() {
     const injected = getInjectedProvider();
-    if (
-      !injected ||
-      !account ||
-      !quoteInput.trim() ||
-      !RESERVOIR_DEPLOYMENT
-    ) {
+    if (!injected || !account || !RESERVOIR_DEPLOYMENT || !amountValid) {
       return;
     }
 
     setAction("reading");
     setQuoteCheck(null);
-    setStatus("Checking quote terms and productive reserve capacity.");
+    setStatus("Requesting a firm quote from the desk.");
     try {
+      const response = await fetch("/api/quote/lido", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          seller: account,
+          requestedStEth: amount.toString(),
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const message =
+          typeof payload === "object" &&
+          payload !== null &&
+          typeof (payload as { error?: unknown }).error === "string"
+            ? (payload as { error: string }).error
+            : "Firm quotes are unavailable right now";
+        throw new Error(message);
+      }
+
       const checked = await verifyReservoirQuote(
         injected,
         account,
-        quoteInput,
+        JSON.stringify(payload),
       );
       if (checked.requestedStEth !== amount) {
         throw new Error("The firm quote amount does not match the entered amount");
       }
       setQuoteCheck(checked);
-      setQuoteModalOpen(false);
       setStatus(
-        `Firm quote ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH.`,
+        `Firm quote ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH. Approve to continue.`,
       );
     } catch (error) {
       setStatus(errorMessage(error));
@@ -1070,10 +1069,10 @@ export default function Home() {
               ) : !quoteCheck ? (
                 <button
                   className="actionButton indicativeAction"
-                  onClick={() => setQuoteModalOpen(true)}
+                  onClick={requestFirmQuote}
                   disabled={busy}
                 >
-                  Use firm quote
+                  {action === "reading" ? "Getting your quote…" : "Get firm quote"}
                 </button>
               ) : quoteCheck.allowance !== quoteCheck.requestedStEth ? (
                 <button
@@ -1394,63 +1393,6 @@ export default function Home() {
         <p>Non-custodial beta · Review every wallet request before signing.</p>
       </footer>
 
-      {quoteModalOpen && (
-        <div
-          className="modalBackdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setQuoteModalOpen(false);
-          }}
-        >
-          <section
-            className="quoteModal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="quote-modal-title"
-          >
-            <div className="modalHeader">
-              <div>
-                <span>Exit now</span>
-                <h2 id="quote-modal-title">Use a firm quote</h2>
-              </div>
-              <button
-                className="closeButton"
-                onClick={() => setQuoteModalOpen(false)}
-                aria-label="Close quote dialog"
-              >
-                ×
-              </button>
-            </div>
-            <p>
-              Paste the short-lived quote supplied by the liquidity provider.
-              Impatience verifies its amount, signature, contracts, expiry and
-              reserve capacity before requesting approval.
-            </p>
-            <textarea
-              value={quoteInput}
-              onChange={(event) => {
-                setQuoteInput(event.target.value);
-                setQuoteCheck(null);
-              }}
-              placeholder="Paste signed quote JSON"
-              aria-label="Signed Impatience quote"
-              spellCheck={false}
-              autoFocus
-            />
-            <button
-              className="actionButton"
-              onClick={inspectQuote}
-              disabled={busy || !quoteInput.trim()}
-            >
-              Check quote
-            </button>
-            <small>
-              The signing key stays on the factor&apos;s operator machine and
-              never enters this app or its hosting environment.
-            </small>
-          </section>
-        </div>
-      )}
     </>
   );
 }

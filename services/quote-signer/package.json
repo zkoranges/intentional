@@ -1,0 +1,16 @@
+{
+  "name": "reservoir-quote-signer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Operator-side firm quote signer for Reservoir factoring",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.55.8"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

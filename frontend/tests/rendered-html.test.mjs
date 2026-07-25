@@ -38,7 +38,8 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "50%",
     "Max",
     "Finding your quote",
-    "Use firm quote",
+    "Get firm quote",
+    "Getting your quote…",
     "Firm · fillable",
     "not pinned in this app build",
     "Firm quote ready",
@@ -174,7 +175,11 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(page, /requestLidoQuote/);
   assert.match(quoteClient, /api\/quote\/lido/);
   assert.match(page, /The firm quote deployment is not pinned in this app build/);
-  assert.match(page, /Paste signed quote JSON/);
+  // The quote arrives over HTTP from the desk; no envelope passes through a
+  // human, so no paste surface may exist.
+  assert.match(page, /requestFirmQuote/);
+  assert.match(page, /"\/api\/quote\/lido"/);
+  assert.doesNotMatch(page, /Paste signed quote JSON|quoteModalOpen|<textarea/);
   assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
   assert.match(ethereum, /claimController\.toLowerCase\(\)/);
   assert.match(ethereum, /claimReceiver\.toLowerCase\(\)/);
@@ -196,26 +201,48 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.doesNotMatch(ethereum, /type\\(uint256\\)\\.max|MaxUint256/);
 });
 
-test("the public quote route fails closed, keyless, and secret-safe", async () => {
+test("the quote proxy route is keyless, validating, and fails closed", async () => {
   const route = await readFile(
     new URL("app/api/quote/lido/route.ts", projectRoot),
     "utf8",
   );
 
-  assert.match(route, /Automated public firm-quote issuance is deliberately disabled/);
-  assert.match(
-    route,
-    /Automated firm-quote issuance is disabled; paste an operator-signed quote to execute/,
-  );
+  // Proxies to the operator desk; the signing key never lives here.
+  assert.match(route, /SIGNER_URL/);
+  assert.match(route, /x-signer-secret/);
+  assert.match(route, /Firm quote issuance is not configured in this deployment/);
+  assert.match(route, /AbortSignal\.timeout/);
   assert.match(route, /force-dynamic/);
   assert.match(route, /no-store, max-age=0/);
   assert.match(route, /MIN_LIVE_LIDO_QUOTE/);
+  // The signer hostname and secret must never reach the client bundle.
+  assert.doesNotMatch(route, /NEXT_PUBLIC_SIGNER|NEXT_PUBLIC_.*SECRET/);
   assert.doesNotMatch(route, /api\.cow\.fi|cowprotocol|uniswap/i);
   assert.doesNotMatch(
     route,
     /PRIVATE_KEY|SIGNER_PRIVATE_KEY|FACTOR_PRIVATE_KEY|ETH_RPC_URL/,
   );
   assert.doesNotMatch(route, /error instanceof Error \? error\.message/);
+});
+
+test("the quote signer service holds the key and enforces its guards", async () => {
+  const signer = await readFile(
+    new URL("../services/quote-signer/server.mjs", projectRoot),
+    "utf8",
+  );
+
+  assert.match(signer, /timingSafeEqual/);
+  assert.match(signer, /MAX_QUOTE_WEI/);
+  assert.match(signer, /SINGLE_FLIGHT/);
+  assert.match(signer, /SETTLEMENT_PAUSED/);
+  assert.match(signer, /LIDO_BUNKER/);
+  assert.match(signer, /INSUFFICIENT_CAPACITY/);
+  assert.match(signer, /SIGNER_SECRET must be at least 32 characters/);
+  assert.match(signer, /QUOTE_TTL_SECONDS must stay inside the kernel/);
+  assert.match(signer, /audit/);
+  // Binds localhost by default; the key is never echoed back.
+  assert.match(signer, /HOST\?\.trim\(\) \|\| "127\.0\.0\.1"/);
+  assert.doesNotMatch(signer, /console\.log\([^)]*FACTOR_PRIVATE_KEY/);
 });
 
 test("the production build contains the dark responsive withdrawal interface", async () => {
@@ -233,7 +260,9 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Connect wallet/);
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
-  assert.match(pageBundle, /Use firm quote/);
+  assert.match(pageBundle, /Get firm quote/);
+  assert.match(pageBundle, /\/api\/quote\/lido/);
+  assert.doesNotMatch(pageBundle, /Paste signed quote JSON/);
   assert.match(pageBundle, /Future value, liquid today/);
   assert.match(pageBundle, /Insufficient stETH balance/);
   assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);
