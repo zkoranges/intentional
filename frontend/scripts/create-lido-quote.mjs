@@ -3,8 +3,8 @@
 import { randomBytes } from "node:crypto";
 import {
   createPublicClient,
+  decodeFunctionData,
   encodeAbiParameters,
-  formatEther,
   getAddress,
   http,
   isAddress,
@@ -14,7 +14,6 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
-import { underwriteLidoExit } from "../lib/quote-policy.ts";
 
 const STETH = getAddress("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
 const WETH = getAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
@@ -45,6 +44,8 @@ const stEthAbi = parseAbi([
 const queueAbi = parseAbi([
   "function isPaused() view returns (bool)",
   "function isBunkerModeActive() view returns (bool)",
+  "function unfinalizedStETH() view returns (uint256)",
+  "function unfinalizedRequestNumber() view returns (uint256)",
 ]);
 
 function required(name) {
@@ -64,104 +65,6 @@ function unsigned(value, name) {
   return BigInt(value);
 }
 
-function policyUint(name, fallback, maximum) {
-  const value = Number(process.env[name] ?? fallback);
-  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
-    throw new Error(`${name} is outside its supported range`);
-  }
-  return value;
-}
-
-async function livePricing(seller, requestedStEth) {
-  const [cowResponse, lidoResponse] = await Promise.all([
-    fetch("https://api.cow.fi/mainnet/api/v1/quote", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        kind: "sell",
-        sellToken: STETH,
-        buyToken: WETH,
-        sellAmountBeforeFee: requestedStEth.toString(),
-        from: seller,
-        receiver: seller,
-        validFor: 300,
-        signingScheme: "eip712",
-        priceQuality: "optimal",
-      }),
-      signal: AbortSignal.timeout(10_000),
-    }),
-    fetch(
-      `https://wq-api.lido.fi/v2/request-time/calculate?amount=${formatEther(requestedStEth)}`,
-      { signal: AbortSignal.timeout(10_000) },
-    ),
-  ]);
-  if (!cowResponse.ok || !lidoResponse.ok) {
-    throw new Error("Live CoW or Lido pricing is unavailable; no firm quote was signed");
-  }
-
-  const cow = await cowResponse.json();
-  const lido = await lidoResponse.json();
-  const cowBuyAmount = unsigned(
-    String(cow.quote?.buyAmount ?? ""),
-    "CoW buy amount",
-  );
-  const gasPriceWei = unsigned(
-    String(cow.quote?.gasPrice ?? ""),
-    "CoW gas price",
-  );
-  const estimatedWaitMs = Number(lido.requestInfo?.finalizationIn);
-  if (
-    lido.status !== "calculated" ||
-    !Number.isSafeInteger(estimatedWaitMs) ||
-    estimatedWaitMs < 0 ||
-    estimatedWaitMs > 365 * 24 * 60 * 60 * 1_000
-  ) {
-    throw new Error("Lido returned an invalid finalization estimate");
-  }
-  const policy = {
-    fundingAprBps: policyUint("LIDO_FUNDING_APR_BPS", 1_000, 10_000),
-    riskBps: policyUint("LIDO_RISK_BPS", 15, 10_000),
-    userEdgeShareBps: policyUint(
-      "LIDO_USER_EDGE_SHARE_BPS",
-      5_000,
-      10_000,
-    ),
-    claimGasUnits: policyUint(
-      "LIDO_CLAIM_GAS_UNITS",
-      120_000,
-      1_000_000,
-    ),
-  };
-  const priced = underwriteLidoExit({
-    requestedStEth,
-    cowBuyAmount,
-    estimatedWaitMs: BigInt(estimatedWaitMs),
-    gasPriceWei,
-    policy,
-  });
-  if (!priced.reservoirAvailable || priced.reservoirPaymentAmount === null) {
-    throw new Error(
-      "CoW currently beats Reservoir's underwriting cap; no firm quote was signed",
-    );
-  }
-  return {
-    paymentAmount: priced.reservoirPaymentAmount,
-    evidence: {
-      mode: "live",
-      source: "cow-live+lido-live",
-      sourceTimestamp: new Date().toISOString(),
-      cowPaymentAmount: cowBuyAmount,
-      estimatedWaitMs,
-      underwritingCap: priced.underwritingCap,
-      fundingCost: priced.fundingCost,
-      riskCost: priced.riskCost,
-      claimGasCost: priced.claimGasCost,
-      userImprovement: priced.userImprovement,
-      policy,
-    },
-  };
-}
-
 const rpcUrl = required("ETH_RPC_URL");
 const factorKey = required("FACTOR_PRIVATE_KEY");
 if (!/^0x[0-9a-fA-F]{64}$/.test(factorKey)) {
@@ -177,20 +80,51 @@ if (seller === account.address) {
 }
 const requestedStEth = parseEther(required("REQUESTED_STETH"));
 const testPaymentOverride = process.env.ALLOW_TEST_PAYMENT_OVERRIDE === "1";
-if (process.env.PAYMENT_WETH && !testPaymentOverride) {
+const operatorFirmQuote = process.env.OPERATOR_FIRM_QUOTE === "1";
+if (testPaymentOverride && operatorFirmQuote) {
   throw new Error(
-    "PAYMENT_WETH is test-only; live quotes must use CoW and Lido market data",
+    "Choose exactly one pricing mode: fork-only test override or operator firm quote",
   );
 }
-const pricing = testPaymentOverride
-  ? {
-      paymentAmount: parseEther(required("PAYMENT_WETH")),
-      evidence: {
-        mode: "test-override",
-        source: "explicit disposable-fork fixture",
-      },
-    }
-  : await livePricing(seller, requestedStEth);
+if (!testPaymentOverride && !operatorFirmQuote) {
+  throw new Error(
+    "Firm Lido quote issuance requires OPERATOR_FIRM_QUOTE=1 with the recorded Aqua intent proof, or the fork-only ALLOW_TEST_PAYMENT_OVERRIDE=1",
+  );
+}
+const paymentAmountWei = parseEther(required("PAYMENT_WETH"));
+const requestedForSpread = requestedStEth;
+if (paymentAmountWei >= requestedForSpread) {
+  throw new Error("PAYMENT_WETH must be below REQUESTED_STETH (positive gross spread)");
+}
+let pricing;
+if (operatorFirmQuote) {
+  const aquaIntentProofTx = required("AQUA_INTENT_PROOF_TX");
+  if (!/^0x[0-9a-fA-F]{64}$/.test(aquaIntentProofTx)) {
+    throw new Error("AQUA_INTENT_PROOF_TX must be a 32-byte transaction hash");
+  }
+  pricing = {
+    paymentAmount: paymentAmountWei,
+    evidence: {
+      mode: "operator-priced-firm-quote",
+      source: "factor-set gross factoring spread; not a market-price guarantee",
+      evidenceNote:
+        "informational metadata; only the EIP-712 ClaimQuote fields are factor-signed",
+      grossSpreadBps: (
+        ((requestedForSpread - paymentAmountWei) * 10_000n) / requestedForSpread
+      ).toString(),
+      aquaIntentProofTx,
+      signedAtUnix: Math.floor(Date.now() / 1000).toString(),
+    },
+  };
+} else {
+  pricing = {
+    paymentAmount: paymentAmountWei,
+    evidence: {
+      mode: "test-override",
+      source: "explicit disposable-fork fixture",
+    },
+  };
+}
 const paymentAmount = pricing.paymentAmount;
 const maxStEthShortfall = unsigned(
   process.env.MAX_STETH_SHORTFALL_WEI ?? "2",
@@ -206,6 +140,100 @@ const nonce = process.env.QUOTE_NONCE
 const client = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
 if ((await client.getChainId()) !== 1) {
   throw new Error("ETH_RPC_URL must point to Ethereum mainnet");
+}
+
+if (operatorFirmQuote) {
+  if (process.env.AQUA_PROOF_ALLOW_UNVERIFIED === "1") {
+    pricing.evidence.aquaProofVerification = "skipped-rehearsal-only";
+  } else {
+    const aquaRouter = address("AQUA_ROUTER_ADDRESS");
+    const expectedStrategyHash = required("AQUA_STRATEGY_HASH").toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(expectedStrategyHash)) {
+      throw new Error("AQUA_STRATEGY_HASH must be a 32-byte hash");
+    }
+    const expectedTakerWstEth = BigInt(
+      unsigned(required("AQUA_TAKER_WSTETH_WEI"), "AQUA_TAKER_WSTETH_WEI"),
+    );
+    const [receipt, proofTx] = await Promise.all([
+      client.getTransactionReceipt({
+        hash: pricing.evidence.aquaIntentProofTx,
+      }),
+      client.getTransaction({ hash: pricing.evidence.aquaIntentProofTx }),
+    ]);
+    if (
+      receipt.status !== "success" ||
+      getAddress(receipt.from) !== account.address ||
+      !receipt.to ||
+      getAddress(receipt.to) !== aquaRouter
+    ) {
+      throw new Error(
+        "AQUA_INTENT_PROOF_TX is not a successful factor transaction to the reviewed Aqua router",
+      );
+    }
+    const swapVmAbi = parseAbi([
+      "function swap((address maker, uint256 traits, bytes data) order, uint256 amount, bytes takerTraits) returns (uint256, uint256, bytes32)",
+      "function hash((address maker, uint256 traits, bytes data) order) view returns (bytes32)",
+    ]);
+    let decodedSwap;
+    try {
+      decodedSwap = decodeFunctionData({ abi: swapVmAbi, data: proofTx.input });
+    } catch {
+      throw new Error("AQUA_INTENT_PROOF_TX calldata is not a SwapVM swap call");
+    }
+    if (decodedSwap.functionName !== "swap") {
+      throw new Error("AQUA_INTENT_PROOF_TX did not call swap on the router");
+    }
+    const [proofOrder, proofAmount] = decodedSwap.args;
+    if (proofAmount !== expectedTakerWstEth) {
+      throw new Error(
+        "AQUA_INTENT_PROOF_TX swap amount does not match the recorded taker input",
+      );
+    }
+    const proofOrderHash = await client.readContract({
+      address: aquaRouter,
+      abi: swapVmAbi,
+      functionName: "hash",
+      args: [proofOrder],
+    });
+    if (proofOrderHash.toLowerCase() !== expectedStrategyHash) {
+      throw new Error(
+        "AQUA_INTENT_PROOF_TX order does not hash to the recorded Aqua strategy",
+      );
+    }
+    const transferTopic =
+      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const wethOutLog = receipt.logs.find(
+      (log) =>
+        getAddress(log.address) === WETH &&
+        log.topics[0] === transferTopic &&
+        log.topics[2] &&
+        getAddress(`0x${log.topics[2].slice(26)}`) === account.address,
+    );
+    if (!wethOutLog || BigInt(wethOutLog.data) === 0n) {
+      throw new Error(
+        "AQUA_INTENT_PROOF_TX receipt lacks a WETH transfer to the factor recipient",
+      );
+    }
+    pricing.evidence.aquaProofVerification = "receipt-and-calldata-verified";
+    pricing.evidence.aquaRouter = aquaRouter;
+    pricing.evidence.aquaStrategyHash = expectedStrategyHash;
+    pricing.evidence.aquaTakerWstEthWei = expectedTakerWstEth.toString();
+    pricing.evidence.aquaWethOutWei = BigInt(wethOutLog.data).toString();
+  }
+  const [queueUnfinalizedStEth, queueUnfinalizedRequests] = await Promise.all([
+    client.readContract({
+      address: QUEUE,
+      abi: queueAbi,
+      functionName: "unfinalizedStETH",
+    }),
+    client.readContract({
+      address: QUEUE,
+      abi: queueAbi,
+      functionName: "unfinalizedRequestNumber",
+    }),
+  ]);
+  pricing.evidence.queueUnfinalizedStEthWei = queueUnfinalizedStEth.toString();
+  pricing.evidence.queueUnfinalizedRequests = queueUnfinalizedRequests.toString();
 }
 const latestBlock = await client.getBlock({ blockTag: "latest" });
 const deadline = process.env.QUOTE_DEADLINE

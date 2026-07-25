@@ -334,6 +334,16 @@ hackathon scope. V0 accounts are disposable local/fork fixtures only: they must
 never be deployed or funded on a persistent network and must not custody
 unrelated funds.
 
+> **Amendment (2026-07-25, ETHGlobal Lisbon micro-demo).** One narrow
+> exception is authorized: a single micro-scale mainnet deployment operated by
+> factor `0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99`, with total seeded
+> inventory frozen at ≤ 0.0026 ETH equivalent, custodying no third-party
+> funds. The unrecoverable seed is disclosed in
+> `docs/MAINNET_MICRO_DEMO.md` §2, and the exact deployment transactions,
+> addresses, and runtime code hashes are recorded in the Aqua deployment
+> manifest produced at broadcast time. Every other persistent v1 deployment
+> remains prohibited.
+
 Every enabled hook validates:
 
 ```text

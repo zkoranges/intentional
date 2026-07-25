@@ -108,16 +108,28 @@ const factorNftsBefore = await publicClient.readContract({
   args: [getAddress(envelope.quote.claimReceiver)],
 });
 
-const approveSimulation = await publicClient.simulateContract({
-  account,
+const preexistingAllowance = await publicClient.readContract({
   address: STETH,
   abi: erc20Abi,
-  functionName: "approve",
-  args: [getAddress(envelope.quote.adapter), requested],
+  functionName: "allowance",
+  args: [account.address, getAddress(envelope.quote.adapter)],
 });
-const approveHash = await walletClient.writeContract(approveSimulation.request);
-const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
-if (approveReceipt.status !== "success") throw new Error("exact stETH approval reverted");
+if (preexistingAllowance === requested) {
+  console.log(
+    "LIVE E2E 0 | exact stETH approval already in place before the quote window",
+  );
+} else {
+  const approveSimulation = await publicClient.simulateContract({
+    account,
+    address: STETH,
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [getAddress(envelope.quote.adapter), requested],
+  });
+  const approveHash = await walletClient.writeContract(approveSimulation.request);
+  const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveHash });
+  if (approveReceipt.status !== "success") throw new Error("exact stETH approval reverted");
+}
 
 const quote = {
   ...envelope.quote,

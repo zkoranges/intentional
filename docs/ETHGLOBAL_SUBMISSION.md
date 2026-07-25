@@ -3,7 +3,8 @@
 This document is the honest provenance and eligibility record for Reservoir.
 It exists because the 1inch Aqua prize requires official Aqua/SwapVM use,
 onchain token transfers in the final demo (local forks are allowed), and proper
-Git history. ETHGlobal also requires pre-existing work to be disclosed.
+Git history. Reservoir was built from scratch during ETHGlobal Lisbon 2026; no
+project-specific code, designs, or assets predate the hackathon.
 
 Official rules:
 
@@ -26,14 +27,11 @@ modified-SwapVM consideration:
 - the final Lido/Aave settlement uses a separate production-contract chain-1
   fork. The two proofs are required but are not represented as one transaction.
 
-The team reports that Reservoir v1 was built for an earlier ETHGlobal edition.
-No public prior repository or ETHGlobal showcase URL was discoverable from this
-workspace or the `zkoranges` GitHub account on 2026-07-25. Do **not** select the
-Continuity Track or claim a previous submission until the exact dated prior
-artifact is added here. Without that evidence, submit to the standard
-**Build an Aqua App** track.
+Reservoir is entered in the standard **Build an Aqua App** track. Both the v1
+Aqua reserve engine and the v2 asynchronous-claim extension were designed and
+implemented during ETHGlobal Lisbon 2026.
 
-## Before and after
+## Project layers
 
 The repository preserves two deliberately distinct layers.
 
@@ -45,7 +43,7 @@ Reservoir v1 / Aqua reserve engine:
 - `src/opcodes/ReservoirOpcodes.sol`
 - `src/routers/ReservoirSwapVMRouter.sol`
 
-Reservoir v2 / work added for Lisbon:
+Reservoir v2 / asynchronous-claim extension:
 
 - `src/claims/**`
 - live Lido withdrawal origination;

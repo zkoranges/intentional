@@ -177,8 +177,8 @@ FACTOR_PRIVATE_KEY="${factor_key}" \
 KERNEL_ADDRESS="${kernel_address}" \
 LIDO_ADAPTER_ADDRESS="${lido_adapter_address}" \
 SELLER_ADDRESS="${seller_address}" \
-REQUESTED_STETH="0.9" \
-PAYMENT_WETH="0.89775" \
+REQUESTED_STETH="${E2E_REQUESTED_STETH:-0.9}" \
+PAYMENT_WETH="${E2E_PAYMENT_WETH:-0.89775}" \
 ALLOW_TEST_PAYMENT_OVERRIDE=1 \
 node --experimental-strip-types frontend/scripts/create-lido-quote.mjs >"${QUOTE_FILE}"
 

@@ -56,7 +56,6 @@ type LidoWaitEstimate = {
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
 const DOCS_URL = "/docs";
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
-const COW_SWAP_URL = "https://swap.cow.fi/";
 const WALLET_DISCONNECTED_KEY = "impatience.wallet-disconnected";
 
 const MARKETS = [
@@ -1134,14 +1133,6 @@ export default function Home() {
 
           {mode === "instant" && lidoQuote && (
             <div className="quoteAlternatives">
-              {lidoQuote.recommendedRoute === "cow" && (
-                <button
-                  className="fallbackLink"
-                  onClick={() => setQuoteModalOpen(true)}
-                >
-                  Already have a firm Reservoir quote? Verify it →
-                </button>
-              )}
               <button
                 className="fallbackLink"
                 onClick={() => selectMode("queue")}

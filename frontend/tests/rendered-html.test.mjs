@@ -40,8 +40,8 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Finding your quote",
     "Use firm quote",
     "Firm · fillable",
-    "CoW wins · executable quote",
-    "Reservoir wins · modeled",
+    "not pinned in this app build",
+    "Firm quote ready",
     "Request withdrawal",
     "Onchain claims",
     "Claim ETH",
@@ -173,8 +173,7 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(page, /RESERVOIR_DEPLOYMENT/);
   assert.match(page, /requestLidoQuote/);
   assert.match(quoteClient, /api\/quote\/lido/);
-  assert.match(quoteClient, /cow-live\+lido-live/);
-  assert.match(page, /Live CoW and Lido data/);
+  assert.match(page, /The firm quote deployment is not pinned in this app build/);
   assert.match(page, /Paste signed quote JSON/);
   assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
   assert.match(ethereum, /claimController\.toLowerCase\(\)/);
@@ -197,20 +196,21 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.doesNotMatch(ethereum, /type\\(uint256\\)\\.max|MaxUint256/);
 });
 
-test("the public market route is live, keyless, and secret-safe", async () => {
+test("the public quote route fails closed, keyless, and secret-safe", async () => {
   const route = await readFile(
     new URL("app/api/quote/lido/route.ts", projectRoot),
     "utf8",
   );
 
-  assert.match(route, /api\.cow\.fi\/mainnet\/api\/v1\/quote/);
-  assert.match(route, /wq-api\.lido\.fi\/v2\/request-time\/calculate/);
-  assert.match(route, /priceQuality: "optimal"/);
-  assert.match(route, /source: "cow-live\+lido-live"/);
+  assert.match(route, /Firm Lido pricing is deliberately paused/);
   assert.match(
     route,
-    /Live CoW\/Lido pricing is temporarily unavailable/,
+    /Firm Lido quotes are paused while the Aqua mainnet intent demo is finalized/,
   );
+  assert.match(route, /force-dynamic/);
+  assert.match(route, /no-store, max-age=0/);
+  assert.match(route, /MIN_LIVE_LIDO_QUOTE/);
+  assert.doesNotMatch(route, /api\.cow\.fi|cowprotocol|uniswap/i);
   assert.doesNotMatch(
     route,
     /PRIVATE_KEY|SIGNER_PRIVATE_KEY|FACTOR_PRIVATE_KEY|ETH_RPC_URL/,

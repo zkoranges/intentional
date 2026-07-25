@@ -23,6 +23,11 @@ polish are optional.
 - Each branch must compile, format, and run its targeted tests before integration.
 - Fork tests never become prerequisites for local deterministic tests.
 - Maker accounts are disposable local/fork fixtures; never deploy or fund v1 on a persistent network.
+  (Amended 2026-07-25: one micro-scale mainnet exception is authorized for the ETHGlobal Lisbon
+  demo — single named factor `0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99`, seeded inventory frozen
+  at ≤ 0.0026 ETH equivalent, no third-party custody, sunk seed disclosed, transactions and
+  addresses recorded in the Aqua deployment manifest. See the SPEC.md amendment and
+  `docs/MAINNET_MICRO_DEMO.md` §4.)
 - The exact-in hero path is implemented before exact-out completeness work.
 - No economic fee or spread work is scheduled in the hackathon hard cut.
 - Morpho is never allowed to delay correctness, the Aave path, or the demo.

@@ -12,7 +12,7 @@
     "quote:lido": "node --experimental-strip-types scripts/create-lido-quote.mjs",
     "verify:deployment": "node scripts/verify-live-deployment.mjs",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs && node --experimental-strip-types --test tests/quote-policy.test.ts && npm run test:pinned-build && npm run build",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs && npm run test:pinned-build && npm run build",
     "test:pinned-build": "NEXT_PUBLIC_RESERVOIR_KERNEL=0x1111111111111111111111111111111111111111 NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER=0x2222222222222222222222222222222222222222 npm run build && node scripts/verify-pinned-build.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
