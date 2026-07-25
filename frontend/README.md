@@ -21,10 +21,10 @@ With an injected wallet on Ethereum mainnet, the page:
    verifies canonical WETH payment plus canonical Lido ownership/share state
    after the receipt.
 
-The current public build keeps Reservoir fills disabled because no persistent
-Reservoir contract is deployed or funded yet. Canonical Lido queue operations
-remain live. There is deliberately no unauthenticated quote API or
-browser-held factor key.
+The public frontend is live, but the current build keeps Reservoir fills
+disabled because no Reservoir contract is persistently deployed or funded.
+Canonical Lido queue operations remain live. There is deliberately no
+unauthenticated quote API or browser-held factor key.
 
 ## Quote validation
 
@@ -104,6 +104,28 @@ reserve, short quotes, active pause/revocation monitoring, and preferably an
 ERC-1271 smart account as factor. Real funding is a separate operator action
 performed only after the exact fork rehearsal and release review pass.
 
+The public-address and canonical-binding verifier is:
+
+```sh
+ETH_RPC_URL=... \
+FACTOR_ADDRESS=0x... \
+KERNEL_ADDRESS=0x... \
+FUNDING_ACCOUNT_ADDRESS=0x... \
+RESERVE_ADAPTER_ADDRESS=0x... \
+LIDO_ADAPTER_ADDRESS=0x... \
+EXPECTED_FUNDING_CODEHASH=0x... \
+EXPECTED_RESERVE_CODEHASH=0x... \
+EXPECTED_KERNEL_CODEHASH=0x... \
+EXPECTED_LIDO_ADAPTER_CODEHASH=0x... \
+EXPECTED_RELEASE_STATE=paused-unfunded \
+npm run verify:deployment
+```
+
+Use `EXPECTED_RELEASE_STATE=funded-paused` or `active` with a nonzero
+`MIN_CAPACITY_WEI` only after separately authorized funding. See
+[`docs/LIVE_ACTIVATION.md`](../docs/LIVE_ACTIVATION.md).
+
 The frontend has no persistent backend. Local `.env*`, `.vercel`, build
-outputs, generated deployment records, and quote files are ignored and must
-not be committed.
+outputs, raw broadcast records, and quote files are ignored and must not be
+committed. A sanitized public deployment manifest is committed only through
+the review procedure in the activation runbook.

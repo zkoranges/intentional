@@ -196,3 +196,47 @@ linting, then returned:
 > **APPROVE**
 
 No persistent Reservoir deployment or funding was introduced by this addendum.
+
+## Production-activation boundary addendum — 2026-07-25
+
+An exact Claude Opus 5 activation review
+(`claude/claude-opus-5`, agent
+`dcf8aa6e-d710-4428-9f8d-ffc7c94cb6fb`) examined the three-phase live release
+procedure and returned:
+
+> **APPROVE — no blockers and no majors remain.**
+
+The review confirmed:
+
+- deployment creates the exact release paused and unfunded;
+- funding and activation use separate scripts and acknowledgement phrases;
+- funding deposits capped WETH into canonical StataWETH while settlement stays
+  paused;
+- activation performs only the final settlement unpause;
+- all four Reservoir runtime code hashes are strict reviewed inputs in both
+  the Solidity operations and independent JavaScript verifier;
+- the verifier fixes the initial adapter count and nonce floor at one and zero,
+  checks a code-free factor, and validates every canonical binding;
+- permanent signing uses a Foundry keystore, hardware wallet, or interactive
+  signer; raw keys appear only in disposable fork tooling;
+- wrong acknowledgement, over-cap funding, and wrong runtime hash fail for
+  their exact expected reasons;
+- deployment identities are reproduced through two independent RPC providers
+  and explorer source verification before capital moves; and
+- no persistent transaction was broadcast.
+
+The reviewer approved the non-persistent release for commit and push. Its
+remaining low-severity suggestions were also folded in:
+
+- the frontend renders the full checksummed kernel and Lido-adapter addresses
+  with explorer links;
+- a pinned production build asserts that both full addresses reach the client
+  bundle, followed by an unpinned rebuild for the current public release;
+- the rehearsal deliberately perturbs a runtime hash and proves rejection; and
+- the runbook accurately distinguishes complete pre-broadcast simulation from
+  the three separately recoverable funding transactions.
+
+The only residual procedural property is unavoidable for contracts with
+constructor immutables: the reviewed source-to-runtime-hash link is established
+through the committed public deployment manifest and explorer source
+verification after deployment and before funding.

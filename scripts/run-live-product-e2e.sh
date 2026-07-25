@@ -135,21 +135,34 @@ if (
 }
 NODE
 
-kernel_address="$(
+deployment_value() {
   node --input-type=module -e \
-    'import fs from "node:fs"; console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).kernel)' \
-    "${DEPLOYMENT_JSON}"
-)"
-lido_adapter_address="$(
-  node --input-type=module -e \
-    'import fs from "node:fs"; console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).lidoAdapter)' \
-    "${DEPLOYMENT_JSON}"
-)"
-funding_account="$(
-  node --input-type=module -e \
-    'import fs from "node:fs"; console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).fundingAccount)' \
-    "${DEPLOYMENT_JSON}"
-)"
+    'import fs from "node:fs"; console.log(JSON.parse(fs.readFileSync(process.argv[1], "utf8"))[process.argv[2]])' \
+    "${DEPLOYMENT_JSON}" "$1"
+}
+
+kernel_address="$(deployment_value kernel)"
+lido_adapter_address="$(deployment_value lidoAdapter)"
+funding_account="$(deployment_value fundingAccount)"
+reserve_adapter_address="$(deployment_value reserveAdapter)"
+funding_codehash="$(deployment_value fundingCodeHash)"
+reserve_codehash="$(deployment_value reserveCodeHash)"
+kernel_codehash="$(deployment_value kernelCodeHash)"
+lido_adapter_codehash="$(deployment_value lidoAdapterCodeHash)"
+
+ETH_RPC_URL="${LOCAL_RPC_URL}" \
+FACTOR_ADDRESS="${factor_address}" \
+KERNEL_ADDRESS="${kernel_address}" \
+FUNDING_ACCOUNT_ADDRESS="${funding_account}" \
+RESERVE_ADAPTER_ADDRESS="${reserve_adapter_address}" \
+LIDO_ADAPTER_ADDRESS="${lido_adapter_address}" \
+EXPECTED_FUNDING_CODEHASH="${funding_codehash}" \
+EXPECTED_RESERVE_CODEHASH="${reserve_codehash}" \
+EXPECTED_KERNEL_CODEHASH="${kernel_codehash}" \
+EXPECTED_LIDO_ADAPTER_CODEHASH="${lido_adapter_codehash}" \
+EXPECTED_RELEASE_STATE="active" \
+MIN_CAPACITY_WEI="1000000000000000000" \
+node frontend/scripts/verify-live-deployment.mjs >/dev/null
 
 ETH_RPC_URL="${LOCAL_RPC_URL}" \
 FACTOR_PRIVATE_KEY="${factor_key}" \

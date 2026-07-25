@@ -5,7 +5,7 @@ FUZZ_SEED := 0x5245534552564f4952
 AAVE_FORK_TEST := test/fork/AaveStataUSDC.t.sol
 LIDO_V2_FORK_TEST := test/fork/LidoWithdrawalClaim.t.sol
 
-.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-v2 jury-demo demo-lido-v2 live-product-e2e
+.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-v2 jury-demo demo-lido-v2 live-product-e2e rehearse-live-activation verify-live-v2
 
 build:
 	forge build
@@ -71,3 +71,10 @@ demo-lido-v2: jury-demo
 live-product-e2e:
 	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required for the chain-1 production rehearsal" && exit 1)
 	./scripts/run-live-product-e2e.sh
+
+rehearse-live-activation:
+	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required for the current-head activation rehearsal" && exit 1)
+	./scripts/rehearse-live-activation.sh
+
+verify-live-v2:
+	npm --prefix frontend run verify:deployment

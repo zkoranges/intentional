@@ -1,6 +1,7 @@
 # Reservoir v2 — implementation plan
 
-> Status: Gates 0–5 passed; Gate 6 live-beta release in progress
+> Status: Gates 0–6 and the public frontend passed; persistent deployment,
+> funding, and activation await separate authorization
 >
 > Canonical name: **Reservoir v2**
 >

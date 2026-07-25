@@ -34,11 +34,17 @@ This is an unaudited hackathon beta. Mainnet funding is deliberately separate
 from deployment and occurs only after the exact chain-1 rehearsal, full test
 matrix, frontend checks, and final independent review.
 
-**Current deployment status:** no Reservoir contract is deployed or funded on
-a persistent network. The public build enables the canonical Lido
+**Current deployment status:** the public frontend is live, but no Reservoir
+contract is deployed or funded on a persistent network. The current build
+enables the canonical Lido
 originate/claim flows and keeps instant Reservoir fills disabled. After the
 reviewed kernel and Lido adapter are deployed, their exact public addresses
 must be compiled into the frontend before that route can request approval.
+
+The paused deployment, separately capped funding, independent verification,
+one-operation activation, and read-only binding-verification procedure is
+frozen in [`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). The tooling is
+prepared but has not broadcast a persistent transaction.
 
 ## What is working
 

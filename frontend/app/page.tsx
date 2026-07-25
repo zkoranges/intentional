@@ -504,6 +504,34 @@ export default function Home() {
                 ? "Paste a factor-signed quote. The app requires the build-pinned kernel and Lido adapter, then verifies its nonce, canonical bindings and full Aave-backed capacity before asking for approval."
                 : "The live Lido route is available now. Reservoir instant fills remain disabled until the reviewed kernel and Lido adapter are deployed and pinned into this build."}
             </p>
+            {RESERVOIR_DEPLOYMENT && (
+              <dl className="deploymentPins" aria-label="Pinned deployment">
+                <div>
+                  <dt>Pinned kernel</dt>
+                  <dd>
+                    <a
+                      href={`https://etherscan.io/address/${RESERVOIR_DEPLOYMENT.kernel}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {RESERVOIR_DEPLOYMENT.kernel}
+                    </a>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Pinned Lido adapter</dt>
+                  <dd>
+                    <a
+                      href={`https://etherscan.io/address/${RESERVOIR_DEPLOYMENT.lidoAdapter}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {RESERVOIR_DEPLOYMENT.lidoAdapter}
+                    </a>
+                  </dd>
+                </div>
+              </dl>
+            )}
             <textarea
               value={quoteInput}
               onChange={(event) => {

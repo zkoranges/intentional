@@ -1,6 +1,7 @@
 # Reservoir v2 scope lock
 
-> Status: live-beta release candidate; final release review pending
+> Status: public frontend live; Reservoir contracts not persistently deployed
+> or funded
 >
 > Scope frozen: 2026-07-25
 >

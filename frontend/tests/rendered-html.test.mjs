@@ -115,6 +115,14 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(ethereum, /statuses\[0\]\.owner/);
   assert.match(page, /snapshot\.queueAllowance === amount/);
   assert.match(page, /quoteCheck\.allowance === quoteCheck\.requestedStEth/);
+  assert.match(page, /Pinned kernel/);
+  assert.match(page, /Pinned Lido adapter/);
+  assert.match(page, /etherscan\.io\/address\/\$\{RESERVOIR_DEPLOYMENT\.kernel\}/);
+  assert.match(
+    page,
+    /etherscan\.io\/address\/\$\{RESERVOIR_DEPLOYMENT\.lidoAdapter\}/,
+  );
+  assert.doesNotMatch(page, /short\(RESERVOIR_DEPLOYMENT\.(kernel|lidoAdapter)\)/);
   assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
   assert.match(ethereum, /hasExactAllowance\(currentAllowance, amount\)/);
   assert.match(ethereum, /hasExactAllowance\(fillAllowance, check\.requestedStEth\)/);
