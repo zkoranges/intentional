@@ -536,7 +536,7 @@ export default function DocsPage() {
               </li>
             </ol>
 
-            <h3>Where the tokens actually go</h3>
+            <h3>Settlement flow</h3>
             <FundsFlowDiagram />
 
             <h3>Three claim paths, stated separately</h3>

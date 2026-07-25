@@ -164,12 +164,12 @@
 }
 
 .docsContent h1 {
-  max-width: 720px;
+  max-width: 640px;
   margin: 0;
-  font-size: clamp(44px, 7vw, 74px);
+  font-size: clamp(36px, 5vw, 56px);
   font-weight: 580;
-  letter-spacing: -0.065em;
-  line-height: 0.98;
+  letter-spacing: -0.055em;
+  line-height: 1.02;
 }
 
 .docsLead {
