@@ -47,6 +47,7 @@ public HTTP/TLS entry point; the quote signer owns only loopback port 8791.
 ## Day-to-day
 
 ```sh
+make remote
 ssh $DEPLOY_HOST systemctl status impatience-signer
 ssh $DEPLOY_HOST journalctl -u impatience-signer -n 50 --no-pager
 ssh $DEPLOY_HOST curl -sf http://127.0.0.1:8791/health
@@ -90,7 +91,8 @@ the v2 deployment. Therefore:
 - any future desk runs against a **fresh deployment with a dedicated key**;
   for this capped pre-alpha the protected service account on the shared VPS
   holds that key, so host compromise remains an explicit risk bounded by the
-  `0.01 WETH` reserve and prompt retirement—not eliminated by service guards.
+  `0.002 WETH` first-test reserve and prompt retirement—not eliminated by
+  service guards.
 
 ## Current state — retired, never to be re-armed
 

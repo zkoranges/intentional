@@ -14,7 +14,7 @@ contract FundV2Mainnet is V2MainnetOpsBase {
     using SafeERC20 for IERC20;
 
     bytes32 private constant ACK_HASH = keccak256("FUND_PAUSED_RESERVOIR_V2");
-    uint256 public constant MIN_JURY_FUNDING = 0.01 ether;
+    uint256 public constant MIN_JURY_FUNDING = 0.002 ether;
     uint256 public constant MAX_JURY_FUNDING = 5 ether;
 
     function run() external {

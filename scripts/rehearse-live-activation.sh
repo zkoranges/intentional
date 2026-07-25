@@ -4,8 +4,8 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_RPC_URL="${ETH_RPC_URL:-}"
 LOCAL_RPC_URL="http://127.0.0.1:8546"
-FUNDING_WEI="${REHEARSAL_FUNDING_WEI:-2000000000000000000}"
-MIN_CAPACITY_WEI="${REHEARSAL_MIN_CAPACITY_WEI:-1000000000000000000}"
+FUNDING_WEI="${REHEARSAL_FUNDING_WEI:-2000000000000000}"
+MIN_CAPACITY_WEI="${REHEARSAL_MIN_CAPACITY_WEI:-1500000000000000}"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/reservoir-activation.XXXXXX")"
 ANVIL_LOG="${TEMP_DIR}/anvil.log"
 DEPLOYMENT_LOG="${TEMP_DIR}/deployment.log"
@@ -144,6 +144,7 @@ for (const key of [
   "reserveCodeHash",
   "kernelCodeHash",
   "lidoAdapterCodeHash",
+  "lidoUnstETHExitAdapterCodeHash",
 ]) {
   if (!/^0x[0-9a-fA-F]{64}$/.test(deployment[key])) {
     throw new Error(`Deployment output has an invalid ${key}`);
@@ -161,10 +162,12 @@ funding_account="$(deployment_value fundingAccount)"
 reserve_adapter="$(deployment_value reserveAdapter)"
 kernel_address="$(deployment_value kernel)"
 lido_adapter="$(deployment_value lidoAdapter)"
+lido_unsteth_adapter="$(deployment_value lidoUnstETHExitAdapter)"
 funding_codehash="$(deployment_value fundingCodeHash)"
 reserve_codehash="$(deployment_value reserveCodeHash)"
 kernel_codehash="$(deployment_value kernelCodeHash)"
 lido_adapter_codehash="$(deployment_value lidoAdapterCodeHash)"
+lido_unsteth_adapter_codehash="$(deployment_value lidoUnstETHExitAdapterCodeHash)"
 
 reviewed_environment=(
   "FACTOR_ADDRESS=${factor_address}"
@@ -172,10 +175,12 @@ reviewed_environment=(
   "RESERVE_ADAPTER_ADDRESS=${reserve_adapter}"
   "KERNEL_ADDRESS=${kernel_address}"
   "LIDO_ADAPTER_ADDRESS=${lido_adapter}"
+  "LIDO_UNSTETH_ADAPTER_ADDRESS=${lido_unsteth_adapter}"
   "EXPECTED_FUNDING_CODEHASH=${funding_codehash}"
   "EXPECTED_RESERVE_CODEHASH=${reserve_codehash}"
   "EXPECTED_KERNEL_CODEHASH=${kernel_codehash}"
   "EXPECTED_LIDO_ADAPTER_CODEHASH=${lido_adapter_codehash}"
+  "EXPECTED_LIDO_UNSTETH_ADAPTER_CODEHASH=${lido_unsteth_adapter_codehash}"
 )
 
 verify_state() {

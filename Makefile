@@ -6,7 +6,7 @@ AAVE_FORK_TEST := test/fork/AaveStataUSDC.t.sol
 LIDO_V2_FORK_TEST := test/fork/LidoWithdrawalClaim.t.sol
 AQUA_INTENT_FORK_TEST := test/fork/AquaIntentWstETH.t.sol
 
-.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-aqua-intent demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e existing-unsteth-e2e rehearse-live-activation preflight-mainnet-v2 verify-live-v2
+.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-aqua-intent demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e existing-unsteth-e2e rehearse-live-activation preflight-mainnet-v2 verify-live-v2 remote
 
 build:
 	forge build
@@ -103,6 +103,27 @@ preflight-mainnet-v2:
 
 verify-live-v2:
 	npm --prefix frontend run verify:deployment
+
+remote:
+	@set -a; \
+	[[ ! -f .env ]] || source .env; \
+	set +a; \
+	host="$${DEPLOY_HOST:-root@62.171.182.177}"; \
+	key="$${DEPLOY_SSH_KEY:-$${HOME}/.ssh/philidor_deploy}"; \
+	if [[ -r "$$key" ]]; then \
+		exec ssh -i "$$key" -o IdentitiesOnly=yes -o ConnectTimeout=20 "$$host"; \
+	fi; \
+	if [[ -n "$${SSHPASS:-}" ]]; then \
+		command -v sshpass >/dev/null 2>&1 || { \
+			echo "sshpass is required for SSHPASS fallback" >&2; \
+			exit 1; \
+		}; \
+		exec sshpass -e ssh -o PreferredAuthentications=password \
+			-o PubkeyAuthentication=no -o ConnectTimeout=20 "$$host"; \
+	fi; \
+	echo "No readable SSH key at $$key and SSHPASS is unset." >&2; \
+	echo "Set DEPLOY_SSH_KEY (preferred) or SSHPASS only in ignored .env." >&2; \
+	exit 1
 
 docs:
 	@echo "Reservoir docs → http://localhost:3000"
