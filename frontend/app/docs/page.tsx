@@ -357,13 +357,23 @@ complete value    → measured`}</pre>
               after; they do not trust return values.
             </p>
 
-            <h3>Built on 1inch Aqua</h3>
+            <h3>Where 1inch Aqua and SwapVM fit</h3>
             <p>
-              The funding layer is an Aqua / SwapVM application. A custom VM
-              instruction (<code>0x92</code>) lets a maker keep inventory in
-              yield vaults and withdraw the exact amount required at
-              settlement. Reservoir reuses that engine as the factor&apos;s
-              treasury.
+              Reservoir ships a working Aqua / SwapVM strategy: a custom VM
+              instruction (<code>0x92</code>) clamps swap output to what the
+              maker&apos;s ERC-4626 reserve can currently deliver, proven
+              against production Aqua contracts on a mainnet fork. A
+              factoring fill does not execute through SwapVM; it reuses the
+              reserve engine built for that strategy to hold the
+              factor&apos;s WETH in an Aave vault and withdraw the exact
+              payment inside the fill.
+            </p>
+            <p>
+              The split is structural. A claim is not an ERC-20 and cannot
+              be named in a SwapVM order, so claim settlement needs the
+              kernel and its adapters. Aqua fits on the factor side:
+              competing factors are makers whose capital must earn between
+              fills, which is what the reserve engine provides.
             </p>
 
             <div className="docsMetric">

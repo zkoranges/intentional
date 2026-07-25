@@ -47,9 +47,13 @@ Keeps the factor's capital in an ERC-4626 vault and withdraws the exact payment 
 
 Adapters confirm every acquisition by measuring balances before and after rather than trusting return values, because the underlying standards permit transfer fees and return nothing useful.
 
-## 1inch Aqua
+## 1inch Aqua and SwapVM
 
-The funding layer is an Aqua / SwapVM application. A custom VM instruction (`0x92`) lets a maker keep inventory in yield vaults and withdraw the exact amount needed at settlement. Reservoir uses that engine as the factor's treasury.
+**The Aqua application.** Reservoir ships a working Aqua / SwapVM strategy: a custom VM instruction (`0x92`) clamps swap output to what the maker's ERC-4626 reserve can currently deliver, so a maker can quote from yield-vault inventory instead of idle tokens. This path is proven against production Aqua contracts on a mainnet fork.
+
+**The factoring path.** A factoring fill does not execute through SwapVM. The settlement kernel reuses the reserve engine built for the Aqua application: the same adapter holds the factor's WETH in an Aave vault, withdraws the exact payment inside the fill, and reports zero capacity on any uncertainty.
+
+**Generalization.** The split is structural. A claim is not an ERC-20 and cannot be named in a SwapVM order, so claim settlement always needs the kernel and its adapters. Aqua fits on the factor side: competing factors are makers whose capital must earn between fills, which is what the reserve engine provides — for factoring and for any RFQ maker.
 
 ## Testing
 
