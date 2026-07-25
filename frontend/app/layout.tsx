@@ -21,31 +21,31 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(origin),
-    title: "Reservoir — Make waiting optional",
+    title: "Impatience — Get paid now",
     description:
-      "Instant liquidity for delayed withdrawals, with a direct Lido queue route when you prefer to keep the claim.",
+      "Sell the right to a delayed withdrawal for liquidity now, or keep the claim and wait.",
     icons: {
       icon: "/favicon.svg",
     },
     openGraph: {
-      title: "Reservoir — Make waiting optional.",
+      title: "Impatience — Get paid now.",
       description:
-        "Exchange a delayed withdrawal for immediate liquidity, or enter the Lido queue directly.",
+        "Sell the right to a delayed withdrawal. Someone else waits.",
       type: "website",
       images: [
         {
           url: socialImage,
           width: 1200,
           height: 630,
-          alt: "Reservoir instant exit interface showing stETH exchanged for WETH.",
+          alt: "Impatience instant exit interface comparing liquidity now with waiting.",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Reservoir — Make waiting optional.",
+      title: "Impatience — Get paid now.",
       description:
-        "Liquidity for delayed withdrawals.",
+        "Sell the right to a delayed withdrawal. Someone else waits.",
       images: [socialImage],
     },
   };

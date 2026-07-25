@@ -2,20 +2,20 @@
 
 :root {
   color-scheme: dark;
-  --canvas: #0d0d0f;
-  --surface: #151517;
-  --surface-raised: #1a1a1d;
-  --surface-soft: #202024;
-  --surface-hover: #29292e;
-  --ink: #f7f7f8;
-  --muted: #9b9ba5;
-  --subtle: #6e6e78;
-  --line: rgba(255, 255, 255, 0.075);
-  --line-strong: rgba(255, 255, 255, 0.12);
-  --pink: #fc72ff;
-  --pink-hover: #ff8aff;
-  --pink-soft: rgba(252, 114, 255, 0.13);
-  --violet: #9b87f5;
+  --canvas: #050505;
+  --surface: #0c0c0d;
+  --surface-raised: #111112;
+  --surface-soft: #161617;
+  --surface-hover: #1d1d1f;
+  --ink: #f4f4f4;
+  --muted: #8b8b91;
+  --subtle: #59595f;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.13);
+  --pink: #8b5cf6;
+  --pink-hover: #9d7df7;
+  --pink-soft: rgba(139, 92, 246, 0.14);
+  --violet: #8b5cf6;
   --blue: #5d95ff;
   --green: #43d69c;
   --green-soft: rgba(67, 214, 156, 0.12);
@@ -40,8 +40,7 @@ body {
   min-width: 320px;
   margin: 0;
   background:
-    radial-gradient(circle at 50% -10%, rgba(252, 114, 255, 0.095), transparent 34rem),
-    radial-gradient(circle at 76% 18%, rgba(94, 63, 193, 0.08), transparent 30rem),
+    radial-gradient(circle at 50% -16%, rgba(139, 92, 246, 0.08), transparent 32rem),
     var(--canvas);
   color: var(--ink);
   font-family:
@@ -68,7 +67,7 @@ a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-  outline: 2px solid rgba(252, 114, 255, 0.72);
+  outline: 2px solid rgba(139, 92, 246, 0.72);
   outline-offset: 3px;
 }
 
@@ -95,7 +94,7 @@ a {
   align-items: center;
   padding: 0 22px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.035);
-  background: rgba(13, 13, 15, 0.74);
+  background: rgba(5, 5, 5, 0.78);
   backdrop-filter: blur(22px) saturate(1.25);
 }
 
@@ -107,29 +106,20 @@ a {
   text-decoration: none;
 }
 
-.brandMark {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 11px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.17), transparent 55%),
-    linear-gradient(145deg, #f05bee, #7960e9);
-  box-shadow:
-    0 8px 24px rgba(208, 69, 222, 0.2),
-    0 1px 0 rgba(255, 255, 255, 0.28) inset;
-  color: white;
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: -0.05em;
+.brandWordmark {
+  color: #f4f4f4;
+  font-size: 18px;
+  font-weight: 620;
+  letter-spacing: -0.045em;
 }
 
-.brand strong {
-  font-size: 18px;
-  font-weight: 680;
-  letter-spacing: -0.035em;
+.wordmarkDot {
+  color: var(--pink);
+}
+
+.wordmarkTld {
+  color: #737378;
+  font-weight: 520;
 }
 
 .navLinks {
@@ -195,10 +185,10 @@ a {
 .walletButton {
   min-height: 40px;
   padding: 0 15px;
-  border: 1px solid rgba(252, 114, 255, 0.18);
+  border: 1px solid rgba(139, 92, 246, 0.2);
   border-radius: 14px;
   background: var(--pink-soft);
-  color: #ff92ff;
+  color: #b69af8;
   font-size: 14px;
   font-weight: 680;
   transition:
@@ -207,7 +197,7 @@ a {
 }
 
 .walletButton:hover:not(:disabled) {
-  background: rgba(252, 114, 255, 0.2);
+  background: rgba(139, 92, 246, 0.2);
   transform: translateY(-1px);
 }
 
@@ -224,7 +214,7 @@ main {
 .appIntro p,
 .sectionHeading p {
   margin: 0 0 9px;
-  color: #cb74cf;
+  color: #9d7df7;
   font-size: 11px;
   font-weight: 720;
   letter-spacing: 0.11em;
@@ -254,7 +244,7 @@ main {
   padding: 12px;
   border: 1px solid var(--line-strong);
   border-radius: 26px;
-  background: rgba(21, 21, 23, 0.96);
+  background: rgba(12, 12, 13, 0.98);
   box-shadow: var(--shadow);
 }
 
@@ -356,8 +346,8 @@ main {
 }
 
 .tokenPanel:focus-within {
-  border-color: rgba(252, 114, 255, 0.34);
-  background: #222227;
+  border-color: rgba(139, 92, 246, 0.38);
+  background: #19191b;
 }
 
 .tokenPanelLabel {
@@ -448,7 +438,7 @@ main {
 .nftIcon {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.2), transparent 54%),
-    linear-gradient(145deg, #ea60ec, #7d66e8);
+    linear-gradient(145deg, #9d7df7, #6746cf);
 }
 
 .amountActions {
@@ -475,15 +465,15 @@ main {
 }
 
 .amountActions button:hover:not(:disabled) {
-  border-color: rgba(252, 114, 255, 0.24);
+  border-color: rgba(139, 92, 246, 0.3);
   background: var(--pink-soft);
-  color: #ff91ff;
+  color: #b9a0f8;
 }
 
 .amountActions button.maxButton {
-  border-color: rgba(252, 114, 255, 0.2);
+  border-color: rgba(139, 92, 246, 0.26);
   background: var(--pink-soft);
-  color: #ff91ff;
+  color: #b9a0f8;
   text-transform: uppercase;
 }
 
@@ -553,7 +543,7 @@ main {
   border-radius: 50%;
 }
 
-.reservoirRoute {
+.impatienceRoute {
   background: var(--pink);
   box-shadow: 0 0 0 3px var(--pink-soft);
 }
@@ -573,10 +563,8 @@ main {
   padding: 0 18px;
   border-radius: 18px;
   background: var(--pink);
-  box-shadow:
-    0 9px 24px rgba(252, 114, 255, 0.16),
-    0 1px 0 rgba(255, 255, 255, 0.28) inset;
-  color: #2b0a2d;
+  box-shadow: 0 9px 24px rgba(139, 92, 246, 0.16);
+  color: white;
   font-size: 16px;
   font-weight: 750;
   transition:
@@ -588,9 +576,7 @@ main {
 .actionButton:hover:not(:disabled) {
   background: var(--pink-hover);
   transform: translateY(-1px);
-  box-shadow:
-    0 12px 30px rgba(252, 114, 255, 0.22),
-    0 1px 0 rgba(255, 255, 255, 0.3) inset;
+  box-shadow: 0 12px 30px rgba(139, 92, 246, 0.22);
 }
 
 .actionButton:active:not(:disabled) {
@@ -622,7 +608,7 @@ main {
 .statusBar button {
   padding: 3px;
   background: transparent;
-  color: #e87ceb;
+  color: #aa8cf7;
   font-size: 11px;
   font-weight: 680;
 }
@@ -654,7 +640,7 @@ main {
   margin: 3px auto 4px;
   padding: 5px;
   background: transparent;
-  color: #e87ceb;
+  color: #aa8cf7;
   font-size: 12px;
   font-weight: 650;
 }
@@ -689,7 +675,7 @@ main {
 }
 
 .sectionHeading > a:hover {
-  color: #ef87f1;
+  color: #b69af8;
 }
 
 .positionList,
@@ -782,10 +768,10 @@ main {
   min-height: 36px;
   align-items: center;
   padding: 0 12px;
-  border: 1px solid rgba(252, 114, 255, 0.16);
+  border: 1px solid rgba(139, 92, 246, 0.2);
   border-radius: 11px;
   background: var(--pink-soft);
-  color: #f18bf3;
+  color: #b69af8;
   font-size: 12px;
   font-weight: 680;
   text-decoration: none;
@@ -810,10 +796,10 @@ main {
   height: 50px;
   margin-bottom: 14px;
   place-items: center;
-  border: 1px solid rgba(252, 114, 255, 0.14);
+  border: 1px solid rgba(139, 92, 246, 0.18);
   border-radius: 16px;
   background: var(--pink-soft);
-  color: #ee85f0;
+  color: #b69af8;
   font-size: 25px;
   font-weight: 680;
 }
@@ -859,7 +845,7 @@ main {
 }
 
 .activitySection li a {
-  color: #eb84ed;
+  color: #b69af8;
   font-size: 12px;
   text-decoration: none;
 }
@@ -921,11 +907,9 @@ main {
   gap: 30px;
   margin: 72px 0 100px;
   padding: 25px 27px;
-  border: 1px solid rgba(252, 114, 255, 0.11);
+  border: 1px solid rgba(139, 92, 246, 0.14);
   border-radius: 22px;
-  background:
-    linear-gradient(135deg, rgba(252, 114, 255, 0.08), rgba(113, 87, 217, 0.07)),
-    var(--surface);
+  background: var(--surface);
 }
 
 .docsStrip span,
@@ -935,7 +919,7 @@ main {
 
 .docsStrip span {
   margin-bottom: 7px;
-  color: #dd7de0;
+  color: #a98af7;
   font-size: 11px;
   font-weight: 680;
 }
@@ -957,7 +941,7 @@ main {
   border: 1px solid var(--line);
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.035);
-  color: #e493e6;
+  color: #b69af8;
   font-size: 12px;
   font-weight: 650;
   text-decoration: none;
@@ -1017,7 +1001,7 @@ footer p {
 .modalHeader span {
   display: block;
   margin-bottom: 7px;
-  color: #e983ec;
+  color: #ad90f8;
   font-size: 11px;
   font-weight: 680;
 }
@@ -1063,7 +1047,7 @@ footer p {
 }
 
 .quoteModal textarea:focus {
-  border-color: rgba(252, 114, 255, 0.4);
+  border-color: rgba(139, 92, 246, 0.45);
   outline: 0;
 }
 
@@ -1154,13 +1138,8 @@ footer p {
     min-height: 64px;
   }
 
-  .brand strong {
+  .brandWordmark {
     font-size: 17px;
-  }
-
-  .brandMark {
-    width: 31px;
-    height: 31px;
   }
 
   .walletButton {

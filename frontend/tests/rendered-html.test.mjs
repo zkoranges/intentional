@@ -18,19 +18,21 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
 
   for (const expected of [
     "Connect wallet",
-    "Make waiting optional.",
-    "Exit stETH",
-    "Instant exit",
-    "Lido queue",
+    "impatience",
+    "Get paid now.",
+    "Someone else waits.",
+    "Exit now",
+    "Wait for Lido",
     "25%",
     "50%",
     "Max",
-    "Import firm quote",
-    "Instant exits coming soon",
+    "Use a firm quote",
+    "Instant liquidity is offline",
     "Request withdrawal",
-    "Withdrawal positions",
+    "Withdrawal claims",
     "Claim ETH",
-    "Frequently asked questions",
+    "Waiting is a choice.",
+    "Powered by Reservoir",
     "Read the docs",
     "https://github.com/zkoranges/reservoir-v2-eth-lisbon",
   ]) {
@@ -123,12 +125,12 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(page, /quoteCheck\.allowance !== quoteCheck\.requestedStEth/);
   assert.match(page, /RESERVOIR_DEPLOYMENT/);
   assert.match(page, /Paste signed quote JSON/);
-  assert.match(page, /Import firm quote/);
+  assert.match(page, /Use a firm quote/);
   assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
   assert.match(ethereum, /hasExactAllowance\(currentAllowance, amount\)/);
   assert.match(ethereum, /hasExactAllowance\(fillAllowance, check\.requestedStEth\)/);
   assert.match(page, /error instanceof MinedTransactionVerificationError/);
-  assert.match(page, /Reservoir exit confirmed with a verification warning/);
+  assert.match(page, /Instant exit confirmed with a verification warning/);
   assert.match(ethereum, /event WithdrawalClaimed/);
   assert.match(ethereum, /claim\.args\.amountOfETH/);
   assert.match(ethereum, /Canonical Lido state does not mark the request claimed/);
@@ -154,13 +156,14 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Connect wallet/);
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
-  assert.match(pageBundle, /Instant exits coming soon/);
-  assert.match(pageBundle, /Frequently asked questions/);
+  assert.match(pageBundle, /Instant liquidity is offline/);
+  assert.match(pageBundle, /Waiting is a choice/);
   assert.match(pageBundle, /Insufficient stETH balance/);
   assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);
-  assert.match(stylesheet, /#0d0d0f/);
+  assert.match(stylesheet, /#050505/);
   assert.match(stylesheet, /color-scheme:\s*dark/);
-  assert.match(stylesheet, /#fc72ff/);
+  assert.match(stylesheet, /#8b5cf6/);
+  assert.doesNotMatch(stylesheet, /#fc72ff/);
   assert.match(stylesheet, /prefers-reduced-motion/);
   assert.match(stylesheet, /@media/);
 

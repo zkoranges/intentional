@@ -45,24 +45,24 @@ const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
 
 const FAQS = [
   {
-    question: "What is Reservoir?",
+    question: "What is Impatience?",
     answer:
-      "Reservoir is an instant-liquidity layer for delayed withdrawals. A factor acquires your future withdrawal claim and pays you from productive reserves in the same transaction.",
+      "Impatience is a market for delayed withdrawals. A liquidity provider buys the right to your future withdrawal and pays you now.",
   },
   {
-    question: "How does an instant exit work?",
+    question: "How do I exit now?",
     answer:
-      "You accept a short-lived firm quote. Reservoir verifies the claim, reserve capacity and signed terms, acquires the withdrawal claim, then releases the exact payment. If any step fails, the whole transaction reverts.",
+      "You accept a short-lived firm quote. The withdrawal claim moves to the liquidity provider and the exact payment moves to you in one transaction. If either side fails, everything reverts.",
   },
   {
-    question: "What is the Lido queue option?",
+    question: "What am I selling?",
     answer:
-      "The standard route sends stETH directly to Lido and mints an unstETH withdrawal NFT to your wallet. You keep the claim and redeem it for ETH after Lido finalizes it.",
+      "You are selling the right to receive assets from a delayed withdrawal. For Lido, stETH enters the official queue and the resulting unstETH claim belongs to the buyer.",
   },
   {
-    question: "What risks should I understand?",
+    question: "Can I choose to wait instead?",
     answer:
-      "Queue timing, final redemption value and protocol conditions can change. Reservoir quotes include a discount for that uncertainty. Always review the amount, route, contract addresses and wallet simulation before signing.",
+      "Yes. The Wait for Lido route creates an unstETH withdrawal claim in your wallet. You keep the claim and redeem it after Lido finalizes the request.",
   },
 ] as const;
 
@@ -86,6 +86,15 @@ function errorMessage(error: unknown) {
     return message.length > 220 ? `${message.slice(0, 217)}…` : message;
   }
   return "The wallet action failed";
+}
+
+function quoteDiscount(check: ReservoirQuoteCheck | null) {
+  if (!check || check.requestedStEth === 0n) return "—";
+  const payment = BigInt(check.envelope.quote.paymentAmount);
+  if (payment >= check.requestedStEth) return "0.00%";
+  const basisPoints =
+    ((check.requestedStEth - payment) * 10_000n) / check.requestedStEth;
+  return `${(Number(basisPoints) / 100).toFixed(2)}%`;
 }
 
 export default function Home() {
@@ -215,7 +224,7 @@ export default function Home() {
   async function connect() {
     const injected = getInjectedProvider();
     if (!injected) {
-      setStatus("Open Reservoir in a browser with an Ethereum wallet.");
+      setStatus("Open Impatience in a browser with an Ethereum wallet.");
       return;
     }
     setAction("connecting");
@@ -379,14 +388,14 @@ export default function Home() {
       );
       setActions((current) => [
         ...current,
-        { label: "stETH approved for Reservoir", hash: receipt.transactionHash },
+        { label: "stETH approved for Impatience", hash: receipt.transactionHash },
       ]);
       setStatus("Approval confirmed. Re-check the quote before exiting.");
       setQuoteCheck(null);
     } catch (error) {
       await handleMinedActionError(
         error,
-        "Reservoir approval confirmed with a verification warning",
+        "Impatience approval confirmed with a verification warning",
         true,
       );
     } finally {
@@ -417,7 +426,7 @@ export default function Home() {
     } catch (error) {
       await handleMinedActionError(
         error,
-        "Reservoir exit confirmed with a verification warning",
+        "Instant exit confirmed with a verification warning",
         true,
       );
     }
@@ -444,20 +453,23 @@ export default function Home() {
   const instantPayment = quoteCheck
     ? formatMainnetAmount(BigInt(quoteCheck.envelope.quote.paymentAmount))
     : "—";
+  const discount = quoteDiscount(quoteCheck);
 
   return (
     <>
       <header className="appHeader">
-        <a className="brand" href="#top" aria-label="Reservoir home">
-          <span className="brandMark">R</span>
-          <strong>Reservoir</strong>
+        <a className="brand" href="#top" aria-label="Impatience home">
+          <strong className="brandWordmark">
+            impatience<span className="wordmarkDot">.</span>
+            <span className="wordmarkTld">xyz</span>
+          </strong>
         </a>
         <nav className="navLinks" aria-label="Primary navigation">
           <a className="active" href="#exit">
-            Exit
+            Exit now
           </a>
-          <a href="#positions">Positions</a>
-          <a href="#faq">Learn</a>
+          <a href="#positions">Claims</a>
+          <a href="#faq">About</a>
         </nav>
         <div className="navActions">
           <span
@@ -474,19 +486,24 @@ export default function Home() {
 
       <main id="top">
         <section className="appIntro">
-          <p>Reservoir liquidity</p>
-          <h1>Make waiting optional.</h1>
+          <p>The market for waiting</p>
+          <h1>Get paid now.</h1>
           <span>
-            Exit a delayed ETH withdrawal now, or use the protocol queue
-            directly.
+            Sell the right to a delayed withdrawal.
+            <br />
+            Someone else waits.
           </span>
         </section>
 
         <section className="exitCard" id="exit" aria-label="Withdrawal interface">
           <div className="cardHeader">
             <div>
-              <h2>Exit stETH</h2>
-              <p>Choose how you want to receive liquidity.</p>
+              <h2>{mode === "instant" ? "Exit now" : "Wait for Lido"}</h2>
+              <p>
+                {mode === "instant"
+                  ? "Trade waiting time for liquidity."
+                  : "Keep the withdrawal claim yourself."}
+              </p>
             </div>
             <a className="helpLink" href="#faq" aria-label="Learn about exits">
               ?
@@ -500,7 +517,7 @@ export default function Home() {
               className={mode === "instant" ? "selected" : ""}
               onClick={() => selectMode("instant")}
             >
-              Instant exit
+              Exit now
             </button>
             <button
               role="tab"
@@ -508,14 +525,14 @@ export default function Home() {
               className={mode === "queue" ? "selected" : ""}
               onClick={() => selectMode("queue")}
             >
-              Lido queue
+              Wait for Lido
             </button>
           </div>
 
           <p className="modeNote">
             {mode === "instant"
-              ? "Receive WETH now by selling the future withdrawal claim."
-              : "Mint an unstETH claim and receive ETH after Lido finalizes it."}
+              ? "A liquidity provider pays you and takes over the wait."
+              : "Join the official queue and claim ETH after finalization."}
           </p>
 
           <div className="tokenPanel inputPanel">
@@ -603,19 +620,21 @@ export default function Home() {
 
           <div className="routeSummary">
             <div>
-              <span>Route</span>
+              <span>{mode === "instant" ? "Receive" : "Expected output"}</span>
               <strong>
-                <i className={mode === "instant" ? "reservoirRoute" : "lidoRoute"} />
-                {mode === "instant" ? "Reservoir" : "Lido"}
+                <i className={mode === "instant" ? "impatienceRoute" : "lidoRoute"} />
+                {mode === "instant" ? "Now" : "After finalization"}
               </strong>
             </div>
             <div>
-              <span>Settlement</span>
-              <strong>{mode === "instant" ? "Immediate" : "After finalization"}</strong>
+              <span>{mode === "instant" ? "Cost of impatience" : "Liquidity fee"}</span>
+              <strong>{mode === "instant" ? discount : "None"}</strong>
             </div>
             <div>
-              <span>Withdrawal claim</span>
-              <strong>{mode === "instant" ? "Transferred" : "You keep it"}</strong>
+              <span>Who waits</span>
+              <strong>
+                {mode === "instant" ? "Liquidity provider" : "You"}
+              </strong>
             </div>
           </div>
 
@@ -635,7 +654,7 @@ export default function Home() {
             ) : mode === "instant" ? (
               !RESERVOIR_DEPLOYMENT ? (
                 <button className="actionButton" disabled>
-                  Instant exits coming soon
+                  Instant liquidity is offline
                 </button>
               ) : !quoteCheck ? (
                 <button
@@ -643,7 +662,7 @@ export default function Home() {
                   onClick={() => setQuoteModalOpen(true)}
                   disabled={busy || !amountValid}
                 >
-                  {amountIssue ?? "Import firm quote"}
+                  {amountIssue ?? "Use a firm quote"}
                 </button>
               ) : quoteCheck.allowance !== quoteCheck.requestedStEth ? (
                 <button
@@ -659,7 +678,7 @@ export default function Home() {
                   onClick={fillQuote}
                   disabled={busy}
                 >
-                  Exit for {instantPayment} WETH
+                  Get {instantPayment} WETH now
                 </button>
               )
             ) : !queueApproved ? (
@@ -714,8 +733,8 @@ export default function Home() {
         <section className="positionsSection" id="positions">
           <div className="sectionHeading">
             <div>
-              <p>Your wallet</p>
-              <h2>Withdrawal positions</h2>
+              <p>Your queues</p>
+              <h2>Withdrawal claims</h2>
             </div>
             {account && <span>{short(account)}</span>}
           </div>
@@ -788,7 +807,7 @@ export default function Home() {
               <p>
                 {snapshot
                   ? "New Lido withdrawal requests will appear here."
-                  : "Reservoir reads your Lido withdrawals directly from Ethereum."}
+                  : "Impatience reads your Lido withdrawals directly from Ethereum."}
               </p>
             </div>
           )}
@@ -834,8 +853,8 @@ export default function Home() {
         <section className="faqSection" id="faq">
           <div className="sectionHeading">
             <div>
-              <p>Learn</p>
-              <h2>Frequently asked questions</h2>
+              <p>How it works</p>
+              <h2>Waiting is a choice.</h2>
             </div>
             <a href={DOCS_URL} target="_blank" rel="noreferrer">
               Read the docs ↗
@@ -856,8 +875,8 @@ export default function Home() {
 
         <section className="docsStrip" aria-label="Documentation links">
           <div>
-            <span>Documentation</span>
-            <strong>Understand the protocol before using it.</strong>
+            <span>Powered by Reservoir</span>
+            <strong>Non-custodial settlement for delayed claims.</strong>
           </div>
           <div className="docsLinks">
             <a href={DOCS_URL} target="_blank" rel="noreferrer">
@@ -874,9 +893,11 @@ export default function Home() {
       </main>
 
       <footer>
-        <a className="brand" href="#top" aria-label="Reservoir home">
-          <span className="brandMark">R</span>
-          <strong>Reservoir</strong>
+        <a className="brand" href="#top" aria-label="Impatience home">
+          <strong className="brandWordmark">
+            impatience<span className="wordmarkDot">.</span>
+            <span className="wordmarkTld">xyz</span>
+          </strong>
         </a>
         <p>Non-custodial beta · Review every wallet request before signing.</p>
       </footer>
@@ -897,8 +918,8 @@ export default function Home() {
           >
             <div className="modalHeader">
               <div>
-                <span>Instant exit</span>
-                <h2 id="quote-modal-title">Import your firm quote</h2>
+                <span>Exit now</span>
+                <h2 id="quote-modal-title">Use a firm quote</h2>
               </div>
               <button
                 className="closeButton"
@@ -909,9 +930,9 @@ export default function Home() {
               </button>
             </div>
             <p>
-              Paste the signed quote supplied by your factor. Reservoir checks
-              the seller, amount, expiry, contracts and available liquidity
-              before requesting approval.
+              Paste the signed quote supplied by your liquidity provider.
+              Impatience checks the amount, expiry, contracts and available
+              liquidity before requesting approval.
             </p>
             <textarea
               value={quoteInput}
@@ -920,7 +941,7 @@ export default function Home() {
                 setQuoteCheck(null);
               }}
               placeholder="Paste signed quote JSON"
-              aria-label="Signed Reservoir quote"
+              aria-label="Signed Impatience quote"
               spellCheck={false}
               autoFocus
             />
@@ -929,10 +950,10 @@ export default function Home() {
               onClick={inspectQuote}
               disabled={busy || !quoteInput.trim()}
             >
-              Verify quote
+              Check quote
             </button>
             <small>
-              Quotes are short-lived and bound to this wallet. Reservoir never
+              Quotes are short-lived and bound to this wallet. Impatience never
               stores your wallet key.
             </small>
           </section>
