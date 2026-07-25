@@ -1,0 +1,8 @@
+# Operator runtime state — never tracked. The audit log (*.jsonl) is already
+# ignored repo-wide via services/**/*.jsonl; the reservation store lives here.
+quote-reservations.sqlite
+quote-reservations.sqlite-wal
+quote-reservations.sqlite-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
