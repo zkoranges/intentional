@@ -31,7 +31,7 @@ test("the shipped page is a wallet-ready mainnet product", async () => {
     "The claim moves before the money does.",
     "0.725747813572212141",
     "0.897750 WETH",
-    "30156722744",
+    "30159264327",
     "https://github.com/zkoranges/reservoir-v2-eth-lisbon",
   ]) {
     assert.match(page, new RegExp(expected));
@@ -160,7 +160,7 @@ test("the production build contains the dark responsive wallet interface", async
   assert.match(pageBundle, /Run verified fork replay/);
   assert.match(pageBundle, /0\.725747813572212141/);
   assert.match(pageBundle, /0\.897750 WETH/);
-  assert.match(pageBundle, /30156722744/);
+  assert.match(pageBundle, /30159264327/);
   assert.match(stylesheet, /#080a0c/);
   assert.match(stylesheet, /prefers-reduced-motion/);
   assert.match(stylesheet, /@media/);

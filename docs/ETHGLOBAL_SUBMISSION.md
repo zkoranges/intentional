@@ -66,7 +66,9 @@ The public repository was created on 2026-07-25. The first v2 import is large:
 - `eda8999` — frontend runtime pin;
 - `0fe0ddb` — wallet receipt verification;
 - `24fbe79` — activation-boundary hardening;
-- `b2cf9fe` — reproducible production-fork proof.
+- `b2cf9fe` — reproducible production-fork proof; and
+- `e847845` — public ETHGlobal jury mode, provenance, and local-fork browser
+  runner.
 
 History has not been rewritten or artificially split. The following successful
 GitHub Actions runs provide third-party timestamps for each release step:
@@ -77,6 +79,8 @@ GitHub Actions runs provide third-party timestamps for each release step:
 - [`24fbe79` CI](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30156452745)
 - [`b2cf9fe` CI](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30156720242)
 - [`b2cf9fe` production fork proof](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30156722744)
+- [`e847845` CI](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30159117366)
+- [`e847845` production fork proof](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30159264327)
 
 ## AI assistance disclosure
 

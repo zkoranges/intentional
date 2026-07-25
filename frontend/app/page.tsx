@@ -34,7 +34,7 @@ type CompletedAction = {
 
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
 const PRODUCTION_PROOF_URL =
-  "https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30156722744";
+  "https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30159264327";
 
 const JURY_METRICS = [
   {
