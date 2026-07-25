@@ -91,13 +91,13 @@ a {
   z-index: 0;
   top: 72px;
   right: 0;
-  width: min(720px, 54vw);
-  height: min(430px, calc(100svh - 72px));
+  width: min(1040px, 72vw);
+  height: min(590px, calc(100svh - 72px));
   pointer-events: none;
   background:
     linear-gradient(90deg, var(--canvas) 0%, rgba(5, 5, 5, 0) 45%),
     url("/textures/gavel-impact-line.png") right bottom / contain no-repeat;
-  opacity: 0.18;
+  opacity: 0.2;
 }
 
 .appHeader {
