@@ -47,7 +47,7 @@ There are now **three signers** — the browser-side verifier, the operator CLI,
 and the quote-desk service — and one on-chain verifier. Every one of them has to
 spell the domain identically. Add a fourth and it goes in the test below too.
 | `NEXT_PUBLIC_RESERVOIR_KERNEL`, `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` | Build-pinned env vars | Vercel and CI configuration, and the pinned-build check |
-| `"reservoir"`, `"reservoir-indicative+lido-live"`, `"reservoir-indicative+lido-fallback"` | Quote API `recommendedRoute` and `source` enums | The public quote route's response contract |
+| `"reservoir-indicative+lido-live"`, `"reservoir-indicative+lido-fallback"` | Quote API `source` enum | The public indicative quote route's response contract, pinned by `frontend/tests/disconnected-quote.test.mjs` |
 | `zkoranges/reservoir-v2-eth-lisbon` | Repository and links | Every published URL, including the ETHGlobal submission |
 
 The EIP-712 domain is the dangerous one. It reads like display text and is not.

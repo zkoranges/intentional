@@ -1,6 +1,6 @@
 # Reservoir v2 web app
 
-The public Reservoir v2 interface is a dark, minimal, non-custodial mainnet
+The public Intentional interface is a dark, minimal, non-custodial mainnet
 application. It does not contain a private key, custody funds, or manufacture a
 quote in the browser.
 
@@ -22,13 +22,15 @@ With an injected wallet on Ethereum mainnet, the page:
    verifies canonical WETH payment plus canonical Lido ownership/share state
    after the receipt.
 
-The same-origin `/api/quote/lido` endpoint returns immediate indicative pricing
-without requiring a wallet. The reviewed mainnet kernel and Lido adapter are
-live, active, and build-pinned into this frontend
-(`frontend/.env.production`). Automated public firm-quote issuance is
-deliberately disabled: operator-signed quotes are generated offline and pasted
-into the app for execution (operator-assisted beta). Canonical Lido queue
-operations remain live, and no signing key enters the browser or Vercel.
+The same-origin `/api/quote/lido/indicative` endpoint returns immediate
+indicative pricing without requiring a wallet; `/api/quote/lido` is the
+separate keyless firm-quote proxy to the operator desk. The reviewed mainnet kernel and Lido adapter are
+build-pinned into this frontend (`frontend/.env.production`). That proof
+deployment is permanently retired: both contracts are paused, its reserve was
+recovered, and its immutable signer key was exposed. `/api/status` reads this
+state from Ethereum through a server-only RPC and gates the complete firm-quote
+CTA. Canonical Lido queue operations remain available, and no signing key
+enters the browser or Vercel.
 
 ## Quote validation
 
@@ -106,17 +108,22 @@ ERC-1271 smart account.
 
 ## In-app quote service
 
-The app requests a quote automatically after a valid stETH amount is entered.
-With no firm configuration, the endpoint returns a clearly labelled
-`indicative` quote using `LIDO_QUOTE_DISCOUNT_BPS`. This preview cannot be
+The app requests an indicative quote automatically after a valid stETH amount
+is entered. `/api/quote/lido/indicative` prices with fixed policy constants
+compiled into the route — a 10% APR funding assumption, a 20 bps
+risk-and-operations fee, and a 500 bps overall cap — applied to the live (or
+clearly labelled fallback) Lido wait estimate. That is a fixed operator
+policy, not a market price; stETH:WETH is assumed 1:1 and no depeg is priced.
+The response also reports whether firm quotes are currently available,
+derived server-side from the desk configuration. `/api/status` additionally
+requires a sealed, unpaused deployment with real reserve capacity before the
+UI can expose the firm path. This preview cannot be
 filled.
 
-Firm mode requires all server-side values in `.env.example`. The service
-rechecks chain 1, canonical Lido bindings, kernel state, reserve capacity, and
-queue state before signing a ten-minute quote. Use
-`LIDO_QUOTE_SIGNER_PRIVATE_KEY` only for a dedicated, capped quote signer; never
-reuse a permanent deployer or unrestricted treasury key. `FACTOR_ADDRESS` may
-point to a reviewed ERC-1271 account that authorizes the dedicated signer.
+Firm quotes go through `/api/quote/lido`, a keyless proxy to the operator's
+quote desk configured by the server-only `SIGNER_URL` and `SIGNER_SECRET`
+environment variables. With no desk configured, the proxy fails closed with
+503. No signing key exists in the frontend or in Vercel.
 
 ## Security boundary
 
@@ -144,7 +151,9 @@ npm run verify:deployment
 ```
 
 Use `EXPECTED_RELEASE_STATE=funded-paused` or `active` with a nonzero
-`MIN_CAPACITY_WEI` only after separately authorized funding. See
+`MIN_CAPACITY_WEI` only after separately authorized funding.
+`retired-paused` and `claim-collected` are terminal states and cannot be
+reactivated. See
 [`docs/LIVE_ACTIVATION.md`](../docs/LIVE_ACTIVATION.md).
 
 The quote route is stateless and stores no requests or signatures. Local

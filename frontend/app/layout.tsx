@@ -23,14 +23,14 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(origin),
     title: "Intentional — Onchain factoring",
     description:
-      "Sell future withdrawal and redemption payouts for liquidity today.",
+      "A mainnet-proven settlement primitive for future withdrawal claims. Public firm quotes are paused while the next deployment is prepared.",
     icons: {
       icon: "/favicon.svg",
     },
     openGraph: {
       title: "Intentional — Onchain factoring",
       description:
-        "Sell future protocol payouts. Get paid now.",
+        "Mainnet settlement proof complete. Public firm quotes are currently paused.",
       type: "website",
       images: [
         {
@@ -45,7 +45,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Intentional — Onchain factoring",
       description:
-        "Sell future protocol payouts. Get paid now.",
+        "Mainnet settlement proof complete. Public firm quotes are currently paused.",
       images: [socialImage],
     },
   };
