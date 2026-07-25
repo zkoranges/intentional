@@ -46,8 +46,7 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Request withdrawal",
     "Onchain claims",
     "Claim ETH",
-    "Future value, liquid today.",
-    "Powered by Reservoir",
+    "Onchain factoring for delayed claims.",
     "Read the docs",
     "https://github.com/zkoranges/reservoir-v2-eth-lisbon",
   ]) {
@@ -294,7 +293,7 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Get firm quote/);
   assert.match(pageBundle, /\/api\/quote\/lido/);
   assert.doesNotMatch(pageBundle, /Paste signed quote JSON/);
-  assert.match(pageBundle, /Future value, liquid today/);
+  assert.match(pageBundle, /Onchain factoring for delayed claims/);
   assert.match(pageBundle, /Insufficient stETH balance/);
   assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);
   assert.match(stylesheet, /#050505/);

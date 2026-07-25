@@ -140,36 +140,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.docsSidebarNote {
-  position: absolute;
-  bottom: 34px;
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  color: #83838a;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.docsSidebarNote > i {
-  width: 7px;
-  height: 7px;
-  margin-top: 4px;
-  border-radius: 50%;
-  background: #f2b85b;
-  box-shadow: 0 0 0 4px rgba(242, 184, 91, 0.1);
-}
-
-.docsSidebarNote span,
-.docsSidebarNote small {
-  display: block;
-}
-
-.docsSidebarNote small {
-  color: #525258;
-  font-size: 10px;
-}
-
 .docsContent {
   min-width: 0;
   padding: 90px 0 80px;
@@ -274,8 +244,7 @@
     #0b0b0c;
 }
 
-.docsCallout > span,
-.docsWarning > span {
+.docsCallout > span {
   display: block;
   margin-bottom: 7px;
   color: #a78bfa;
@@ -285,8 +254,7 @@
   text-transform: uppercase;
 }
 
-.docsCallout p,
-.docsWarning p {
+.docsCallout p {
   margin: 0;
   color: #d1d1d5;
   font-size: 15px;
@@ -660,43 +628,68 @@
   line-height: 1.55;
 }
 
-.docsWarning {
-  margin-top: 32px;
-  padding: 21px 23px;
-  border: 1px solid rgba(242, 184, 91, 0.18);
-  border-radius: 16px;
-  background: rgba(242, 184, 91, 0.055);
-}
-
-.docsWarning > span {
-  color: #e1ac59;
-}
-
 .docsFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-top: 90px;
-  padding: 32px 0 10px;
+  padding: 36px 0 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.09);
 }
 
-.docsFooter div {
+.docsFooterIdentity {
   display: grid;
-  gap: 4px;
+  gap: 7px;
 }
 
-.docsFooter strong {
-  font-size: 14px;
-  font-weight: 630;
+.docsFooterIdentity strong {
+  color: #ededee;
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 650;
+  letter-spacing: -0.035em;
 }
 
-.docsFooter span {
-  color: #5d5d64;
+.docsFooterIdentity strong span {
+  color: #8b5cf6;
+}
+
+.docsFooterIdentity strong em {
+  color: #66666d;
+  font-style: normal;
+  font-weight: 540;
+}
+
+.docsFooterIdentity p {
+  margin: 0;
+  color: #6f6f76;
   font-size: 11px;
 }
 
-.docsFooter > a {
+.docsFooter nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docsFooter nav a {
+  padding: 9px 11px;
+  border-radius: 10px;
+  color: #888890;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+}
+
+.docsFooter nav a:hover {
+  background: #131314;
+  color: #ededee;
+}
+
+.docsFooter nav .docsFooterPrimary {
   padding: 10px 14px;
   border: 1px solid rgba(139, 92, 246, 0.2);
   border-radius: 11px;
@@ -704,7 +697,6 @@
   color: #b69af8;
   font-size: 12px;
   font-weight: 650;
-  text-decoration: none;
 }
 
 /* The diagrams stay legible instead of shrinking: narrow viewports scroll
@@ -745,8 +737,7 @@
     padding: 24px 0 0;
   }
 
-  .docsSidebar > p,
-  .docsSidebarNote {
+  .docsSidebar > p {
     display: none;
   }
 
@@ -846,6 +837,7 @@
 
   .docsFooter {
     align-items: flex-start;
+    flex-direction: column;
     gap: 24px;
   }
 }

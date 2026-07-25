@@ -1436,7 +1436,7 @@ export default function Home() {
 
         <section className="docsStrip" aria-label="Documentation links">
           <div>
-            <span>Powered by Reservoir</span>
+            <span>Technical documentation</span>
             <strong>Settlement infrastructure for onchain factoring.</strong>
           </div>
           <div className="docsLinks">
@@ -1453,14 +1453,26 @@ export default function Home() {
         </section>
       </main>
 
-      <footer>
-        <a className="brand" href="#top" aria-label="Intentional home">
-          <strong className="brandWordmark">
-            intentional<span className="wordmarkDot">.</span>
-            <span className="wordmarkTld">so</span>
-          </strong>
-        </a>
-        <p>Non-custodial beta · Review every wallet request before signing.</p>
+      <footer className="siteFooter">
+        <div className="siteFooterInner">
+          <div className="footerIdentity">
+            <a className="brand" href="#top" aria-label="Intentional home">
+              <strong className="brandWordmark">
+                intentional<span className="wordmarkDot">.</span>
+                <span className="wordmarkTld">so</span>
+              </strong>
+            </a>
+            <p>Onchain factoring for delayed claims.</p>
+          </div>
+          <nav className="footerNav" aria-label="Footer navigation">
+            <a href="#markets">Markets</a>
+            <a href="#positions">Claims</a>
+            <a href={DOCS_URL}>Docs</a>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+              GitHub <span aria-hidden="true">↗</span>
+            </a>
+          </nav>
+        </div>
       </footer>
 
     </>

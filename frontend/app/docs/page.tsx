@@ -422,13 +422,6 @@ export default function DocsPage() {
               </a>
             ))}
           </nav>
-          <div className="docsSidebarNote">
-            <i />
-            <span>
-              Hackathon software
-              <small>Unaudited · Mainnet demo settled · Reserve recovered</small>
-            </span>
-          </div>
         </aside>
 
         <main className="docsContent">
@@ -831,24 +824,27 @@ complete value    → measured`}</pre>
               another.
             </p>
 
-            <div className="docsWarning">
-              <span>Deployment status</span>
-              <p>
-                This is unaudited hackathon software. The completed mainnet
-                proof deployment is permanently retired: both pausable
-                contracts are paused and the reserve was recovered. A future
-                deployment requires a fresh signer and starts paused and
-                unfunded.
-              </p>
-            </div>
           </section>
 
           <footer className="docsFooter">
-            <div>
-              <strong>Future value, liquid today.</strong>
-              <span>Powered by Reservoir.</span>
+            <div className="docsFooterIdentity">
+              <strong>
+                intentional<span>.</span><em>so</em>
+              </strong>
+              <p>Onchain factoring for delayed claims.</p>
             </div>
-            <Link href="/">Open Intentional</Link>
+            <nav aria-label="Footer navigation">
+              <a
+                href="https://github.com/zkoranges/reservoir-v2-eth-lisbon"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitHub <span aria-hidden="true">↗</span>
+              </a>
+              <Link className="docsFooterPrimary" href="/">
+                Open app
+              </Link>
+            </nav>
           </footer>
         </main>
       </div>

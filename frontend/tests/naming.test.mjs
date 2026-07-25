@@ -69,13 +69,14 @@ test("user-facing failure text does not name the protocol", async () => {
   );
 });
 
-test("the footer keeps deliberate Reservoir attribution", async () => {
+test("public footers use the product identity without protocol attribution", async () => {
   const [page, docs] = await Promise.all([
     read("app/page.tsx"),
     read("app/docs/page.tsx"),
   ]);
 
-  // Attribution, not a product name. Removing it is also a naming decision.
-  assert.match(page, /Powered by Reservoir/);
-  assert.match(docs, /Powered by Reservoir/);
+  assert.match(page, /Onchain factoring for delayed claims/);
+  assert.match(docs, /Onchain factoring for delayed claims/);
+  assert.doesNotMatch(page, /Powered by Reservoir/);
+  assert.doesNotMatch(docs, /Powered by Reservoir/);
 });
