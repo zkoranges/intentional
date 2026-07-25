@@ -90,6 +90,12 @@ Run the exact release contracts on a disposable chain-1 fork:
 ETH_RPC_URL="https://your-archive-mainnet-rpc.example" make live-product-e2e
 ```
 
+The manually dispatched
+[`production fork proof`](.github/workflows/production-fork-proof.yml)
+workflow reproduces the complete fork suite and the same product rehearsal in
+GitHub Actions. Its RPC input is used read-only; every state-changing call is
+sent only to the disposable local Anvil fork.
+
 The rehearsal refuses any chain other than chain 1 and any block other than
 `25,604,561`. It generates fresh disposable signers, deploys the release
 contracts, wraps and deposits real WETH into canonical Aave StataWETH, obtains
