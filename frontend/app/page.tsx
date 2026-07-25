@@ -56,7 +56,7 @@ type LidoWaitEstimate = {
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
 const DOCS_URL = "/docs";
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
-const WALLET_DISCONNECTED_KEY = "impatience.wallet-disconnected";
+const WALLET_DISCONNECTED_KEY = "intentional.wallet-disconnected";
 
 const MARKETS = [
   {
@@ -105,7 +105,7 @@ const FAQS = [
   {
     question: "What is onchain factoring?",
     answer:
-      "Traditional factoring turns future receivables into cash today. Impatience applies the same idea to onchain withdrawals: a liquidity provider buys your future protocol payout and pays you now.",
+      "Traditional factoring turns future receivables into cash today. Intentional applies the same idea to onchain withdrawals: a liquidity provider buys your future protocol payout and pays you now.",
   },
   {
     question: "Is this a loan?",
@@ -416,7 +416,7 @@ export default function Home() {
   async function connect() {
     const injected = getInjectedProvider();
     if (!injected) {
-      setStatus("Open Impatience in a browser with an Ethereum wallet.");
+      setStatus("Open Intentional in a browser with an Ethereum wallet.");
       return;
     }
     setAction("connecting");
@@ -625,7 +625,7 @@ export default function Home() {
       );
       setActions((current) => [
         ...current,
-        { label: "stETH approved for Impatience", hash: receipt.transactionHash },
+        { label: "stETH approved for Intentional", hash: receipt.transactionHash },
       ]);
       const checked = await verifyReservoirQuote(
         injected,
@@ -637,7 +637,7 @@ export default function Home() {
     } catch (error) {
       await handleMinedActionError(
         error,
-        "Impatience approval confirmed with a verification warning",
+        "Intentional approval confirmed with a verification warning",
         true,
       );
     } finally {
@@ -705,10 +705,10 @@ export default function Home() {
     <>
       <div className="gavelBackdrop" aria-hidden="true" />
       <header className="appHeader">
-        <a className="brand" href="#top" aria-label="Impatience home">
+        <a className="brand" href="#top" aria-label="Intentional home">
           <strong className="brandWordmark">
-            impatience<span className="wordmarkDot">.</span>
-            <span className="wordmarkTld">xyz</span>
+            intentional<span className="wordmarkDot">.</span>
+            <span className="wordmarkTld">so</span>
           </strong>
         </a>
         <nav className="navLinks" aria-label="Primary navigation">
@@ -980,7 +980,7 @@ export default function Home() {
             <div>
               <span>{mode === "instant" ? "Receive" : "Claim token"}</span>
               <strong>
-                <i className={mode === "instant" ? "impatienceRoute" : "lidoRoute"} />
+                <i className={mode === "instant" ? "instantRoute" : "lidoRoute"} />
                 {mode === "instant" ? "Now" : "1 unstETH NFT"}
               </strong>
             </div>
@@ -1298,7 +1298,7 @@ export default function Home() {
               <p>
                 {snapshot
                   ? "New Lido withdrawal requests will appear here."
-                  : "Impatience reads your Lido withdrawals directly from Ethereum."}
+                  : "Intentional reads your Lido withdrawals directly from Ethereum."}
               </p>
             </div>
           )}
@@ -1384,10 +1384,10 @@ export default function Home() {
       </main>
 
       <footer>
-        <a className="brand" href="#top" aria-label="Impatience home">
+        <a className="brand" href="#top" aria-label="Intentional home">
           <strong className="brandWordmark">
-            impatience<span className="wordmarkDot">.</span>
-            <span className="wordmarkTld">xyz</span>
+            intentional<span className="wordmarkDot">.</span>
+            <span className="wordmarkTld">so</span>
           </strong>
         </a>
         <p>Non-custodial beta · Review every wallet request before signing.</p>

@@ -868,7 +868,7 @@ main {
   color: #b9a0f8;
 }
 
-.impatienceRoute {
+.instantRoute {
   background: var(--pink);
   box-shadow: 0 0 0 3px var(--pink-soft);
 }

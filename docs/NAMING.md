@@ -1,8 +1,8 @@
-# Naming: Impatience and Reservoir
+# Naming: Intentional and Reservoir
 
 Two names, on purpose.
 
-**Impatience** is the product. It is what a visitor sees, what the domain says,
+**Intentional** is the product. It is what a visitor sees, what the domain says,
 and the voice everything user-facing is written in.
 
 **Reservoir** is the protocol — the settlement kernel, its adapters, and the
@@ -10,7 +10,7 @@ funding account. It is a technical term. It belongs in code, in contract and
 protocol documentation, in wire formats, and in attribution.
 
 Neither name is a rename of the other. A person selling a withdrawal claim is
-using Impatience; the thing that settles it is Reservoir. Keeping them separate
+using Intentional; the thing that settles it is Reservoir. Keeping them separate
 lets the app be marketed freely while the protocol keeps a neutral identity that
 another front end could build on — the same shape as the SwapVM and Aqua
 attribution this repository already carries.
@@ -19,8 +19,8 @@ attribution this repository already carries.
 
 | Surface | Name | Why |
 |---|---|---|
-| Page titles, meta descriptions, social cards | **Impatience** | This is the product a visitor found |
-| Headings, body copy, button labels | **Impatience** | Product voice |
+| Page titles, meta descriptions, social cards | **Intentional** | This is the product a visitor found |
+| Headings, body copy, button labels | **Intentional** | Product voice |
 | Status messages and errors shown in the app | **neither, by default** | Errors should name what the person controls, not the system underneath |
 | Footer attribution | **Reservoir** | "Powered by Reservoir", deliberate, like "Powered by SwapVM" |
 | Protocol documentation (`/docs`) | **Reservoir** | It genuinely documents the protocol |
@@ -71,9 +71,9 @@ The EIP-712 domain is the dangerous one. It reads like display text and is not.
 | `worker/index.ts` | 1 | source comment |
 
 The split is already respected almost everywhere. Marketing metadata in
-[`app/layout.tsx`](../frontend/app/layout.tsx) is Impatience throughout, the
-wordmark is Impatience, and in-app copy that addresses the user by name already
-says things like "Impatience verifies its amount, signature, contracts, expiry".
+[`app/layout.tsx`](../frontend/app/layout.tsx) is Intentional throughout, the
+wordmark is Intentional, and in-app copy that addresses the user by name already
+says things like "Intentional verifies its amount, signature, contracts, expiry".
 
 ### The exception, and it is deliberate
 
@@ -96,7 +96,7 @@ like it:
 | "Reservoir firm quotes are disabled while Lido bunker mode is active" | "Firm quotes are disabled while Lido bunker mode is active" |
 | "The Reservoir transaction mined but reverted" | "The settlement transaction mined but reverted" |
 
-Each drops the name rather than swapping in "Impatience", because naming either
+Each drops the name rather than swapping in "Intentional", because naming either
 system tells the reader nothing they can act on.
 
 ## Enforcement

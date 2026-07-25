@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 // The decision this file enforces is written up in docs/NAMING.md:
-// Impatience is the product, Reservoir is the protocol.
+// Intentional is the product, Reservoir is the protocol.
 
 const projectRoot = new URL("../", import.meta.url);
 const repoRoot = new URL("../../", import.meta.url);
@@ -41,10 +41,10 @@ test("the quote envelope version is frozen across signer and verifier", async ()
   assert.equal(JSON.parse(archived).version, "reservoir-v2-lido-1");
 });
 
-test("marketing metadata is Impatience, never the protocol name", async () => {
+test("marketing metadata is Intentional, never the protocol name", async () => {
   const layout = await read("app/layout.tsx");
 
-  assert.match(layout, /Impatience/);
+  assert.match(layout, /Intentional/);
   assert.doesNotMatch(
     layout,
     /Reservoir/,

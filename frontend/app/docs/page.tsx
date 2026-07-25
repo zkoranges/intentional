@@ -4,9 +4,9 @@ import Link from "next/link";
 import "./docs.css";
 
 export const metadata: Metadata = {
-  title: "Documentation — Impatience",
+  title: "Documentation — Intentional",
   description:
-    "Reservoir protocol documentation: factoring for onchain claims.",
+    "Intentional documentation: factoring for onchain claims.",
 };
 
 const SECTIONS = [
@@ -392,7 +392,7 @@ export default function DocsPage() {
       <header className="docsHeader">
         <Link className="docsBrand" href="/">
           <strong>
-            impatience<span>.</span><em>xyz</em>
+            intentional<span>.</span><em>so</em>
           </strong>
           <i />
           <small>Docs</small>
@@ -829,7 +829,7 @@ complete value    → measured`}</pre>
               <strong>Future value, liquid today.</strong>
               <span>Powered by Reservoir.</span>
             </div>
-            <Link href="/">Open Impatience</Link>
+            <Link href="/">Open Intentional</Link>
           </footer>
         </main>
       </div>

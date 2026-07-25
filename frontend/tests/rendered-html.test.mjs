@@ -19,7 +19,7 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
   for (const expected of [
     "Connect wallet",
     "Disconnect wallet",
-    "impatience",
+    "intentional",
     "Onchain factoring",
     "Sell future payouts.",
     "Get paid now.",
