@@ -40,6 +40,7 @@ import {
 
 type ActionState = "idle" | "connecting" | "reading" | "signing" | "mining";
 type ExitMode = "instant" | "queue";
+type NavSection = "markets" | "positions" | "faq";
 
 type CompletedAction = {
   label: string;
@@ -54,7 +55,7 @@ type LidoWaitEstimate = {
 };
 
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
-const DOCS_URL = `${GITHUB_URL}#readme`;
+const DOCS_URL = "/docs";
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
 const COW_SWAP_URL = "https://swap.cow.fi/";
 const WALLET_DISCONNECTED_KEY = "impatience.wallet-disconnected";
@@ -195,6 +196,8 @@ export default function Home() {
   const [quoteInput, setQuoteInput] = useState("");
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] =
+    useState<NavSection>("markets");
   const [lidoWaitEstimate, setLidoWaitEstimate] =
     useState<LidoWaitEstimate | null>(null);
   const walletMenuRef = useRef<HTMLDivElement>(null);
@@ -715,11 +718,30 @@ export default function Home() {
           </strong>
         </a>
         <nav className="navLinks" aria-label="Primary navigation">
-          <a className="active" href="#markets">
+          <a
+            className={activeSection === "markets" ? "active" : ""}
+            href="#markets"
+            aria-current={activeSection === "markets" ? "page" : undefined}
+            onClick={() => setActiveSection("markets")}
+          >
             Markets
           </a>
-          <a href="#positions">Claims</a>
-          <a href="#faq">About</a>
+          <a
+            className={activeSection === "positions" ? "active" : ""}
+            href="#positions"
+            aria-current={activeSection === "positions" ? "page" : undefined}
+            onClick={() => setActiveSection("positions")}
+          >
+            Claims
+          </a>
+          <a
+            className={activeSection === "faq" ? "active" : ""}
+            href="#faq"
+            aria-current={activeSection === "faq" ? "page" : undefined}
+            onClick={() => setActiveSection("faq")}
+          >
+            About
+          </a>
         </nav>
         <div className="navActions">
           <span
@@ -1319,7 +1341,7 @@ export default function Home() {
               <p>The factoring model</p>
               <h2>Future value, liquid today.</h2>
             </div>
-            <a href={DOCS_URL} target="_blank" rel="noreferrer">
+            <a href={DOCS_URL}>
               Read the docs ↗
             </a>
           </div>
@@ -1342,7 +1364,7 @@ export default function Home() {
             <strong>Settlement infrastructure for onchain factoring.</strong>
           </div>
           <div className="docsLinks">
-            <a href={DOCS_URL} target="_blank" rel="noreferrer">
+            <a href={DOCS_URL}>
               Docs ↗
             </a>
             <a href={CONTRACTS_URL} target="_blank" rel="noreferrer">
