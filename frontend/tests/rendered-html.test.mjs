@@ -151,7 +151,7 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
 
   for (const guard of [
     "disabled until the reviewed deployment is pinned",
-    "does not use the reviewed Reservoir deployment",
+    "does not use the reviewed deployment",
     "different seller",
     "seller cannot remain the claim controller or receiver",
     "only accepts WETH",

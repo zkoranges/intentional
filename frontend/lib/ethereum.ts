@@ -570,13 +570,13 @@ export async function verifyReservoirQuote(
 ): Promise<ReservoirQuoteCheck> {
   const envelope = parseSignedQuoteEnvelope(rawEnvelope);
   if (!RESERVOIR_DEPLOYMENT) {
-    throw new Error("Reservoir fills are disabled until the reviewed deployment is pinned");
+    throw new Error("Firm quotes are disabled until the reviewed deployment is pinned");
   }
   if (
     envelope.kernel !== RESERVOIR_DEPLOYMENT.kernel ||
     envelope.quote.adapter !== RESERVOIR_DEPLOYMENT.lidoAdapter
   ) {
-    throw new Error("The quote does not use the reviewed Reservoir deployment");
+    throw new Error("This quote does not use the reviewed deployment");
   }
   if (envelope.quote.seller.toLowerCase() !== account.toLowerCase()) {
     throw new Error("This quote is signed for a different seller");
@@ -843,7 +843,7 @@ export async function verifyReservoirQuote(
     throw new Error("Canonical Lido withdrawals are currently paused");
   }
   if (bunkerMode) {
-    throw new Error("Reservoir firm quotes are disabled while Lido bunker mode is active");
+    throw new Error("Firm quotes are disabled while Lido bunker mode is active");
   }
 
   return {
@@ -907,7 +907,7 @@ export async function fillReservoirQuote(
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
-      "The Reservoir transaction mined but reverted",
+      "The settlement transaction mined but reverted",
       hash,
     );
   }
