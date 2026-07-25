@@ -3,18 +3,19 @@
 This document traces where every token sits, moves, and settles in Reservoir
 v2. It is written against the deployed source, not against the pitch: each
 diagram is annotated with the contract and function that performs the step, and
-the worked example uses the wei amounts from the live mainnet settlement.
+the worked example uses the wei amounts from the mainnet settlement proof.
 
 Read [`docs-site/README.md`](../docs-site/README.md) first if you want the
 product idea. This document assumes you already know that a factor buys a
-pending claim at a discount and redeems it at par when the queue finalizes.
+pending claim at a discount and collects the eventual ETH payout when the
+queue finalizes it, subject to finalization timing and impairment risk.
 
 **Contents**
 
 1. [Actors and where value sits](#1-actors-and-where-value-sits)
 2. [The invariant](#2-the-invariant)
-3. [Path A — Lido origination (the live product)](#3-path-a--lido-origination-the-live-product)
-4. [The live mainnet settlement, wei by wei](#4-the-live-mainnet-settlement-wei-by-wei)
+3. [Path A — Lido origination (the mainnet-proven product)](#3-path-a--lido-origination-the-mainnet-proven-product)
+4. [The mainnet settlement, wei by wei (proof record)](#4-the-mainnet-settlement-wei-by-wei-proof-record)
 5. [Path B — ERC-7540/8161 acquisition (reference)](#5-path-b--erc-75408161-acquisition-reference)
 6. [The factor's capital cycle](#6-the-factors-capital-cycle)
 7. [The validation gauntlet](#7-the-validation-gauntlet)
@@ -109,7 +110,7 @@ Aave — earning — through the entire external claim call, and leaves the vaul
 only in the instant it must be paid. If anything after acquisition fails, the
 whole transaction reverts and the claim operation unwinds with it.
 
-## 3. Path A — Lido origination (the live product)
+## 3. Path A — Lido origination (the mainnet-proven product)
 
 The seller holds stETH and wants ETH now. There is no pre-existing claim: the
 withdrawal request is *created inside the settlement transaction* and minted
@@ -132,7 +133,7 @@ flowchart TB
     QUEUE ==>|"3 · unstETH NFT to claimReceiver"| FACTOR
     AAVE ==>|"4 · WETH, exact shortfall only"| FUND
     FUND ==>|"5 · WETH, exact payment"| SELLER
-    QUEUE ==>|"6 · ETH at par, days later"| FACTOR
+    QUEUE ==>|"6 · eventual ETH after finalization,<br/>impairment risk"| FACTOR
 ```
 
 Steps 1–5 happen in one transaction. Step 6 happens days later, when the Lido
@@ -224,7 +225,7 @@ sequenceDiagram
 | Residual shares returned to the seller | Any dust this flow created goes back. Shares donated to the adapter *before* the call are deliberately untouched and unrecoverable. |
 | Seller WETH balance delta | Rejects fee-on-transfer payment assets and confirms the seller received exactly the signed amount. |
 
-## 4. The live mainnet settlement, wei by wei
+## 4. The mainnet settlement, wei by wei (proof record)
 
 Settlement [`0x6c7dfd20…71d611`](https://etherscan.io/tx/0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611)
 at block 25,611,746. Every number below is from
@@ -271,8 +272,9 @@ signature. The `pricing` block in the archived envelope is operator provenance
 validated before signing, not signed data.
 
 The sixth leg of the flow has not happened yet: the factor holds unstETH
-#130880 and collects ETH at par when the Lido queue finalizes it. That is the
-position the discount was charged for.
+#130880 and collects the eventual ETH payout when the Lido queue finalizes it
+— subject to finalization timing and impairment risk; even this origination
+landed one wei under par. That is the position the discount was charged for.
 
 ## 5. Path B — ERC-7540/8161 acquisition (reference)
 
@@ -322,14 +324,16 @@ ERC-7540 permits a vault to aggregate all of a user's requests under ID zero,
 which cannot identify a specific claim.
 
 This adapter is a standards-conformant reference. **No production ERC-8161
-endpoint is claimed**, and it is not part of the live mainnet deployment.
+endpoint is claimed**, and it was not part of the retired mainnet deployment
+(the proof record in §4).
 
 ## 6. The factor's capital cycle
 
-The factor is idle most of the time — in the sampled data, opportunities
-appeared on 15 of 87 active days. Standby capital that earns nothing is
-expensive, so the reserve sits in an ERC-4626 vault and only the exact payment
-ever leaves it.
+The factor is idle most of the time — factoring demand is episodic stress
+liquidity, not a daily flow (an externally produced sample supporting this,
+not reproduced here, is discussed in [`V2_ECONOMICS.md`](V2_ECONOMICS.md)).
+Standby capital that earns nothing is expensive, so the reserve sits in an
+ERC-4626 vault and only the exact payment ever leaves it.
 
 ```mermaid
 stateDiagram-v2
@@ -356,7 +360,8 @@ Two properties fall out of this design:
   is nonzero. The kernel then requires capacity to equal the payment *exactly*,
   so an uncertain reserve stops the fill before any claim moves.
 
-The live deployment closed its books and the arithmetic reconciles to the wei:
+The retired deployment closed its books and the arithmetic reconciles to the
+wei:
 
 | Reserve ledger | Wei |
 |---|---:|
@@ -377,7 +382,7 @@ The factor's position over time:
 flowchart LR
     T0["T+0 · settlement<br/>−0.0049875 WETH<br/>+unstETH #130880"]
     T1["T+0 … T+n days<br/>capital locked<br/>queue risk, share-rate risk"]
-    T2["T+n · finalization<br/>claimWithdrawal()<br/>+ETH at par"]
+    T2["T+n · finalization<br/>claimWithdrawal()<br/>+eventual ETH (impairment risk)"]
     T0 --> T1 --> T2
 ```
 
@@ -448,6 +453,10 @@ the allowlist. Every other binding — factor, funding account, payment asset �
 is sealed at deployment.
 
 ## 8. Path C — Aqua/SwapVM reserve clamp (v1 engine)
+
+Reservoir contains two production proofs built around productive reserves.
+The Aqua proof executes through SwapVM. The async-claim settlement is a
+separate v2 kernel and does not execute through Aqua.
 
 Reservoir v1 is a separate engine and **not** part of a factoring fill. It
 solves the maker-side half of the same problem: letting a market maker quote
@@ -555,7 +564,11 @@ stateDiagram-v2
 The mainnet deployment has now traversed that machine end to end and stopped:
 the kernel and funding account are **paused**, the funding account holds zero
 shares, and the factor holds all recovered WETH. The demo contracts are
-retired. One item is still outstanding — unstETH #130880, claimable after Lido
+retired — and cannot be reactivated: the factor signer key was exposed in a
+working session transcript and `factorSigner` is immutable, so the
+`Halted → Active` edge is permanently closed for this instance and it stays
+paused and unfunded. Any future demo uses a fresh deployment with a fresh
+key. One item is still outstanding — unstETH #130880, claimable after Lido
 finalizes it, which is leg 6 of the flow in §3.1.
 
 The `Paused → Recovered` edge is therefore not hypothetical; it was executed,
