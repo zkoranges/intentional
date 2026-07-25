@@ -43,5 +43,15 @@
   },
   "taker": {
     "retainedWstETHWei": "48380478256900"
+  },
+  "fill": {
+    "txHash": "0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37",
+    "blockNumber": 25611688,
+    "wstETHInWei": "48380478256900",
+    "quotedWethOutWei": "57142857142857",
+    "minWethOutWei": "56971428571428",
+    "actualWethOutWei": "57142857142857",
+    "recipient": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+    "note": "quote-bound exact-input intent filled through canonical Aqua; output matched the router quote exactly"
   }
 }
