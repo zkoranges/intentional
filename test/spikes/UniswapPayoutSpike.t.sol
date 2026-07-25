@@ -47,7 +47,15 @@ contract UniswapPayoutSpikeTest is Test {
         assertEq(harness, makeAddr("uniswapPayoutSpikeHarness"), "fixture swapper mismatch");
         assertEq(recipient, makeAddr("uniswapPayoutSpikeRecipient"), "fixture recipient mismatch");
 
-        vm.createSelectFork(vm.envString("ETH_RPC_URL"), fetchedAtBlock);
+        // The deterministic CI suite runs without an RPC. Treat a missing URL
+        // the same way a missing fixture is treated: skip, do not fail.
+        string memory rpcUrl = vm.envOr("ETH_RPC_URL", string(""));
+        if (bytes(rpcUrl).length == 0) {
+            fixtureLoaded = false;
+            return;
+        }
+
+        vm.createSelectFork(rpcUrl, fetchedAtBlock);
 
         // Assertion 1 context: the swapper must be a CONTRACT caller with no
         // Permit2 signature. Give the harness bytecode so the proxy sees code.
@@ -57,7 +65,7 @@ contract UniswapPayoutSpikeTest is Test {
 
     modifier requiresFixture() {
         if (!fixtureLoaded) {
-            emit log_string("SKIP: no fixture; run frontend/scripts/fetch-uniswap-route.mjs first");
+            emit log_string("SKIP: needs ETH_RPC_URL and the fixture from frontend/scripts/fetch-uniswap-route.mjs");
             return;
         }
         _;
