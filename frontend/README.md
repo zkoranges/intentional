@@ -8,7 +8,8 @@ quote in the browser.
 
 With an injected wallet on Ethereum mainnet, the page:
 
-1. verifies runtime code for canonical Aqua, SwapVM, stETH, WETH, Lido
+1. verifies runtime presence for canonical Aqua and SwapVM plus the complete
+   canonical bindings for stETH, WETH, Lido
    WithdrawalQueueERC721, and Aave StataWETH;
 2. reads the connected wallet's ETH, stETH, WETH, Lido queue state, and recent
    withdrawal requests;

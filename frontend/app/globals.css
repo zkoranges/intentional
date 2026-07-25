@@ -109,6 +109,17 @@ nav {
   gap: 10px;
 }
 
+.repoLink {
+  color: var(--muted);
+  font: 650 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.repoLink:hover {
+  color: var(--green);
+}
+
 .network {
   display: inline-flex;
   min-height: 38px;
@@ -235,6 +246,31 @@ h1 span {
   line-height: 1.5;
 }
 
+.heroActions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.heroActions a {
+  color: var(--green);
+  font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.heroActions .primaryLink {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 16px;
+  border-radius: 11px;
+  background: var(--green);
+  color: #07120d;
+}
+
 .heroProof {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -260,6 +296,160 @@ h1 span {
   grid-column: 2;
   color: #4f5753;
   font-size: 12px;
+}
+
+.juryDemo {
+  margin-bottom: 18px;
+  padding: 28px;
+  border: 1px solid rgba(133, 240, 181, 0.3);
+  border-radius: 24px;
+  background:
+    linear-gradient(145deg, rgba(133, 240, 181, 0.085), transparent 42%),
+    rgba(16, 19, 22, 0.92);
+}
+
+.juryDemo > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 40px;
+}
+
+.juryDemo h2 {
+  max-width: 690px;
+  font-size: clamp(34px, 4.5vw, 56px);
+}
+
+.proofControls {
+  display: grid;
+  min-width: 245px;
+  gap: 12px;
+}
+
+.proofControls > span {
+  color: var(--muted);
+  font: 650 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.juryBoundary {
+  max-width: 870px;
+  margin: 24px 0 0;
+  color: #a7b0ac;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.juryMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--line);
+}
+
+.juryMetrics article {
+  min-width: 0;
+  padding: 16px;
+  background: #0b0e10;
+}
+
+.juryMetrics span,
+.juryMetrics small {
+  display: block;
+  color: var(--muted);
+  font: 600 8px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+}
+
+.juryMetrics strong {
+  display: block;
+  margin: 10px 0 7px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font: 700 clamp(14px, 1.8vw, 20px)/1.1 ui-monospace, SFMono-Regular, Menlo,
+    monospace;
+  letter-spacing: -0.045em;
+}
+
+.jurySteps {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #0b0e10;
+}
+
+.jurySteps li {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 15px;
+  border-bottom: 1px solid var(--line);
+  color: #4e5652;
+  list-style: none;
+  transition:
+    color 180ms ease,
+    background 180ms ease;
+}
+
+.jurySteps li:last-child {
+  border-bottom: 0;
+}
+
+.jurySteps li.revealed {
+  background: rgba(133, 240, 181, 0.025);
+  color: #cbd3cf;
+}
+
+.jurySteps li[aria-current="step"] {
+  background: rgba(133, 240, 181, 0.07);
+}
+
+.jurySteps span,
+.jurySteps b {
+  font: 700 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.jurySteps span {
+  color: var(--muted);
+}
+
+.jurySteps b {
+  color: var(--green);
+}
+
+.jurySteps p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.juryEvidence {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.juryEvidence p,
+.juryEvidence a {
+  margin: 0;
+  color: var(--muted);
+  font: 650 9px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+}
+
+.juryEvidence a {
+  color: var(--green);
+  text-decoration: none;
 }
 
 .terminal {
@@ -808,6 +998,20 @@ footer p {
   text-transform: uppercase;
 }
 
+.footerLinks {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.footerLinks > a {
+  color: var(--green);
+  font: 650 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
 @media (max-width: 960px) {
   .hero {
     grid-template-columns: 1fr;
@@ -836,8 +1040,21 @@ footer p {
   }
 
   .routeGrid,
-  .proofCopy {
+  .proofCopy,
+  .juryDemo > header {
     grid-template-columns: 1fr;
+  }
+
+  .juryDemo > header {
+    display: grid;
+  }
+
+  .proofControls {
+    min-width: 0;
+  }
+
+  .proofControls > span {
+    text-align: left;
   }
 
   .proofCopy .eyebrow {
@@ -859,9 +1076,18 @@ footer p {
     display: none;
   }
 
+  .repoLink {
+    display: none;
+  }
+
   .hero {
     gap: 38px;
     padding: 72px 0 50px;
+  }
+
+  .heroActions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   h1 {
@@ -878,6 +1104,24 @@ footer p {
 
   .terminal {
     align-items: flex-start;
+  }
+
+  .juryDemo {
+    padding: 20px;
+  }
+
+  .juryMetrics {
+    grid-template-columns: 1fr;
+  }
+
+  .jurySteps li {
+    grid-template-columns: 28px 1fr auto;
+    min-height: 58px;
+  }
+
+  .juryEvidence {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .walletGrid {
@@ -952,6 +1196,11 @@ footer p {
     align-items: flex-start;
     flex-direction: column;
     justify-content: center;
+  }
+
+  .footerLinks {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   footer p {

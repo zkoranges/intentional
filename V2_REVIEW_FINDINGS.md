@@ -157,13 +157,13 @@ below are about where the *novelty weight* sits, plus one concrete implementatio
 
 ---
 
-## 4. Deferred (correctly)
+## 4. Deferred at pre-scope; subsequently verified
 
 | Item | Status |
 |---|---|
-| Block `25,604,561` / hash `0x95ca77…7888d` | UNVERIFIED — needs archive RPC. |
-| `unstETH` IDs `130816` (pending), `130808` (finalized, hint `1166`, 2.6 ETH) | UNVERIFIED — plan's instruction to re-read owner/status/amounts rather than trust the constants is exactly right. |
-| Aave StataTokenV2 WETH `0x0bfc9d54Fc184518A81162F8fB99c2eACa081202` | UNVERIFIED — Gate 0 task 4 already covers code/asset/liquidity/deposit-gas. Retaining the shipped Stata **USDC** test as independent funding-adapter proof is a good hedge. |
+| Block `25,604,561` / hash `0x95ca77…7888d` | VERIFIED — asserted by every fork suite and reproduced in GitHub Actions run `30156722744`. |
+| Historical `unstETH` fixtures | VERIFIED WITH A SAFER FIXTURE — the shipped test reads `getLastFinalizedRequestId()` and current status dynamically rather than relying on the pre-scope IDs/hint. It also creates and verifies a fresh pending request. |
+| Aave StataTokenV2 WETH `0x0bfc9d54Fc184518A81162F8fB99c2eACa081202` | VERIFIED — runtime code, `asset()`, aWETH, Pool binding, deposit, withdrawal, NAV, and gas are asserted in the fork suites. |
 
 ---
 
@@ -206,7 +206,7 @@ All six findings are now dispositioned:
 - five confirmed and resolved;
 - one partially confirmed/resolved with an overstatement corrected; and
 - the archive-dependent fixture facts were subsequently verified at Gate 0 and
-  again in the final seven-test fork matrix; see `docs/V2_FORK_REALISM.md`.
+  again in the final nine-test fork matrix; see `docs/V2_FORK_REALISM.md`.
 
 ---
 

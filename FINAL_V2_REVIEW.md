@@ -1,4 +1,4 @@
-# Reservoir v2 — final independent release review
+# Reservoir v2 — AI-assisted release review
 
 > Review date: 2026-07-25
 >
@@ -7,6 +7,9 @@
 > Review agent: `bb0683d5-8979-46db-9fb2-168d3beaa379`
 >
 > Final verdict: **APPROVE**
+>
+> Nature: read-only Claude Opus 5 review requested by the team. This is not an
+> external professional audit and is not presented as independent assurance.
 
 ## Scope
 
@@ -21,10 +24,10 @@ The final read-only review covered the exact live-beta release candidate:
 - normative docs, licenses, attribution, and repository hygiene; and
 - the fact that no Reservoir contract is yet deployed or funded persistently.
 
-The reviewer independently read the implementation rather than relying on
-design prose and reran the relevant gates.
+The reviewer agent read the implementation rather than relying on design prose
+and reran the relevant gates.
 
-## Independently reproduced gates
+## Agent-reproduced gates
 
 | Gate | Result |
 |---|---:|
@@ -37,10 +40,10 @@ design prose and reran the relevant gates.
 | Solidity formatting | clean |
 | Secret/artifact check | ignored credentials/builds confirmed; no source key |
 
-The rehearsal independently observed:
+The rehearsal observed:
 
 ```text
-canonical Aqua reserve swap passed
+companion Aqua/SwapVM reserve swap passed in a separate fork test
 exact 0.9 stETH seller approval
 canonical unstETH minted directly to factor
 0.725747813572212141 Lido shares acquired
@@ -131,7 +134,7 @@ are pinned.
 
 - No file under `test/fork/` imports or deploys a protocol mock.
 - No fork test uses `vm.etch`, `vm.store`, or `vm.mockCall`.
-- Canonical bindings were independently queried at the pinned block.
+- Canonical bindings were queried directly at the pinned block.
 - The Aqua companion proof executes a real Aqua swap with both reserves in
   canonical Aave Stata vaults.
 - The Lido/Aave rehearsal obtains stETH and WETH through canonical payable
@@ -190,8 +193,8 @@ Confirmed fixes:
   hash in the interface, refreshes state, and is shown as a verification
   warning rather than optimistic success.
 
-The reviewer independently reran the focused tests, TypeScript checking, and
-linting, then returned:
+The reviewer agent reran the focused tests, TypeScript checking, and linting,
+then returned:
 
 > **APPROVE**
 

@@ -88,12 +88,20 @@ if [[ "${anvil_ready}" != "true" ]]; then
   exit 1
 fi
 
-factor_key="$(
-  awk '/Private Keys/{capture=1; next} capture && $1 == "(0)" {print $2; exit}' "${ANVIL_LOG}"
-)"
-seller_key="$(
-  awk '/Private Keys/{capture=1; next} capture && $1 == "(1)" {print $2; exit}' "${ANVIL_LOG}"
-)"
+factor_key=""
+seller_key=""
+for _ in $(seq 1 100); do
+  factor_key="$(
+    awk '/Private Keys/{capture=1; next} capture && $1 == "(0)" {print $2; exit}' "${ANVIL_LOG}"
+  )"
+  seller_key="$(
+    awk '/Private Keys/{capture=1; next} capture && $1 == "(1)" {print $2; exit}' "${ANVIL_LOG}"
+  )"
+  if [[ "${factor_key}" =~ ^0x[0-9a-fA-F]{64}$ ]] && [[ "${seller_key}" =~ ^0x[0-9a-fA-F]{64}$ ]]; then
+    break
+  fi
+  sleep 0.05
+done
 if [[ ! "${factor_key}" =~ ^0x[0-9a-fA-F]{64}$ ]] || [[ ! "${seller_key}" =~ ^0x[0-9a-fA-F]{64}$ ]]; then
   echo "Could not derive disposable Anvil accounts. Log follows:" >&2
   sed -n '1,160p' "${ANVIL_LOG}" >&2
@@ -173,6 +181,26 @@ REQUESTED_STETH="0.9" \
 PAYMENT_WETH="0.89775" \
 node frontend/scripts/create-lido-quote.mjs >"${QUOTE_FILE}"
 
+if [[ "${JURY_BROWSER_MODE:-0}" == "1" ]]; then
+  echo
+  echo "JURY UI READY | disposable chain-1 fork at ${LOCAL_RPC_URL}"
+  echo "JURY UI SELLER | ${seller_address}"
+  echo "JURY UI SELLER PRIVATE KEY | ${seller_key}"
+  echo "JURY UI WARNING | this key exists only on the disposable fork; never fund or reuse it"
+  echo "JURY UI QUOTE BEGIN"
+  sed -n '1,260p' "${QUOTE_FILE}"
+  echo "JURY UI QUOTE END"
+  echo "JURY UI ACTION | temporarily point a disposable wallet's Ethereum RPC to ${LOCAL_RPC_URL}"
+  echo "JURY UI ACTION | import the disposable seller key, open the local URL below, paste the quote, approve, and fill"
+  echo "JURY UI ACTION | press Ctrl-C when judging is complete; Anvil and all temporary files will be removed"
+  echo
+
+  NEXT_PUBLIC_RESERVOIR_KERNEL="${kernel_address}" \
+  NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER="${lido_adapter_address}" \
+  npm --prefix frontend run dev
+  exit 0
+fi
+
 ETH_RPC_URL="${LOCAL_RPC_URL}" \
 SELLER_PRIVATE_KEY="${seller_key}" \
 QUOTE_FILE="${QUOTE_FILE}" \
@@ -180,4 +208,4 @@ FUNDING_ACCOUNT="${funding_account}" \
 AQUA_PROOF_PASSED="1" \
 node frontend/scripts/execute-lido-quote.mjs
 
-echo "LIVE E2E PASS | exact release bytecode exercised against production Lido and Aave state"
+echo "LIVE E2E PASS | exact release bytecode exercised against canonical Lido and Aave contracts at pinned fork state"

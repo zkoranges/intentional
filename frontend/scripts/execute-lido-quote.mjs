@@ -219,9 +219,9 @@ const nav = await publicClient.readContract({
   args: [shares],
 });
 
-console.log("LIVE E2E 1 | canonical Aqua reserve swap passed");
-console.log(`LIVE E2E 2 | seller approved exactly ${formatEther(requested)} stETH`);
-console.log(`LIVE E2E 3 | canonical unstETH #${requestId} minted to factor`);
-console.log(`LIVE E2E 4 | claim shares acquired ${formatEther(decoded.args.pendingReceived)}`);
-console.log(`LIVE E2E 5 | seller received exactly ${formatEther(payment)} WETH`);
-console.log(`LIVE E2E 6 | remaining productive reserve NAV ${formatEther(nav)} WETH`);
+console.log("COMPANION PROOF | Aqua/SwapVM reserve swap passed in a separate fork test");
+console.log(`LIVE E2E 1 | seller approved exactly ${formatEther(requested)} stETH`);
+console.log(`LIVE E2E 2 | canonical unstETH #${requestId} minted to factor`);
+console.log(`LIVE E2E 3 | claim shares acquired ${formatEther(decoded.args.pendingReceived)}`);
+console.log(`LIVE E2E 4 | seller received exactly ${formatEther(payment)} WETH`);
+console.log(`LIVE E2E 5 | remaining productive reserve NAV ${formatEther(nav)} WETH`);

@@ -23,14 +23,14 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(origin),
     title: "Reservoir — Instant liquidity for asynchronous claims",
     description:
-      "Connect a wallet, inspect canonical Lido claims, use the native withdrawal queue, or atomically exchange a signed claim for productive reserve-backed WETH.",
+      "Replay the verified Lido/Aave fork proof, inspect canonical Lido claims, or atomically exchange a signed claim for productive reserve-backed WETH.",
     icons: {
       icon: "/favicon.svg",
     },
     openGraph: {
       title: "Reservoir — The claim moves before the money does.",
       description:
-        "A wallet-ready mainnet interface for Lido withdrawal claims and productive reserve-backed settlement.",
+        "A verified ETHGlobal jury proof and wallet-ready Lido interface for productive reserve-backed claim settlement.",
       type: "website",
       images: [
         {

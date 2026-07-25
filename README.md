@@ -2,6 +2,11 @@
 
 > **Future protocol cash flow → immediate WETH, atomically.**
 
+[Live demo](https://reservoir-v2-eth-lisbon.vercel.app) ·
+[Source](https://github.com/zkoranges/reservoir-v2-eth-lisbon) ·
+[Production fork proof](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30156722744) ·
+[ETHGlobal provenance and track record](docs/ETHGLOBAL_SUBMISSION.md)
+
 Reservoir v2 is a state-contingent settlement engine for asynchronous claims.
 A seller receives an exact, factor-signed payment if and only if the complete
 quoted claim is irrevocably acquired in the same transaction. The factor's
@@ -32,7 +37,7 @@ generic ERC-4626 reserve adapter.
 
 This is an unaudited hackathon beta. Mainnet funding is deliberately separate
 from deployment and occurs only after the exact chain-1 rehearsal, full test
-matrix, frontend checks, and final independent review.
+matrix, frontend checks, and AI-assisted release review.
 
 **Current deployment status:** the public frontend is live, but no Reservoir
 contract is deployed or funded on a persistent network. The current build
@@ -58,7 +63,9 @@ prepared but has not broadcast a persistent transaction.
 - ERC-7540/8161 adapter that acquires Pending and Claimable legs in one fill
   using measured deltas and signed rate floors.
 - Canonical mainnet-fork tests for Lido, stETH, WETH, Aave V3 StataWETH/
-  StataUSDC, Aqua, and SwapVM. Fork acceptance imports no protocol mock.
+  StataUSDC, and official Aqua through the modified Reservoir SwapVM router.
+  Canonical SwapVM runtime presence is checked separately. Fork acceptance
+  imports no protocol mock.
 - Public dark frontend with injected-wallet connection and canonical Lido
   originate/claim flows. Signed Reservoir quote execution is implemented but
   fail-closed until the reviewed kernel/adapter addresses are build-pinned.
@@ -90,6 +97,12 @@ Run the exact release contracts on a disposable chain-1 fork:
 ETH_RPC_URL="https://your-archive-mainnet-rpc.example" make live-product-e2e
 ```
 
+For the final live browser fill, use `make jury-ui`. It keeps the disposable
+fork alive, starts a build-pinned local frontend, and prints a disposable
+seller key plus single-use quote. Follow the safety instructions in
+[`docs/JURY_DEMO.md`](docs/JURY_DEMO.md); never use or fund that key on a
+persistent network.
+
 The manually dispatched
 [`production fork proof`](.github/workflows/production-fork-proof.yml)
 workflow reproduces the complete fork suite and the same product rehearsal in
@@ -102,10 +115,11 @@ contracts, wraps and deposits real WETH into canonical Aave StataWETH, obtains
 real stETH through canonical Lido, generates a target-chain-timestamped quote,
 and fills it through the same ABI/envelope used by the web app.
 
-The asserted output is intentionally short:
+The asserted output is intentionally short and distinguishes the separate
+Aqua/SwapVM companion fork proof from the Lido/Aave settlement:
 
 ```text
-canonical Aqua reserve swap passed
+companion Aqua/SwapVM reserve swap passed in a separate fork test
 exact stETH approval
 canonical unstETH minted to factor
 Lido shares acquired
@@ -115,7 +129,7 @@ remaining productive reserve NAV
 
 This is not a mocked simulation. The only disposable pieces are the newly
 deployed Reservoir contracts and user accounts. Protocol calls target
-production bytecode and state.
+production bytecode at pinned historical state.
 
 ## Complete verification
 
@@ -137,7 +151,7 @@ Release record on 2026-07-25:
 | Production-contract fork suites | 9 passed, 0 failed, 0 skipped |
 | Exact deploy/sign/approve/fill rehearsal | passed |
 | Frontend rendered tests | 5 passed |
-| Vinext/Sites build | passed |
+| `npm test` Vinext build and rendered assertions | passed |
 | Native Next.js/Vercel build | passed |
 
 Fork methodology and every canonical/disposable boundary are documented in
@@ -147,8 +161,8 @@ Fork methodology and every canonical/disposable boundary are documented in
 
 The frontend connects an injected wallet and enforces Ethereum mainnet. It:
 
-- reads canonical Aqua, SwapVM, stETH, WETH, Lido queue, and StataWETH code and
-  state;
+- checks canonical Aqua and SwapVM runtime presence and reads live stETH, WETH,
+  Lido queue, and StataWETH state;
 - shows the wallet's balances and recent unstETH requests;
 - uses exact approval and simulation before canonical Lido origination;
 - claims finalized unstETH through the canonical queue;
@@ -238,7 +252,7 @@ Normative v2 documents:
 - [`V2_THREAT_MODEL.md`](V2_THREAT_MODEL.md)
 - [`V2_REVIEW_FINDINGS.md`](V2_REVIEW_FINDINGS.md)
 
-The final post-development Opus 5 release review is recorded in
+The post-development Opus 5 AI-assisted release review is recorded in
 [`FINAL_V2_REVIEW.md`](FINAL_V2_REVIEW.md). The previous review remains
 historical until the current live-beta pass is complete.
 

@@ -32,6 +32,52 @@ type CompletedAction = {
   hash: Hash;
 };
 
+const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
+const PRODUCTION_PROOF_URL =
+  "https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30156722744";
+
+const JURY_METRICS = [
+  {
+    label: "Aave NAV / fixed shares",
+    value: "5.000000 → 5.006285 WETH",
+    note: "30-day timestamp advance",
+  },
+  {
+    label: "Seller input",
+    value: "0.900000 stETH",
+    note: "exact approval",
+  },
+  {
+    label: "Claim acquired",
+    value: "0.725747813572212141",
+    note: "Lido share units",
+  },
+  {
+    label: "Seller payment",
+    value: "0.897750 WETH",
+    note: "exact post-acquisition delta",
+  },
+  {
+    label: "Productive NAV left",
+    value: "4.102250019398133931",
+    note: "WETH in StataWETH",
+  },
+  {
+    label: "Release result",
+    value: "PASS",
+    note: "canonical Lido + Aave",
+  },
+] as const;
+
+const JURY_STEPS = [
+  "Companion Aqua/SwapVM reserve swap passed in a separate fork proof.",
+  "Seller approved exactly 0.9 stETH.",
+  "Canonical unstETH #130835 minted directly to the factor.",
+  "0.725747813572212141 Lido share units were acquired.",
+  "Seller received exactly 0.89775 WETH after acquisition.",
+  "4.102250019398133931 WETH of productive reserve NAV remained.",
+] as const;
+
 function short(value: string) {
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
@@ -68,6 +114,8 @@ export default function Home() {
   );
   const [quoteInput, setQuoteInput] = useState("");
   const [quoteCheck, setQuoteCheck] = useState<ReservoirQuoteCheck | null>(null);
+  const [juryRun, setJuryRun] = useState(0);
+  const [juryStep, setJuryStep] = useState(-1);
 
   const provider = getInjectedProvider();
   const busy = action !== "idle";
@@ -85,6 +133,16 @@ export default function Home() {
   const queueApproved = Boolean(
     snapshot && amount > 0n && snapshot.queueAllowance === amount,
   );
+
+  useEffect(() => {
+    if (juryRun === 0) return;
+
+    setJuryStep(0);
+    const timers = JURY_STEPS.slice(1).map((_, index) =>
+      window.setTimeout(() => setJuryStep(index + 1), (index + 1) * 520),
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [juryRun]);
 
   const refresh = useCallback(
     async (connectedAccount = account) => {
@@ -372,6 +430,14 @@ export default function Home() {
           <em>v2</em>
         </a>
         <div className="navActions">
+          <a
+            className="repoLink"
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub
+          </a>
           <span className={`network ${snapshot?.productionCodeVerified ? "ok" : ""}`}>
             <i />
             Ethereum
@@ -394,6 +460,14 @@ export default function Home() {
             reserves pay the seller. The canonical queue remains available as
             the always-honest fallback.
           </p>
+          <div className="heroActions">
+            <a className="primaryLink" href="#jury-proof">
+              Run the jury proof
+            </a>
+            <a href={PRODUCTION_PROOF_URL} target="_blank" rel="noreferrer">
+              Inspect green CI
+            </a>
+          </div>
         </div>
         <div className="heroProof" aria-label="Atomic settlement order">
           <span>01</span>
@@ -404,6 +478,64 @@ export default function Home() {
           <b>→</b>
           <span>03</span>
           <p>Pay seller</p>
+        </div>
+      </section>
+
+      <section className="juryDemo" id="jury-proof" aria-labelledby="jury-title">
+        <header>
+          <div>
+            <p className="eyebrow">ETHGlobal jury mode</p>
+            <h2 id="jury-title">The claim moves before the money does.</h2>
+          </div>
+          <div className="proofControls">
+            <span>Ethereum block 25,604,561</span>
+            <button
+              className="primary"
+              onClick={() => setJuryRun((current) => current + 1)}
+            >
+              {juryRun === 0 ? "Run verified fork replay" : "Replay proof"}
+            </button>
+          </div>
+        </header>
+        <p className="juryBoundary">
+          This replays the exact release output from production Lido and Aave
+          contracts on a disposable chain-1 fork. It is not a persistent
+          mainnet fill. The companion Aqua/SwapVM swap is a separate gated fork
+          proof, as required by the 1inch track.
+        </p>
+        <div className="juryMetrics" aria-label="Verified release measurements">
+          {JURY_METRICS.map((metric) => (
+            <article key={metric.label}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <small>{metric.note}</small>
+            </article>
+          ))}
+        </div>
+        <ol className="jurySteps" aria-live="polite">
+          {JURY_STEPS.map((step, index) => {
+            const revealed = juryStep >= index;
+            return (
+              <li
+                key={step}
+                className={revealed ? "revealed" : ""}
+                aria-current={juryStep === index ? "step" : undefined}
+              >
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <p>{step}</p>
+                <b>{revealed ? "PASS" : "—"}</b>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="juryEvidence">
+          <p>
+            186 deterministic tests · 9 production-contract fork tests · 0
+            failures · 0 skips
+          </p>
+          <a href={PRODUCTION_PROOF_URL} target="_blank" rel="noreferrer">
+            Open reproducible GitHub Actions proof
+          </a>
         </div>
       </section>
 
@@ -787,31 +919,32 @@ export default function Home() {
           <p className="eyebrow">Jury-grade evidence</p>
           <h2>Production contracts. Disposable capital.</h2>
           <p>
-            The release gate executes real Lido origination, real Aave
-            StataWETH materialization and real Aqua swaps against a pinned
-            Ethereum archive state. No external protocol is replaced by a
-            test double in the fork suite.
+            The release gate executes Lido origination and Aave StataWETH
+            materialization against pinned historical Ethereum state. A
+            separate companion proof executes the modified SwapVM router
+            through official Aqua. No external protocol is replaced by a test
+            double in the fork suite.
           </p>
         </div>
         <div className="proofGrid">
           <article>
             <span>01 / Rest</span>
-            <strong>5.0000 WETH NAV</strong>
+            <strong>5.000000 WETH NAV</strong>
             <small>zero idle underlying</small>
           </article>
           <article>
             <span>02 / Earn</span>
-            <strong>5.0063 WETH NAV</strong>
+            <strong>5.006285 WETH NAV</strong>
             <small>same StataWETH shares</small>
           </article>
           <article>
             <span>03 / Acquire</span>
-            <strong>0.806386 shares</strong>
+            <strong>0.725747813572 shares</strong>
             <small>canonical unstETH</small>
           </article>
           <article>
             <span>04 / Pay</span>
-            <strong>0.9975 WETH</strong>
+            <strong>0.89775 WETH</strong>
             <small>after claim acquisition</small>
           </article>
         </div>
@@ -855,10 +988,18 @@ export default function Home() {
           <strong>Reservoir</strong>
           <em>ETH Lisbon</em>
         </div>
-        <p>
-          Mainnet wallet beta · Review contract addresses and wallet prompts
-          before signing.
-        </p>
+        <div className="footerLinks">
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+            Source
+          </a>
+          <a href={PRODUCTION_PROOF_URL} target="_blank" rel="noreferrer">
+            Fork proof
+          </a>
+          <p>
+            Mainnet wallet beta · Review contract addresses and wallet prompts
+            before signing.
+          </p>
+        </div>
       </footer>
     </main>
   );
