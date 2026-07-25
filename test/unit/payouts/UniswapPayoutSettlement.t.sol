@@ -241,6 +241,47 @@ contract UniswapPayoutSettlementTest is Test {
         assertEq(vault.balanceOf(address(fundingAccount)), sharesBefore, "reserve shares moved despite rollback");
     }
 
+    function test_ExecutorDonationsAreInertThroughASettlementFill() public {
+        weth.mint(address(executor), 0.7 ether);
+        usdc.mint(address(executor), 123e6);
+
+        PayoutTypes.Quote memory quote = _quote(30);
+        bytes memory signature = _sign(quote, FACTOR_KEY, settlement);
+
+        vm.prank(seller);
+        settlement.fill(quote, claimData, boundsData, payoutData, signature);
+
+        assertEq(usdc.balanceOf(seller), expectedOut, "seller payout delta mismatch");
+        assertEq(weth.balanceOf(address(executor)), 0.7 ether, "funding donation not carried through");
+        assertEq(usdc.balanceOf(address(executor)), 123e6, "payout donation not carried through");
+        assertEq(weth.balanceOf(address(fundingAccount)), 0, "funding account idle residue");
+    }
+
+    function test_ExecutorDonationsSurviveARevertedSettlementFill() public {
+        weth.mint(address(executor), 0.7 ether);
+        usdc.mint(address(executor), 123e6);
+        proxy.setMode(MockUniswapProxy.Mode.PayLess);
+
+        PayoutTypes.Quote memory quote = _quote(31);
+        bytes memory signature = _sign(quote, FACTOR_KEY, settlement);
+        vm.prank(seller);
+        vm.expectPartialRevert(UniswapPayoutExecutor.InsufficientDelivery.selector);
+        settlement.fill(quote, claimData, boundsData, payoutData, signature);
+
+        assertEq(weth.balanceOf(address(executor)), 0.7 ether, "funding donation moved despite the rollback");
+        assertEq(usdc.balanceOf(address(executor)), 123e6, "payout donation moved despite the rollback");
+        assertFalse(settlement.nonceUsed(quote.nonce), "nonce survived the rollback");
+
+        // The identical quote fills once the route behaves again, and the
+        // donations stay inert across the retry.
+        proxy.setMode(MockUniswapProxy.Mode.Normal);
+        vm.prank(seller);
+        settlement.fill(quote, claimData, boundsData, payoutData, signature);
+        assertEq(usdc.balanceOf(seller), expectedOut, "seller payout delta mismatch");
+        assertEq(weth.balanceOf(address(executor)), 0.7 ether, "funding donation not carried through");
+        assertEq(usdc.balanceOf(address(executor)), 123e6, "payout donation not carried through");
+    }
+
     function test_ReplayPauseFloorCancellationAndLifetimePortedFromV2() public {
         PayoutTypes.Quote memory quote = _quote(8);
         bytes memory signature = _sign(quote, FACTOR_KEY, settlement);
