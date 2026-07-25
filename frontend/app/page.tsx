@@ -741,7 +741,13 @@ export default function Home() {
           <span
             className={`networkPill ${snapshot?.productionCodeVerified ? "verified" : ""}`}
           >
-            <i />
+            <img
+              src="/icons/eth.svg"
+              alt=""
+              width={18}
+              height={18}
+              aria-hidden="true"
+            />
             Ethereum
           </span>
           {account ? (
@@ -752,12 +758,25 @@ export default function Home() {
                 disabled={busy}
                 aria-haspopup="menu"
                 aria-expanded={walletMenuOpen}
+                aria-label={`Wallet ${short(account)}`}
               >
-                <span className="walletIdenticon" aria-hidden="true" />
-                {short(account)}
-                <span className="walletChevron" aria-hidden="true">
-                  ⌄
-                </span>
+                <span className="walletAddress">{short(account)}</span>
+                <svg
+                  className="walletChevron"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3.5 5.25 7 8.75l3.5-3.5"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
               {walletMenuOpen && (
                 <div className="walletPopover" role="menu">
@@ -791,7 +810,7 @@ export default function Home() {
             </div>
           ) : (
             <button className="walletButton" onClick={connect} disabled={busy}>
-              Connect
+              Connect wallet
             </button>
           )}
         </div>
