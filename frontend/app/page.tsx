@@ -58,7 +58,7 @@ const MARKETS = [
     payout: "ETH",
     status: "Open",
     active: true,
-    icon: "/icons/steth.svg",
+    icon: "/icons/steth.png",
     iconAlt: "stETH",
     iconClass: "stethIcon",
   },
@@ -69,7 +69,7 @@ const MARKETS = [
     payout: "ETH",
     status: "Next",
     active: false,
-    icon: "/icons/etherfi.svg",
+    icon: "/icons/etherfi.png",
     iconAlt: "Ether.fi",
     iconClass: "etherfiIcon",
   },
@@ -627,7 +627,7 @@ export default function Home() {
                   <div className="walletPopoverAccount">
                     <span className="tokenIcon wethIcon">
                       <img
-                        src="/icons/eth.svg"
+                        src="/icons/eth.png"
                         alt=""
                         width={18}
                         height={18}
@@ -783,7 +783,7 @@ export default function Home() {
               />
               <div className="tokenSelect">
                 <span className="tokenIcon stethIcon">
-                  <img src="/icons/steth.svg" alt="stETH" width={18} height={18} />
+                  <img src="/icons/steth.png" alt="stETH" width={18} height={18} />
                 </span>
                 stETH
               </div>
@@ -849,7 +849,7 @@ export default function Home() {
                   className={`tokenIcon ${mode === "instant" ? "wethIcon" : "nftIcon"}`}
                 >
                   <img
-                    src={mode === "instant" ? "/icons/weth.svg" : "/icons/unsteth.svg"}
+                    src={mode === "instant" ? "/icons/weth.png" : "/icons/unsteth.png"}
                     alt={mode === "instant" ? "WETH" : "unstETH"}
                     width={18}
                     height={18}
@@ -1021,7 +1021,7 @@ export default function Home() {
                 <article key={request.requestId.toString()}>
                   <div className="positionIdentity">
                     <span className="tokenIcon nftIcon">
-                      <img src="/icons/unsteth.svg" alt="unstETH" width={18} height={18} />
+                      <img src="/icons/unsteth.png" alt="unstETH" width={18} height={18} />
                     </span>
                     <div>
                       <strong>unstETH #{request.requestId}</strong>
