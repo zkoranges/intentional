@@ -17,35 +17,35 @@ export async function generateMetadata(): Promise<Metadata> {
       ? "http"
       : "https");
   const origin = `${protocol}://${host}`;
-  const socialImage = new URL("/og.png", origin).toString();
+  const socialImage = new URL("/og-factoring.png", origin).toString();
 
   return {
     metadataBase: new URL(origin),
-    title: "Impatience — Get paid now",
+    title: "Impatience — Onchain factoring",
     description:
-      "Sell the right to a delayed withdrawal for liquidity now, or keep the claim and wait.",
+      "Sell future withdrawal and redemption payouts for liquidity today.",
     icons: {
       icon: "/favicon.svg",
     },
     openGraph: {
-      title: "Impatience — Get paid now.",
+      title: "Impatience — Onchain factoring",
       description:
-        "Sell the right to a delayed withdrawal. Someone else waits.",
+        "Sell future protocol payouts. Get paid now.",
       type: "website",
       images: [
         {
           url: socialImage,
           width: 1200,
           height: 630,
-          alt: "Impatience instant exit interface comparing liquidity now with waiting.",
+          alt: "Impatience onchain factoring markets for delayed withdrawal claims.",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Impatience — Get paid now.",
+      title: "Impatience — Onchain factoring",
       description:
-        "Sell the right to a delayed withdrawal. Someone else waits.",
+        "Sell future protocol payouts. Get paid now.",
       images: [socialImage],
     },
   };

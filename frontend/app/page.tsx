@@ -43,14 +43,52 @@ const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
 const DOCS_URL = `${GITHUB_URL}#readme`;
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
 
-const FAQS = [
+const MARKETS = [
   {
-    question: "What is Impatience?",
-    answer:
-      "Impatience is a market for delayed withdrawals. A liquidity provider buys the right to your future withdrawal and pays you now.",
+    name: "Lido",
+    asset: "stETH",
+    claim: "Withdrawal claim",
+    payout: "ETH",
+    status: "Open",
+    active: true,
+    icon: "S",
+    iconClass: "stethIcon",
   },
   {
-    question: "How do I exit now?",
+    name: "Ether.fi",
+    asset: "eETH",
+    claim: "Withdrawal request",
+    payout: "ETH",
+    status: "Next",
+    active: false,
+    icon: "E",
+    iconClass: "etherfiIcon",
+  },
+  {
+    name: "Async vaults",
+    asset: "ERC-7540",
+    claim: "Redemption request",
+    payout: "Vault asset",
+    status: "Planned",
+    active: false,
+    icon: "V",
+    iconClass: "vaultIcon",
+  },
+] as const;
+
+const FAQS = [
+  {
+    question: "What is onchain factoring?",
+    answer:
+      "Traditional factoring turns future receivables into cash today. Impatience applies the same idea to onchain withdrawals: a liquidity provider buys your future protocol payout and pays you now.",
+  },
+  {
+    question: "Is this a loan?",
+    answer:
+      "No. You sell the withdrawal claim outright. There is no debt, repayment schedule or liquidation risk for you. The buyer takes over the wait and receives the eventual protocol payout.",
+  },
+  {
+    question: "How do I get paid now?",
     answer:
       "You accept a short-lived firm quote. The withdrawal claim moves to the liquidity provider and the exact payment moves to you in one transaction. If either side fails, everything reverts.",
   },
@@ -107,7 +145,7 @@ export default function Home() {
   const [mode, setMode] = useState<ExitMode>(
     RESERVOIR_DEPLOYMENT ? "instant" : "queue",
   );
-  const [amountInput, setAmountInput] = useState("0.10");
+  const [amountInput, setAmountInput] = useState("0.00");
   const [actions, setActions] = useState<CompletedAction[]>([]);
   const [lastMintedRequest, setLastMintedRequest] = useState<bigint | null>(
     null,
@@ -465,8 +503,8 @@ export default function Home() {
           </strong>
         </a>
         <nav className="navLinks" aria-label="Primary navigation">
-          <a className="active" href="#exit">
-            Exit now
+          <a className="active" href="#markets">
+            Markets
           </a>
           <a href="#positions">Claims</a>
           <a href="#faq">About</a>
@@ -486,22 +524,71 @@ export default function Home() {
 
       <main id="top">
         <section className="appIntro">
-          <p>The market for waiting</p>
-          <h1>Get paid now.</h1>
-          <span>
-            Sell the right to a delayed withdrawal.
+          <p>Onchain factoring</p>
+          <h1>
+            Sell future payouts.
             <br />
-            Someone else waits.
+            Get paid now.
+          </h1>
+          <span>
+            Turn pending withdrawals and redemptions into liquidity.
+            <br />
+            A buyer takes the claim. Someone else waits.
           </span>
+        </section>
+
+        <section className="marketsSection" id="markets" aria-label="Factoring markets">
+          <div className="marketHeader">
+            <span>Factoring markets</span>
+            <small>One market open · More adapters coming</small>
+          </div>
+          <div className="marketGrid">
+            {MARKETS.map((market) => (
+              <a
+                className={`marketCard ${market.active ? "active" : ""}`}
+                href={market.active ? "#exit" : "#markets"}
+                aria-label={`${market.name} ${market.asset} market — ${market.status}`}
+                key={market.name}
+              >
+                <div className="marketIdentity">
+                  <span className={`tokenIcon ${market.iconClass}`}>
+                    {market.icon}
+                  </span>
+                  <div>
+                    <strong>{market.name}</strong>
+                    <small>{market.asset}</small>
+                  </div>
+                </div>
+                <dl>
+                  <div>
+                    <dt>Claim</dt>
+                    <dd>{market.claim}</dd>
+                  </div>
+                  <div>
+                    <dt>Payout</dt>
+                    <dd>{market.payout}</dd>
+                  </div>
+                </dl>
+                <span className={`marketStatus ${market.active ? "open" : ""}`}>
+                  {market.status}
+                </span>
+              </a>
+            ))}
+          </div>
         </section>
 
         <section className="exitCard" id="exit" aria-label="Withdrawal interface">
           <div className="cardHeader">
             <div>
-              <h2>{mode === "instant" ? "Exit now" : "Wait for Lido"}</h2>
+              <span className="cardEyebrow">Lido · stETH → ETH</span>
+              <h2>
+                {mode === "instant"
+                  ? "Factor a withdrawal"
+                  : "Withdraw through Lido"}
+              </h2>
               <p>
                 {mode === "instant"
-                  ? "Trade waiting time for liquidity."
+                  ? "Sell the future payout for liquidity now."
                   : "Keep the withdrawal claim yourself."}
               </p>
             </div>
@@ -517,7 +604,7 @@ export default function Home() {
               className={mode === "instant" ? "selected" : ""}
               onClick={() => selectMode("instant")}
             >
-              Exit now
+              Sell now
             </button>
             <button
               role="tab"
@@ -525,13 +612,13 @@ export default function Home() {
               className={mode === "queue" ? "selected" : ""}
               onClick={() => selectMode("queue")}
             >
-              Wait for Lido
+              Wait & claim
             </button>
           </div>
 
           <p className="modeNote">
             {mode === "instant"
-              ? "A liquidity provider pays you and takes over the wait."
+              ? "A liquidity provider buys your future ETH payout and takes over the wait."
               : "Join the official queue and claim ETH after finalization."}
           </p>
 
@@ -554,7 +641,7 @@ export default function Home() {
                   setQuoteCheck(null);
                 }}
                 aria-label="stETH amount"
-                placeholder="0"
+                placeholder="0.00"
               />
               <div className="tokenSelect">
                 <span className="tokenIcon stethIcon">S</span>
@@ -627,7 +714,7 @@ export default function Home() {
               </strong>
             </div>
             <div>
-              <span>{mode === "instant" ? "Cost of impatience" : "Liquidity fee"}</span>
+              <span>{mode === "instant" ? "Factoring discount" : "Liquidity fee"}</span>
               <strong>{mode === "instant" ? discount : "None"}</strong>
             </div>
             <div>
@@ -733,8 +820,8 @@ export default function Home() {
         <section className="positionsSection" id="positions">
           <div className="sectionHeading">
             <div>
-              <p>Your queues</p>
-              <h2>Withdrawal claims</h2>
+              <p>Your receivables</p>
+              <h2>Onchain claims</h2>
             </div>
             {account && <span>{short(account)}</span>}
           </div>
@@ -853,8 +940,8 @@ export default function Home() {
         <section className="faqSection" id="faq">
           <div className="sectionHeading">
             <div>
-              <p>How it works</p>
-              <h2>Waiting is a choice.</h2>
+              <p>The factoring model</p>
+              <h2>Future value, liquid today.</h2>
             </div>
             <a href={DOCS_URL} target="_blank" rel="noreferrer">
               Read the docs ↗
@@ -876,7 +963,7 @@ export default function Home() {
         <section className="docsStrip" aria-label="Documentation links">
           <div>
             <span>Powered by Reservoir</span>
-            <strong>Non-custodial settlement for delayed claims.</strong>
+            <strong>Settlement infrastructure for onchain factoring.</strong>
           </div>
           <div className="docsLinks">
             <a href={DOCS_URL} target="_blank" rel="noreferrer">

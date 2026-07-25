@@ -19,19 +19,26 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
   for (const expected of [
     "Connect wallet",
     "impatience",
+    "Onchain factoring",
+    "Sell future payouts.",
     "Get paid now.",
     "Someone else waits.",
-    "Exit now",
-    "Wait for Lido",
+    "Factoring markets",
+    "Lido",
+    "Ether.fi",
+    "ERC-7540",
+    "Sell now",
+    "Wait & claim",
+    "0.00",
     "25%",
     "50%",
     "Max",
     "Use a firm quote",
     "Instant liquidity is offline",
     "Request withdrawal",
-    "Withdrawal claims",
+    "Onchain claims",
     "Claim ETH",
-    "Waiting is a choice.",
+    "Future value, liquid today.",
     "Powered by Reservoir",
     "Read the docs",
     "https://github.com/zkoranges/reservoir-v2-eth-lisbon",
@@ -157,7 +164,7 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
   assert.match(pageBundle, /Instant liquidity is offline/);
-  assert.match(pageBundle, /Waiting is a choice/);
+  assert.match(pageBundle, /Future value, liquid today/);
   assert.match(pageBundle, /Insufficient stETH balance/);
   assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);
   assert.match(stylesheet, /#050505/);
@@ -167,7 +174,9 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(stylesheet, /prefers-reduced-motion/);
   assert.match(stylesheet, /@media/);
 
-  const socialCard = await readFile(new URL("public/og.png", projectRoot));
+  const socialCard = await readFile(
+    new URL("public/og-factoring.png", projectRoot),
+  );
   assert.ok(
     socialCard.length > 10_000,
     "social preview image is unexpectedly small",
