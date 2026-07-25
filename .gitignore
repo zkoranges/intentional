@@ -15,3 +15,10 @@ keystore/
 secrets/
 .DS_Store
 .vercel
+
+# never track dependency trees
+node_modules/
+**/node_modules/
+# operator runtime artifacts (scoped: B5 receipt logs stay trackable)
+services/**/.env
+services/**/*.jsonl
