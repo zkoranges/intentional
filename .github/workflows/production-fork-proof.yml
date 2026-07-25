@@ -43,6 +43,9 @@ jobs:
       - name: Install locked frontend dependencies
         run: npm --prefix frontend ci
 
+      - name: Install locked quote-desk dependencies
+        run: npm --prefix services/quote-signer ci
+
       - name: Prove chain and historical-state access
         run: |
           test "$(cast chain-id --rpc-url "$ETH_RPC_URL")" = "1"
