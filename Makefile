@@ -6,7 +6,7 @@ AAVE_FORK_TEST := test/fork/AaveStataUSDC.t.sol
 LIDO_V2_FORK_TEST := test/fork/LidoWithdrawalClaim.t.sol
 AQUA_INTENT_FORK_TEST := test/fork/AquaIntentWstETH.t.sol
 
-.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-aqua-intent demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e existing-unsteth-e2e rehearse-live-activation preflight-mainnet-v2 verify-live-v2 remote
+.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-aqua-intent demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e existing-unsteth-e2e rehearse-live-activation preflight-mainnet-v2 create-pre-alpha-manifest verify-live-v2 remote
 
 build:
 	forge build
@@ -100,6 +100,9 @@ rehearse-live-activation:
 
 preflight-mainnet-v2:
 	./scripts/preflight-mainnet-v2.sh
+
+create-pre-alpha-manifest:
+	node scripts/create-pre-alpha-manifest.mjs
 
 verify-live-v2:
 	npm --prefix frontend run verify:deployment

@@ -63,8 +63,9 @@ safely; only rewrites our own files).
 Create DNS `A quotes 62.171.182.177`, then add only the dedicated
 `quotes.intentional.so` Caddy site from
 [`LIVE_ACTIVATION.md`](LIVE_ACTIVATION.md). Back up and validate the full
-Caddyfile before a reload. Do not restart Caddy and do not edit another
-service's site.
+Caddyfile before a reload. The edge proxies only `/health` and `/quote`;
+all scanner paths receive `404` without reaching Node. Do not restart Caddy
+and do not edit another service's site.
 
 ## Safety properties (why this is safe to expose)
 

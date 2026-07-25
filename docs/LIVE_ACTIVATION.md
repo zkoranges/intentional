@@ -118,7 +118,16 @@ Copy the JSON emitted between
 `RESERVOIR_MAINNET_DEPLOYMENT_BEGIN/END` into
 `deployments/mainnet-pre-alpha-001.json`, using
 [`deployments/mainnet-v2.example.json`](../deployments/mainnet-v2.example.json)
-as the schema. Record:
+as the schema. The preferred path derives it from the successful broadcast and
+independently checks every receipt and runtime code hash against mainnet:
+
+```sh
+FACTOR_ADDRESS="0x..." \
+ETH_RPC_URL="$ETH_RPC_URL" \
+make create-pre-alpha-manifest
+```
+
+Record:
 
 - the reviewed Git commit and `paused-unfunded` release state;
 - factor, funding account, reserve adapter, kernel, origination adapter, and
@@ -222,7 +231,13 @@ Add one isolated Caddy site only after DNS resolves:
 
 ```caddy
 quotes.intentional.so {
-    reverse_proxy 127.0.0.1:8791
+    @signer_endpoint path /health /quote
+    handle @signer_endpoint {
+        reverse_proxy 127.0.0.1:8791
+    }
+    handle {
+        respond "Not Found" 404
+    }
     header {
         X-Content-Type-Options nosniff
         Referrer-Policy no-referrer
