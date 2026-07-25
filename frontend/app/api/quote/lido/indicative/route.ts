@@ -13,9 +13,16 @@ const LIDO_WAIT_URL = "https://wq-api.lido.fi/v2/request-time/calculate";
 const DEFAULT_WAIT_MS = 7 * 24 * 60 * 60 * 1_000;
 const MAX_WAIT_MS = 365 * 24 * 60 * 60 * 1_000;
 const YEAR_MS = 365 * 24 * 60 * 60 * 1_000;
+
+// Fixed operator policy, never a market price: a 10% APR funding assumption,
+// a 20 bps risk-and-operations fee, and a 500 bps overall cap.
 const FUNDING_APR_BPS = 1_000;
 const RISK_AND_OPERATIONS_BPS = 20;
 const MAX_DISCOUNT_BPS = 500;
+
+// The estimate quotes WETH against stETH one-for-one. No depeg is priced.
+const PEG_ASSUMPTION =
+  "stETH:WETH is assumed 1:1; no depeg risk is priced into this estimate";
 
 type LidoWaitResponse = {
   status?: unknown;
@@ -108,6 +115,14 @@ export async function POST(request: Request) {
   const riskCost =
     (requestedStEth * BigInt(RISK_AND_OPERATIONS_BPS)) / 10_000n;
 
+  // Firm quotes require the operator desk. Derived server-side: with no
+  // SIGNER_URL configured, the firm proxy fails closed, so report the firm
+  // path unavailable rather than implying a fillable market.
+  const firmQuoteAvailability =
+    process.env.SIGNER_URL?.trim() && process.env.SIGNER_SECRET?.trim()
+      ? ("available" as const)
+      : ("unavailable" as const);
+
   return json({
     kind: "market",
     market: "lido",
@@ -115,18 +130,18 @@ export async function POST(request: Request) {
     paymentAmount: paymentAmount.toString(),
     paymentAsset: "WETH",
     discountBps,
-    recommendedRoute: "reservoir",
-    cowPaymentAmount: paymentAmount.toString(),
-    reservoirPaymentAmount: paymentAmount.toString(),
-    underwritingCap: paymentAmount.toString(),
     estimatedWaitMs,
     fundingCost: fundingCost.toString(),
     riskCost: riskCost.toString(),
-    claimGasCost: "0",
-    userImprovement: "0",
+    policy: {
+      label: "fixed-policy",
+      fundingAprBps: FUNDING_APR_BPS,
+      riskAndOperationsBps: RISK_AND_OPERATIONS_BPS,
+      maxDiscountBps: MAX_DISCOUNT_BPS,
+    },
+    pegAssumption: PEG_ASSUMPTION,
+    firmQuoteAvailability,
     source,
     sourceTimestamp: new Date().toISOString(),
-    expiresAt: Math.floor(Date.now() / 1_000) + 60,
-    envelope: null,
   });
 }

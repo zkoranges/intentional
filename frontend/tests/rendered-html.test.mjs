@@ -225,6 +225,37 @@ test("the quote proxy route is keyless, validating, and fails closed", async () 
   assert.doesNotMatch(route, /error instanceof Error \? error\.message/);
 });
 
+test("market status is derived server-side and gates the complete firm path", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+  const statusRoute = await readFile(
+    new URL("app/api/status/route.ts", projectRoot),
+    "utf8",
+  );
+
+  assert.match(page, /fetch\("\/api\/status"/);
+  assert.match(page, /marketStatus\.firmQuotesEnabled/);
+  assert.match(page, /!marketLive/);
+  assert.match(page, /proof deployment retired/);
+  assert.match(page, /Lido: \{marketStatus\.state\}/);
+  assert.doesNotMatch(page, /status:\s*"Open"/);
+  assert.doesNotMatch(page, /One market open/);
+
+  assert.match(statusRoute, /process\.env\.ETH_RPC_URL/);
+  assert.match(statusRoute, /functionName: "isPaused"/);
+  assert.match(statusRoute, /functionName: "isSealed"/);
+  assert.match(statusRoute, /functionName: "isAdapterAllowed"/);
+  assert.match(statusRoute, /functionName: "availableFor"/);
+  assert.match(statusRoute, /"Live"/);
+  assert.match(statusRoute, /"Standby"/);
+  assert.match(statusRoute, /"Retired"/);
+  assert.match(statusRoute, /"Unavailable"/);
+  assert.match(statusRoute, /state === "Live" && firmQuoteConfigured/);
+  assert.doesNotMatch(
+    statusRoute,
+    /return Response\.json\([^)]*(ETH_RPC_URL|SIGNER_SECRET|SIGNER_URL)/s,
+  );
+});
+
 test("the quote signer service holds the key and enforces its guards", async () => {
   const signer = await readFile(
     new URL("../services/quote-signer/server.mjs", projectRoot),

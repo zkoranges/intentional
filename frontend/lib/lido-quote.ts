@@ -2,32 +2,32 @@ import { formatEther, parseEther } from "viem";
 
 export const MIN_LIVE_LIDO_QUOTE = parseEther("0.001");
 
-export type LidoQuoteKind = "market" | "firm";
 export type LidoQuoteSource =
-  | "cow-live+lido-live"
   | "reservoir-indicative+lido-live"
   | "reservoir-indicative+lido-fallback";
 
+export type LidoQuotePolicy = {
+  label: "fixed-policy";
+  fundingAprBps: number;
+  riskAndOperationsBps: number;
+  maxDiscountBps: number;
+};
+
 export type LidoQuoteResponse = {
-  kind: LidoQuoteKind;
+  kind: "market";
   market: "lido";
   requestedStEth: string;
   paymentAmount: string;
   paymentAsset: "WETH";
   discountBps: number;
-  recommendedRoute: "cow" | "reservoir";
-  cowPaymentAmount: string;
-  reservoirPaymentAmount: string | null;
-  underwritingCap: string;
   estimatedWaitMs: number;
   fundingCost: string;
   riskCost: string;
-  claimGasCost: string;
-  userImprovement: string;
+  policy: LidoQuotePolicy;
+  pegAssumption: string;
+  firmQuoteAvailability: "available" | "unavailable";
   source: LidoQuoteSource;
   sourceTimestamp: string;
-  expiresAt: number | null;
-  envelope: Record<string, unknown> | null;
 };
 
 export type LidoQuoteError = {
@@ -70,11 +70,13 @@ export async function requestLidoQuote(
     );
   }
   if (
+    result.kind !== "market" ||
     result.market !== "lido" ||
     result.requestedStEth !== requestedStEth.toString() ||
     !/^\d+$/.test(result.paymentAmount) ||
-    !/^\d+$/.test(result.cowPaymentAmount) ||
-    !["cow", "reservoir"].includes(result.recommendedRoute) ||
+    typeof result.discountBps !== "number" ||
+    typeof result.estimatedWaitMs !== "number" ||
+    !["available", "unavailable"].includes(result.firmQuoteAvailability) ||
     ![
       "reservoir-indicative+lido-live",
       "reservoir-indicative+lido-fallback",

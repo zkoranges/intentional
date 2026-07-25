@@ -140,7 +140,7 @@ function FundsFlowDiagram() {
           factor. In the opposite direction, the Aave StataWETH vault releases
           only the exact shortfall to the funding account, which pays the exact
           WETH amount to the seller. Days later, outside the transaction, the
-          queue pays the factor ETH at par.
+          queue pays the factor the finalized ETH amount, which may be impaired.
         </desc>
 
         <defs>
@@ -236,7 +236,7 @@ function FundsFlowDiagram() {
           y={278}
           w={160}
           h={44}
-          title="ETH at par"
+          title="Finalized ETH"
           sub="factor collects"
           dashed
         />
@@ -378,7 +378,7 @@ function ReserveDiagram() {
         </text>
       </svg>
       <figcaption>
-        The factor is idle on most days. Nothing sits in a wallet waiting: the
+        Because demand can be episodic, nothing sits in a wallet waiting: the
         reserve stays deposited, and a fill cuts out the exact payment and
         nothing more.
       </figcaption>
@@ -443,7 +443,8 @@ export default function DocsPage() {
               <span>In one sentence</span>
               <p>
                 A factor buys your pending withdrawal claim, pays you now,
-                and redeems the claim at full value when it finalizes.
+                and accepts the timing and impairment risk of the eventual
+                protocol payout.
               </p>
             </div>
 
@@ -472,16 +473,18 @@ export default function DocsPage() {
 
             <h2>Why this cannot just be a swap</h2>
             <p>
-              Uniswap and CoW orders name an ERC-20 <code>sellToken</code>. A
-              withdrawal claim is an NFT or an entry in vault storage, so the
-              order cannot even be expressed. The person waiting in the queue
-              has no market; Reservoir provides one.
+              Fungible-token orders name an ERC-20 <code>sellToken</code>. A
+              withdrawal claim may instead be an NFT or an entry in vault
+              storage, so ordinary ERC-20 execution cannot express every
+              route. Reservoir provides claim-specific acquisition and
+              settlement postconditions.
             </p>
             <p>
-              The production demo factors Lido withdrawals. The settlement
-              kernel is claim-agnostic: supporting a new claim type means
-              writing an adapter, not changing the kernel. An ERC-7540/8161
-              adapter ships alongside the Lido one to demonstrate this.
+              The completed mainnet proof originated a new Lido withdrawal
+              from liquid stETH and paid the seller atomically. Buying an
+              already-created unstETH is under development. The ERC-7540/8161
+              path is reference-only because no production ERC-8161 vault is
+              used in this repository.
             </p>
 
             <blockquote>
@@ -533,8 +536,8 @@ export default function DocsPage() {
                 <div>
                   <strong>Collect</strong>
                   <p>
-                    The factor waits for finalization and redeems the claim at
-                    full value. The difference is its return.
+                    The factor waits for finalization and collects the actual
+                    queue payout. Timing and impairment risk stay with it.
                   </p>
                 </div>
               </li>
@@ -543,10 +546,10 @@ export default function DocsPage() {
             <h3>Where the tokens actually go</h3>
             <FundsFlowDiagram />
 
-            <h3>Two kinds of claim</h3>
+            <h3>Three claim paths, stated separately</h3>
             <div className="docsCardGrid">
               <article>
-                <span className="docsTag">Originate</span>
+                <span className="docsTag">Proven on mainnet</span>
                 <h4>The claim does not exist yet</h4>
                 <p>
                   The seller holds stETH and wants ETH now. During settlement,
@@ -559,8 +562,21 @@ new Lido withdrawal ticket → factor
 WETH payment               → seller`}</pre>
               </article>
               <article>
-                <span className="docsTag">Acquire</span>
-                <h4>The claim already exists</h4>
+                <span className="docsTag">Under development</span>
+                <h4>Existing unstETH</h4>
+                <p>
+                  The seller already owns a Lido withdrawal NFT. The exit
+                  adapter must acquire that exact token and verify ownership,
+                  request amount, share amount, and claimed state before any
+                  payment can leave the reserve.
+                </p>
+                <pre>{`existing unstETH → factor
+WETH payment     → seller
+either both settle or neither does`}</pre>
+              </article>
+              <article>
+                <span className="docsTag">Reference only</span>
+                <h4>ERC-7540 / ERC-8161</h4>
                 <p>
                   An ERC-7540 request can be partly Pending and partly
                   Claimable. The adapter transfers the Pending portion using
@@ -646,13 +662,12 @@ complete value    → measured`}</pre>
 
             <h3>Why productive reserves matter</h3>
             <p>
-              In sampled settlement data, opportunities appeared on 15 out
-              of 87 active days; the factor was idle roughly{" "}
-              <strong>83% of the time</strong>. Keeping the reserve in an
-              ERC-4626 vault means the same capital earns lending yield on
-              idle days and the factoring spread when a deal appears.
-              Without that yield, holding standby capital would rarely be
-              worth it.
+              Factoring is episodic stress liquidity, so standby capital may
+              wait between fills. Keeping the reserve in an ERC-4626 vault
+              means the same capital earns lending yield while idle and can be
+              materialized only when an accepted quote settles. Reported
+              economic samples are preserved in the appendix, but their raw
+              dataset is not reproduced in this repository.
             </p>
           </section>
 
@@ -750,10 +765,10 @@ complete value    → measured`}</pre>
             </p>
 
             <div className="docsMetric">
-              <strong>187</strong>
+              <strong>Green</strong>
               <span>
-                deterministic tests passing
-                <small>Unit · integration · invariant — plus 10 mainnet-fork suites</small>
+                deterministic and mainnet-fork gates
+                <small>Unit · integration · invariant · canonical protocol forks</small>
               </span>
             </div>
           </section>
@@ -767,15 +782,17 @@ complete value    → measured`}</pre>
 
             <h3>For liquid assets, use an exchange</h3>
             <p>
-              Across a year of settlement data—308,160 CoW settlements, 568
-              comparable stETH→ETH executions, and 42,074 Lido requests—
-              factoring beat the open market on{" "}
-              <strong>4.6% of trades and 5.3% of volume</strong>.
+              An externally produced sample suggested that attractive
+              factoring opportunities are clustered rather than continuous.
+              The raw dataset and analysis pipeline are not in this
+              repository, so the product does not present those reported
+              figures as reproduced evidence.
             </p>
             <p>
               Factoring applies when there is no liquid token market: a
               non-transferable claim, a position too large to sell without
-              slippage, or a stressed market where the queue still pays par.
+              slippage, or stressed conditions where a factor is willing to
+              accept queue timing and impairment risk.
             </p>
 
             <h3>What is not built</h3>
@@ -817,9 +834,11 @@ complete value    → measured`}</pre>
             <div className="docsWarning">
               <span>Deployment status</span>
               <p>
-                This is unaudited hackathon software. Contracts deploy paused
-                and unfunded; funding and activation are separate, deliberate
-                steps with read-only verification between each.
+                This is unaudited hackathon software. The completed mainnet
+                proof deployment is permanently retired: both pausable
+                contracts are paused and the reserve was recovered. A future
+                deployment requires a fresh signer and starts paused and
+                unfunded.
               </p>
             </div>
           </section>

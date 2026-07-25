@@ -53,6 +53,17 @@ type LidoWaitEstimate = {
   source: "lido-withdrawals-api";
 };
 
+type MarketState = "Live" | "Standby" | "Retired" | "Unavailable";
+
+type MarketStatusResponse = {
+  state: MarketState;
+  capacityWei: string;
+  firmQuoteConfigured: boolean;
+  firmQuotesEnabled: boolean;
+  detail: string;
+  observedAt: string;
+};
+
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
 const DOCS_URL = "/docs";
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
@@ -66,8 +77,8 @@ const MARKETS = [
     payout: "ETH",
     queueTime: null,
     queueDetail: "Live Lido estimate for a representative 1 stETH withdrawal",
-    status: "Open",
-    active: true,
+    status: "Checking",
+    active: false,
     icon: "/icons/steth.png",
     iconAlt: "stETH",
     iconClass: "stethIcon",
@@ -196,9 +207,18 @@ export default function Home() {
     useState<NavSection>("markets");
   const [lidoWaitEstimate, setLidoWaitEstimate] =
     useState<LidoWaitEstimate | null>(null);
+  const [marketStatus, setMarketStatus] = useState<MarketStatusResponse>({
+    state: "Unavailable",
+    capacityWei: "0",
+    firmQuoteConfigured: false,
+    firmQuotesEnabled: false,
+    detail: "Checking live Ethereum deployment state",
+    observedAt: "",
+  });
   const walletMenuRef = useRef<HTMLDivElement>(null);
 
   const busy = action !== "idle";
+  const marketLive = marketStatus.firmQuotesEnabled;
   const amount = useMemo(() => {
     try {
       return parseEther(amountInput || "0");
@@ -303,6 +323,47 @@ export default function Home() {
 
   useEffect(() => {
     const controller = new AbortController();
+    void fetch("/api/status", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Market status unavailable");
+        const result = (await response.json()) as Partial<MarketStatusResponse>;
+        if (
+          !["Live", "Standby", "Retired", "Unavailable"].includes(
+            result.state ?? "",
+          ) ||
+          typeof result.capacityWei !== "string" ||
+          !/^\d+$/.test(result.capacityWei) ||
+          typeof result.firmQuoteConfigured !== "boolean" ||
+          typeof result.firmQuotesEnabled !== "boolean" ||
+          typeof result.detail !== "string" ||
+          typeof result.observedAt !== "string"
+        ) {
+          throw new Error("Invalid market status");
+        }
+        if (!controller.signal.aborted) {
+          setMarketStatus(result as MarketStatusResponse);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setMarketStatus({
+            state: "Unavailable",
+            capacityWei: "0",
+            firmQuoteConfigured: false,
+            firmQuotesEnabled: false,
+            detail: "Live Ethereum status could not be verified",
+            observedAt: "",
+          });
+        }
+      });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
     void fetch("/api/wait/lido", {
       cache: "no-store",
       signal: controller.signal,
@@ -368,28 +429,8 @@ export default function Home() {
       setLidoQuote(null);
       setQuoteCheck(null);
       void requestLidoQuote(amountInput, controller.signal)
-        .then(async (nextQuote) => {
+        .then((nextQuote) => {
           if (controller.signal.aborted) return;
-          if (nextQuote.kind === "firm") {
-            const injected = getInjectedProvider();
-            if (
-              !account ||
-              !injected ||
-              !nextQuote.envelope ||
-              !RESERVOIR_DEPLOYMENT
-            ) {
-              throw new Error(
-                "The firm quote deployment is not pinned in this app build",
-              );
-            }
-            const checked = await verifyReservoirQuote(
-              injected,
-              account,
-              JSON.stringify(nextQuote.envelope),
-            );
-            if (controller.signal.aborted) return;
-            setQuoteCheck(checked);
-          }
           setLidoQuote(nextQuote);
         })
         .catch((error) => {
@@ -406,7 +447,6 @@ export default function Home() {
       controller.abort();
     };
   }, [
-    account,
     amountInput,
     amountWithinMarketLimits,
     mode,
@@ -565,7 +605,15 @@ export default function Home() {
   /// through a human: the desk signs, this verifies, the wallet fills.
   async function requestFirmQuote() {
     const injected = getInjectedProvider();
-    if (!injected || !account || !RESERVOIR_DEPLOYMENT || !amountValid) {
+    if (!injected || !account || !amountValid) {
+      return;
+    }
+    if (!marketLive) {
+      setStatus(marketStatus.detail);
+      return;
+    }
+    if (!RESERVOIR_DEPLOYMENT) {
+      setStatus("The firm quote deployment is not pinned in this app build");
       return;
     }
 
@@ -678,7 +726,9 @@ export default function Home() {
     setMode(nextMode);
     setStatus(
       nextMode === "instant"
-        ? "Enter an amount to receive a live Lido factoring quote."
+        ? marketLive
+          ? "Enter an amount to request a firm Lido factoring quote."
+          : "Indicative estimates are available; public firm quotes are not."
         : "Use Lido directly and keep the withdrawal claim in your wallet.",
     );
   }
@@ -948,7 +998,7 @@ export default function Home() {
                       ? "Finding quote"
                       : lidoQuote
                         ? "Indicative quote"
-                        : "Live estimate"
+                        : "Policy estimate"
                   : "Claim notional"}
               </span>
             </div>
@@ -1010,7 +1060,7 @@ export default function Home() {
                       : "quoteStatus indicative"
                   }
                 >
-                  {quoteCheck
+                  {quoteCheck && marketLive
                     ? "Firm · fillable"
                     : account
                       ? "Indicative · preview"
@@ -1030,7 +1080,13 @@ export default function Home() {
 
           <div className="primaryAction">
             {mode === "instant" ? (
-              !amountWithinMarketLimits ? (
+              !marketLive ? (
+                <button className="actionButton" disabled>
+                  {marketStatus.state === "Retired"
+                    ? "Firm quotes paused · proof deployment retired"
+                    : "Firm quotes unavailable"}
+                </button>
+              ) : !amountWithinMarketLimits ? (
                 <button className="actionButton" disabled>
                   {amountIssue}
                 </button>
@@ -1139,7 +1195,9 @@ export default function Home() {
                 ? quoteError
                 : mode === "instant" && lidoQuote
                   ? account
-                    ? "Indicative preview. Import a short-lived firm quote to settle."
+                    ? marketLive
+                      ? "Indicative preview. Request a firm quote to settle."
+                      : marketStatus.detail
                     : "Indicative preview. Connect your wallet only when you are ready to continue."
                   : status}
             </p>
@@ -1165,16 +1223,27 @@ export default function Home() {
         <section className="marketsSection" id="markets" aria-label="Factoring markets">
           <div className="marketHeader">
             <span>Factoring markets</span>
-            <small>One market open · More adapters coming</small>
+            <small>
+              Lido: {marketStatus.state}
+              {marketStatus.state === "Live"
+                ? ` · ${formatMainnetAmount(BigInt(marketStatus.capacityWei), 4)} WETH capacity`
+                : " · More adapters under development"}
+            </small>
           </div>
           <div className="marketGrid">
-            {MARKETS.map((market) => (
-              <a
-                className={`marketCard ${market.active ? "active" : ""}`}
-                href={market.active ? "#exit" : "#markets"}
-                aria-label={`${market.name} ${market.asset} market — ${market.status}`}
-                key={market.name}
-              >
+            {MARKETS.map((market) => {
+              const isLido = market.name === "Lido";
+              const isActive = isLido ? marketLive : market.active;
+              const displayedStatus = isLido
+                ? marketStatus.state
+                : market.status;
+              return (
+                <a
+                  className={`marketCard ${isActive ? "active" : ""}`}
+                  href={isActive ? "#exit" : "#markets"}
+                  aria-label={`${market.name} ${market.asset} market — ${displayedStatus}`}
+                  key={market.name}
+                >
                 <div className="marketIdentity">
                   <span className={`tokenIcon ${market.iconClass}`}>
                     <img src={market.icon} alt={market.iconAlt} width={18} height={18} />
@@ -1203,7 +1272,7 @@ export default function Home() {
                       }
                       title={market.queueDetail}
                     >
-                      {market.name === "Lido"
+                      {isLido
                         ? lidoWaitEstimate
                           ? formatMarketWait(lidoWaitEstimate.estimatedWaitMs)
                           : "Checking live…"
@@ -1211,11 +1280,12 @@ export default function Home() {
                     </dd>
                   </div>
                 </dl>
-                <span className={`marketStatus ${market.active ? "open" : ""}`}>
-                  {market.status}
+                <span className={`marketStatus ${isActive ? "open" : ""}`}>
+                  {displayedStatus}
                 </span>
               </a>
-            ))}
+              );
+            })}
           </div>
         </section>
 
