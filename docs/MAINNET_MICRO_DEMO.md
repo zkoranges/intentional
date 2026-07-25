@@ -152,10 +152,10 @@ broadcast phase in both the complete rehearsal and the mainnet sequence.
 | G-F | `FACTOR_PRIVATE_KEY` deriving `0x894E…fc99` in `.env` | user | **DONE** (verified; an empty duplicate template line in `.env` was removed) |
 | G-G | Factor funding for gas solvency | user | **DONE** (0.04 ETH at nonce 0) |
 | G-H | Commit clean tree; preflight (`EXPECTED_DEPLOYER_NONCE=0`) | user go, agent | pending |
-| G-I | **v2 leg first (nonce 0)**: deploy paused `--verify` → verifier → manifest → fund 0.01 → activate → verifier | simulate agent / broadcast user-authorized | pending |
-| G-J | **Aqua leg second**: router via `cast send --create` (forge's encoder mis-decodes its string ctor args; Etherscan verification done manually with `forge verify-contract`), then deploy/seed/ship script, then the quote-bound fill; record tx hashes | simulate agent / broadcast user-authorized | pending |
-| G-K | Frontend gate: pin `NEXT_PUBLIC_*` in Vercel, redeploy, then **accept**: public URL renders both pinned addresses with explorer links, `verify:deployment` passes against a production RPC, a wallet connects on chain 1, and the quote/fill card simulates | user + agent verification | pending |
-| G-L | Seller setup; operator firm quote (receipt-verified Aqua proof); approve + fill; Etherscan receipts archived | user-authorized | pending |
+| G-I | **v2 leg first (nonce 0)**: deploy paused `--verify` → verifier → manifest → fund 0.01 → activate → verifier | simulate agent / broadcast user-authorized | **DONE on mainnet** — all four contracts live at predicted addresses, Etherscan-verified, ACTIVE; manifest `deployments/mainnet-v2.json` |
+| G-J | **Aqua leg second**: router via `cast send --create`, then deploy/seed/ship script, then the quote-bound fill | simulate agent / broadcast user-authorized | **router + maker + strategy LIVE on canonical Aqua** (manifest `deployments/mainnet-aqua.json`; strategy `0x80ccae4c…02be`); **fill awaiting explicit authorization** — live-resume rehearsal green |
+| G-K | Frontend gate: pin `NEXT_PUBLIC_*` in Vercel, redeploy, then **accept**: public URL renders both pinned addresses with explorer links, `verify:deployment` passes against a production RPC, a wallet connects on chain 1, and the quote/fill card simulates | user + agent verification | env pinned; production deploy + acceptance in progress |
+| G-L | Seller staged (staked + exact 0.005 approval on-chain); operator firm quote (receipt-verified Aqua proof); wallet-signed fill; Etherscan receipts archived | user-authorized | seller staged on mainnet; fill awaiting Aqua receipt + authorization |
 | G-M | Recovery: pause settlement + funding, withdraw StataWETH shares; after Lido finalization, claim unstETH; confirm all recoverable value back under operator control | agent commands, user-authorized | pending — **mandatory, not optional** |
 
 Every broadcast is simulated first with the identical command minus

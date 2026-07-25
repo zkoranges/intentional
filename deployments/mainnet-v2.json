@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "network": "ethereum-mainnet",
+  "chainId": 1,
+  "gitCommit": "693cb859e975c9b3fe7f07069f805c9135f943fc",
+  "releaseState": "active",
+  "factor": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+  "contracts": {
+    "fundingAccount": {
+      "address": "0xb87f5ce2b24439b6a74b1dfef9311dd527087a37",
+      "runtimeCodeHash": "0xcdede33f2d0154b93240aa3e6af77377209141fc5332a71464d1865784d1fd06",
+      "deploymentTxHash": "0xe8328d46a0e8f3888c2c86e32d03a2b3b890384513729e057a88a1aa92705d54",
+      "blockNumber": 25611166,
+      "sourceVerificationUrl": "https://etherscan.io/address/0xb87f5ce2b24439b6a74b1dfef9311dd527087a37#code"
+    },
+    "reserveAdapter": {
+      "address": "0x5427324cd37415ce8c359673945aac622186cb5a",
+      "runtimeCodeHash": "0xa0d93b27751f69ce7e94a672de11febfe56ca6b932d30672f1829817a54c680e",
+      "deploymentTxHash": "0x7af1cee95a15142926a8086171694aadde08da6ecf9db45cec97718acd2759cc",
+      "blockNumber": 25611168,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x5427324cd37415ce8c359673945aac622186cb5a#code"
+    },
+    "kernel": {
+      "address": "0x50b619295e00990feb28e79fa939b5f42af6af53",
+      "runtimeCodeHash": "0xbe0426d7768d9a0153d45341f42320ffe89ec55c70dd01993adfb0d850052725",
+      "deploymentTxHash": "0xa17650692abd6f0a56bbd39bbb9a722d8d1e8cab7996e347c1ba1c912d8997f4",
+      "blockNumber": 25611173,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x50b619295e00990feb28e79fa939b5f42af6af53#code"
+    },
+    "lidoAdapter": {
+      "address": "0xfc2c5bcaeff85e72f13ecf78101c4d4262ebd027",
+      "runtimeCodeHash": "0x0c5e4065c8f6523307706c134d9f78762f5226801b29c7c94b7cc9b0b3c2e445",
+      "deploymentTxHash": "0x10891a7921cc0ff7dd8be7230f848084166e33c2fb251c713f30105f15a33ed2",
+      "blockNumber": 25611174,
+      "sourceVerificationUrl": "https://etherscan.io/address/0xfc2c5bcaeff85e72f13ecf78101c4d4262ebd027#code"
+    }
+  },
+  "canonical": {
+    "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "stataWeth": "0x0bfc9d54Fc184518A81162F8fB99c2eACa081202",
+    "stETH": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+    "lidoWithdrawalQueue": "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"
+  },
+  "activationTxHash": "0x1b39d85ed4f3e0c0779470f8a3cc1d742f6c03bf9ae2460ea5299f1056c0e223"
+}

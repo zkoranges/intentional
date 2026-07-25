@@ -85,7 +85,9 @@ if [[ "${runtime_code}" == "0x" ]]; then
 fi
 runtime_codehash="$(cast keccak "${runtime_code}")"
 if [[ -n "${EXPECTED_ROUTER_CODEHASH:-}" ]]; then
-  if [[ "${runtime_codehash,,}" != "${EXPECTED_ROUTER_CODEHASH,,}" ]]; then
+  actual_lower="$(printf '%s' "${runtime_codehash}" | tr '[:upper:]' '[:lower:]')"
+  expected_lower="$(printf '%s' "${EXPECTED_ROUTER_CODEHASH}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "${actual_lower}" != "${expected_lower}" ]]; then
     echo "Router runtime codehash ${runtime_codehash} does not match expected ${EXPECTED_ROUTER_CODEHASH}." >&2
     exit 1
   fi

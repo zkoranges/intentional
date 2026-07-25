@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "network": "ethereum-mainnet",
+  "chainId": 1,
+  "gitCommit": "0040f2b",
+  "role": "reservoir-v1-aqua-intent-engine",
+  "operator": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+  "router": {
+    "address": "0x15a82271F280D4D1485CCE1980AC3C3799b483D9",
+    "artifact": "src/routers/ReservoirSwapVMRouter.sol:ReservoirSwapVMRouter",
+    "deploymentTxHash": "0x6a521e9bb1e28bdb4f0b3923df10ef8bb0574f92f8c41f5709ce9ea8d7e2caa3",
+    "blockNumber": 25611210,
+    "runtimeCodeHash": "0xd8ac4a51d5994d12b862a303c471237bd28a497b6360c382cab3752977bf0519",
+    "constructorArgs": {
+      "aqua": "0x499943E74FB0cE105688beeE8Ef2ABec5D936d31",
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "owner": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+      "name": "Reservoir Aqua Intent",
+      "version": "1"
+    },
+    "sourceVerificationUrl": "https://etherscan.io/address/0x15a82271F280D4D1485CCE1980AC3C3799b483D9#code"
+  },
+  "maker": {
+    "address": "0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6",
+    "deploymentTxHash": "0x7f856cfa4a8edc046759806688e12c653331745d72406faed93e2ff56e691439",
+    "disposable": true,
+    "note": "no owner withdrawal by design; seeded inventory moves only through fills"
+  },
+  "wstETHAdapter": {
+    "address": "0x83433270E36144765939e331024873730429caD9",
+    "deploymentTxHash": "0x8dfcc58b84455a36341dab62bc61baaf29420b431eca13dca76c05531457d8b8"
+  },
+  "wethAdapter": {
+    "address": "0xaa6dC9494d4Ee348C15fEd66A1E80A84b8d8fe77",
+    "deploymentTxHash": "0xeb6d2eeccd5f1bf06460af310825204255127c3d28f2653d8c9f896269f914b6"
+  },
+  "strategy": {
+    "hash": "0x80ccae4c9e1c0f64303fb3009f9be95f6a8da14343941dfea1d96c68748702be",
+    "aqua": "0x499943E74FB0cE105688beeE8Ef2ABec5D936d31",
+    "shipTxHash": "0x7b1bbda5837a568078c41e77ea275b3c8f25a4b3cfe692d124b18812320ef804",
+    "virtualWstETHWei": "967609565137999",
+    "virtualWethWei": "1199999999999999"
+  },
+  "taker": {
+    "retainedWstETHWei": "48380478256900"
+  }
+}
