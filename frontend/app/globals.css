@@ -87,14 +87,22 @@ a {
 .fintechTexture {
   position: absolute;
   z-index: 0;
-  top: 72px;
-  right: -42px;
-  width: min(760px, 66vw);
-  height: min(720px, calc(100svh - 72px));
+  top: 96px;
+  width: min(620px, 44vw);
+  height: min(620px, calc(100svh - 96px));
   pointer-events: none;
   background: url("/textures/impatience-flow.svg") right bottom / contain
     no-repeat;
-  opacity: 0.46;
+  opacity: 0.25;
+}
+
+.fintechTextureLeft {
+  left: -112px;
+}
+
+.fintechTextureRight {
+  right: -112px;
+  transform: scaleX(-1);
 }
 
 .appHeader {
@@ -1440,11 +1448,7 @@ footer p {
 
 @media (max-width: 760px) {
   .fintechTexture {
-    top: 64px;
-    right: -220px;
-    width: 600px;
-    height: min(650px, calc(100svh - 64px));
-    opacity: 0.3;
+    display: none;
   }
 
   .appHeader {
