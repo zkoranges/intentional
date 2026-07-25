@@ -18,9 +18,13 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
 
   for (const expected of [
     "Connect wallet",
-    "Exit when you want.",
+    "Make waiting optional.",
+    "Exit stETH",
     "Instant exit",
     "Lido queue",
+    "25%",
+    "50%",
+    "Max",
     "Import firm quote",
     "Instant exits coming soon",
     "Request withdrawal",
@@ -135,7 +139,7 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.doesNotMatch(ethereum, /type\\(uint256\\)\\.max|MaxUint256/);
 });
 
-test("the production build contains the light responsive withdrawal interface", async () => {
+test("the production build contains the dark responsive withdrawal interface", async () => {
   const assetsDir = new URL("dist/client/assets/", projectRoot);
   const assetNames = await readdir(assetsDir);
   const pageAsset = assetNames.find((name) => name.startsWith("page-"));
@@ -152,8 +156,10 @@ test("the production build contains the light responsive withdrawal interface", 
   assert.match(pageBundle, /Request withdrawal/);
   assert.match(pageBundle, /Instant exits coming soon/);
   assert.match(pageBundle, /Frequently asked questions/);
+  assert.match(pageBundle, /Insufficient stETH balance/);
   assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);
-  assert.match(stylesheet, /#f7f7f8/);
+  assert.match(stylesheet, /#0d0d0f/);
+  assert.match(stylesheet, /color-scheme:\s*dark/);
   assert.match(stylesheet, /#fc72ff/);
   assert.match(stylesheet, /prefers-reduced-motion/);
   assert.match(stylesheet, /@media/);

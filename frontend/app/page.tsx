@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAddress, parseEther, type Address, type Hash } from "viem";
+import {
+  formatEther,
+  getAddress,
+  parseEther,
+  type Address,
+  type Hash,
+} from "viem";
 
 import {
   ADDRESSES,
@@ -89,7 +95,9 @@ export default function Home() {
   const [status, setStatus] = useState(
     "Connect your wallet to start an exit.",
   );
-  const [mode, setMode] = useState<ExitMode>("instant");
+  const [mode, setMode] = useState<ExitMode>(
+    RESERVOIR_DEPLOYMENT ? "instant" : "queue",
+  );
   const [amountInput, setAmountInput] = useState("0.10");
   const [actions, setActions] = useState<CompletedAction[]>([]);
   const [lastMintedRequest, setLastMintedRequest] = useState<bigint | null>(
@@ -99,7 +107,6 @@ export default function Home() {
   const [quoteCheck, setQuoteCheck] = useState<ReservoirQuoteCheck | null>(null);
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
 
-  const provider = getInjectedProvider();
   const busy = action !== "idle";
   const amount = useMemo(() => {
     try {
@@ -115,6 +122,16 @@ export default function Home() {
   const queueApproved = Boolean(
     snapshot && amount > 0n && snapshot.queueAllowance === amount,
   );
+  const amountIssue =
+    amount === 0n
+      ? "Enter an amount"
+      : amount < MIN_LIDO_REQUEST
+        ? "Amount below minimum"
+        : amount > MAX_LIDO_REQUEST
+          ? "Amount above maximum"
+          : snapshot && amount > snapshot.stEthBalance
+            ? "Insufficient stETH balance"
+            : null;
 
   const refresh = useCallback(
     async (connectedAccount = account) => {
@@ -222,6 +239,7 @@ export default function Home() {
       await refresh(account);
     } catch (error) {
       setStatus(errorMessage(error));
+    } finally {
       setAction("idle");
     }
   }
@@ -342,6 +360,7 @@ export default function Home() {
       );
     } catch (error) {
       setStatus(errorMessage(error));
+    } finally {
       setAction("idle");
     }
   }
@@ -415,6 +434,13 @@ export default function Home() {
     );
   }
 
+  function setBalancePercent(percent: 25 | 50 | 100) {
+    if (!snapshot) return;
+    const nextAmount = (snapshot.stEthBalance * BigInt(percent)) / 100n;
+    setAmountInput(formatEther(nextAmount));
+    setQuoteCheck(null);
+  }
+
   const instantPayment = quoteCheck
     ? formatMainnetAmount(BigInt(quoteCheck.envelope.quote.paymentAmount))
     : "—";
@@ -448,42 +474,57 @@ export default function Home() {
 
       <main id="top">
         <section className="appIntro">
-          <p>Liquidity for delayed withdrawals</p>
-          <h1>Exit when you want.</h1>
+          <p>Reservoir liquidity</p>
+          <h1>Make waiting optional.</h1>
+          <span>
+            Exit a delayed ETH withdrawal now, or use the protocol queue
+            directly.
+          </span>
         </section>
 
         <section className="exitCard" id="exit" aria-label="Withdrawal interface">
           <div className="cardHeader">
-            <div className="modeTabs" role="tablist" aria-label="Exit route">
-              <button
-                role="tab"
-                aria-selected={mode === "instant"}
-                className={mode === "instant" ? "selected" : ""}
-                onClick={() => selectMode("instant")}
-              >
-                Instant exit
-              </button>
-              <button
-                role="tab"
-                aria-selected={mode === "queue"}
-                className={mode === "queue" ? "selected" : ""}
-                onClick={() => selectMode("queue")}
-              >
-                Lido queue
-              </button>
+            <div>
+              <h2>Exit stETH</h2>
+              <p>Choose how you want to receive liquidity.</p>
             </div>
-            <a className="helpLink" href="#faq" aria-label="Learn about exit routes">
+            <a className="helpLink" href="#faq" aria-label="Learn about exits">
               ?
             </a>
           </div>
 
-          <div className="tokenPanel">
+          <div className="modeTabs" role="tablist" aria-label="Exit route">
+            <button
+              role="tab"
+              aria-selected={mode === "instant"}
+              className={mode === "instant" ? "selected" : ""}
+              onClick={() => selectMode("instant")}
+            >
+              Instant exit
+            </button>
+            <button
+              role="tab"
+              aria-selected={mode === "queue"}
+              className={mode === "queue" ? "selected" : ""}
+              onClick={() => selectMode("queue")}
+            >
+              Lido queue
+            </button>
+          </div>
+
+          <p className="modeNote">
+            {mode === "instant"
+              ? "Receive WETH now by selling the future withdrawal claim."
+              : "Mint an unstETH claim and receive ETH after Lido finalizes it."}
+          </p>
+
+          <div className="tokenPanel inputPanel">
             <div className="tokenPanelLabel">
-              <span>You send</span>
+              <span>You sell</span>
               <span>
                 Balance:{" "}
                 {snapshot
-                  ? formatMainnetAmount(snapshot.stEthBalance)
+                  ? formatMainnetAmount(snapshot.stEthBalance, 6)
                   : "—"}
               </span>
             </div>
@@ -498,21 +539,37 @@ export default function Home() {
                 aria-label="stETH amount"
                 placeholder="0"
               />
-              <button className="tokenSelect" type="button" tabIndex={-1}>
+              <div className="tokenSelect">
                 <span className="tokenIcon stethIcon">S</span>
                 stETH
-              </button>
+              </div>
             </div>
-            {snapshot && (
+            <div className="amountActions" aria-label="Amount shortcuts">
+              <button
+                type="button"
+                onClick={() => setBalancePercent(25)}
+                disabled={!snapshot || busy}
+              >
+                25%
+              </button>
+              <button
+                type="button"
+                onClick={() => setBalancePercent(50)}
+                disabled={!snapshot || busy}
+              >
+                50%
+              </button>
               <button
                 className="maxButton"
                 type="button"
-                onClick={() =>
-                  setAmountInput(formatMainnetAmount(snapshot.stEthBalance))
-                }
+                onClick={() => setBalancePercent(100)}
+                disabled={!snapshot || busy}
               >
                 Max
               </button>
+            </div>
+            {amountIssue && amount > 0n && (
+              <p className="amountError">{amountIssue}</p>
             )}
           </div>
 
@@ -522,7 +579,7 @@ export default function Home() {
 
           <div className="tokenPanel outputPanel">
             <div className="tokenPanelLabel">
-              <span>{mode === "instant" ? "You receive" : "You receive"}</span>
+              <span>You receive</span>
               <span>{mode === "instant" ? "Firm quote" : "After request"}</span>
             </div>
             <div className="tokenRow">
@@ -547,24 +604,20 @@ export default function Home() {
           <div className="routeSummary">
             <div>
               <span>Route</span>
-              <strong>{mode === "instant" ? "Reservoir" : "Lido"}</strong>
+              <strong>
+                <i className={mode === "instant" ? "reservoirRoute" : "lidoRoute"} />
+                {mode === "instant" ? "Reservoir" : "Lido"}
+              </strong>
             </div>
             <div>
-              <span>Timing</span>
-              <strong>{mode === "instant" ? "Immediate" : "Protocol queue"}</strong>
+              <span>Settlement</span>
+              <strong>{mode === "instant" ? "Immediate" : "After finalization"}</strong>
             </div>
             <div>
-              <span>Claim owner</span>
-              <strong>{mode === "instant" ? "Factor" : "You"}</strong>
+              <span>Withdrawal claim</span>
+              <strong>{mode === "instant" ? "Transferred" : "You keep it"}</strong>
             </div>
           </div>
-
-          {!provider && (
-            <div className="inlineNotice">
-              No browser wallet detected. Open Reservoir with MetaMask, Rabby,
-              Frame, or another Ethereum wallet.
-            </div>
-          )}
 
           <div className="primaryAction">
             {!account ? (
@@ -590,7 +643,7 @@ export default function Home() {
                   onClick={() => setQuoteModalOpen(true)}
                   disabled={busy || !amountValid}
                 >
-                  Import firm quote
+                  {amountIssue ?? "Import firm quote"}
                 </button>
               ) : quoteCheck.allowance !== quoteCheck.requestedStEth ? (
                 <button
@@ -615,7 +668,9 @@ export default function Home() {
                 onClick={approveQueue}
                 disabled={!amountValid || snapshot.queuePaused || busy}
               >
-                Approve stETH
+                {snapshot.queuePaused
+                  ? "Lido withdrawals paused"
+                  : amountIssue ?? "Approve stETH"}
               </button>
             ) : (
               <button
@@ -629,7 +684,15 @@ export default function Home() {
           </div>
 
           <div className="statusBar" aria-live="polite">
-            <span className={busy ? "statusSpinner" : "statusDot"} />
+            <span
+              className={
+                busy
+                  ? "statusSpinner"
+                  : snapshot?.productionCodeVerified
+                    ? "statusDot ready"
+                    : "statusDot"
+              }
+            />
             <p>{status}</p>
             {account && (
               <button onClick={() => refresh()} disabled={busy}>

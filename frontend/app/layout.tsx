@@ -21,14 +21,14 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(origin),
-    title: "Reservoir — Exit when you want",
+    title: "Reservoir — Make waiting optional",
     description:
       "Instant liquidity for delayed withdrawals, with a direct Lido queue route when you prefer to keep the claim.",
     icons: {
       icon: "/favicon.svg",
     },
     openGraph: {
-      title: "Reservoir — Exit when you want.",
+      title: "Reservoir — Make waiting optional.",
       description:
         "Exchange a delayed withdrawal for immediate liquidity, or enter the Lido queue directly.",
       type: "website",
@@ -43,7 +43,7 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: "Reservoir — Exit when you want.",
+      title: "Reservoir — Make waiting optional.",
       description:
         "Liquidity for delayed withdrawals.",
       images: [socialImage],
