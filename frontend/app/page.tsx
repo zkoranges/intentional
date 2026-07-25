@@ -704,6 +704,7 @@ export default function Home() {
 
   return (
     <>
+      <div className="fintechTexture" aria-hidden="true" />
       <header className="appHeader">
         <a className="brand" href="#top" aria-label="Impatience home">
           <strong className="brandWordmark">
