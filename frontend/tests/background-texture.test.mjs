@@ -13,9 +13,10 @@ test("the app includes a non-interactive lower-right fintech texture", async () 
 
   assert.match(page, /className="fintechTexture" aria-hidden="true"/);
   assert.match(stylesheet, /\.fintechTexture \{/);
-  assert.match(stylesheet, /position: fixed/);
-  assert.match(stylesheet, /right: -68px/);
-  assert.match(stylesheet, /bottom: -34px/);
+  assert.match(stylesheet, /position: absolute/);
+  assert.match(stylesheet, /top: 72px/);
+  assert.match(stylesheet, /right: -42px/);
+  assert.match(stylesheet, /100svh - 72px/);
   assert.match(stylesheet, /impatience-flow\.svg/);
   assert.match(stylesheet, /pointer-events: none/);
   assert.doesNotMatch(stylesheet, /repeating-radial-gradient/);
@@ -24,7 +25,7 @@ test("the app includes a non-interactive lower-right fintech texture", async () 
     new URL("public/textures/impatience-flow.svg", projectRoot),
     "utf8",
   );
-  assert.match(texture, /id="fastLane"/);
-  assert.match(texture, /id="ledger"/);
-  assert.match(texture, /#A78BFA/);
+  assert.match(texture, /id="timeline"/);
+  assert.match(texture, /id="ticks"/);
+  assert.doesNotMatch(texture, /#A78BFA|#8B5CF6/i);
 });
