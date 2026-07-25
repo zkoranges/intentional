@@ -149,7 +149,26 @@ const fillSimulation = await publicClient.simulateContract({
     envelope.factorSignature,
   ],
 });
-const fillHash = await walletClient.writeContract(fillSimulation.request);
+// Execution can cost more than the simulation estimate (Aave interest
+// accrual and Lido checkpoint growth take colder, longer paths at mining
+// time). A flat 50% cushion prevents the OutOfGas-revert observed live.
+const estimatedFillGas = await publicClient.estimateContractGas({
+  account,
+  address: getAddress(envelope.kernel),
+  abi: settlementAbi,
+  functionName: "fill",
+  args: [
+    quote,
+    envelope.claimData,
+    envelope.boundsData,
+    envelope.factorSignature,
+  ],
+});
+const fillGasLimit = (estimatedFillGas * 15n) / 10n;
+const fillHash = await walletClient.writeContract({
+  ...fillSimulation.request,
+  gas: fillGasLimit,
+});
 const fillReceipt = await publicClient.waitForTransactionReceipt({ hash: fillHash });
 if (fillReceipt.status !== "success") throw new Error("Reservoir fill reverted");
 
