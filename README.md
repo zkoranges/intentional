@@ -38,14 +38,28 @@ and SwapVM enforces the exact input call, explicit output recipient, minimum
 output, and deadline. See
 [`docs/AQUA_INTENT_DEMO.md`](docs/AQUA_INTENT_DEMO.md).
 
-The first live product is Lido:
+The first live product is Lido. One transaction, claim acquired before any
+money moves:
 
-```text
-seller stETH
-    -> canonical Lido withdrawal request minted directly to factor
-    -> exact WETH materialized from canonical Aave StataWETH
-    -> seller paid atomically
+```mermaid
+flowchart TB
+    SELLER(["Seller"])
+    ADAPTER["Lido claim adapter"]
+    QUEUE["canonical Lido<br/>withdrawal queue"]
+    FACTOR(["Factor"])
+    FUND["productive funding account"]
+    AAVE["canonical Aave StataWETH"]
+
+    SELLER ==>|"1 · stETH, measured delta"| ADAPTER
+    ADAPTER ==>|"2 · exact measured amount"| QUEUE
+    QUEUE ==>|"3 · unstETH minted directly to the factor"| FACTOR
+    AAVE ==>|"4 · exact shortfall only"| FUND
+    FUND ==>|"5 · exact WETH payment"| SELLER
+    QUEUE ==>|"6 · ETH at par, days later"| FACTOR
 ```
+
+Every token movement, gate, and measurement is traced against the deployed
+source in [`docs/FUNDS_FLOW.md`](docs/FUNDS_FLOW.md).
 
 The standards-hard reference path handles an ERC-7540/ERC-8161 request that
 changes after quote signing:
@@ -250,20 +264,31 @@ deployment environments. See [`frontend/README.md`](frontend/README.md).
 
 ## Architecture
 
-```text
-factor signs exact quote
-          |
-seller --+--> AsyncClaimSettlement
-                    |
-          acquire first, pay second
-             +------+------------------+
-             |                         |
-      IClaimAdapter          ProductiveFundingAccount
-       |        |                       |
-   ERC-8161   Lido             ERC4626ReserveAdapter
-   reference  live                       |
-                                   Aave StataWETH
+```mermaid
+flowchart TB
+    FACTOR(["factor signs the exact quote off-chain"])
+    SELLER(["seller sends the only transaction"])
+    KERNEL["AsyncClaimSettlement<br/>acquire first, pay second<br/>holds no tokens"]
+    ADAPTERS["allowlisted IClaimAdapter"]
+    LIDO["LidoWithdrawalClaimAdapter<br/>live"]
+    E8161["ERC8161RedeemClaimAdapter<br/>reference"]
+    FUND["ProductiveFundingAccount<br/>holds WETH and vault shares"]
+    RESERVE["ERC4626ReserveAdapter<br/>reused from v1"]
+    AAVE["Aave StataWETH"]
+
+    FACTOR -.->|"EIP-712 quote"| SELLER
+    SELLER --> KERNEL
+    KERNEL --> ADAPTERS
+    KERNEL --> FUND
+    ADAPTERS --> LIDO
+    ADAPTERS --> E8161
+    FUND --> RESERVE --> AAVE
 ```
+
+A full walkthrough of the funds flow — both settlement paths, the factor's
+capital cycle, every validation gate and the error it reverts with, and the
+live mainnet settlement decoded wei by wei — is in
+[`docs/FUNDS_FLOW.md`](docs/FUNDS_FLOW.md).
 
 [`AsyncClaimSettlement`](src/claims/AsyncClaimSettlement.sol) validates the
 sealed core configuration, seller, buyer-side claim destinations, signature,
@@ -307,6 +332,7 @@ does not freeze its implementation.
 
 Normative v2 documents:
 
+- [`docs/FUNDS_FLOW.md`](docs/FUNDS_FLOW.md) — diagrammed funds flow and mechanics
 - [`V2_SCOPE.md`](V2_SCOPE.md)
 - [`V2_SPEC.md`](V2_SPEC.md)
 - [`V2_IMPLEMENTATION_PLAN.md`](V2_IMPLEMENTATION_PLAN.md)
@@ -329,7 +355,7 @@ test/invariants/        constant-total and payment/acquisition properties
 test/fork/              production-contract mainnet fixtures
 script/                 exact deployment and terminal demos
 frontend/               wallet product and operator quote tooling
-docs/                   jury, fork, and economics evidence
+docs/                   funds flow, jury, fork, and economics evidence
 ```
 
 ## Licensing and attribution

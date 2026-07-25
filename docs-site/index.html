@@ -14,11 +14,16 @@
     .app-name-link img { max-width: 100%; }
     blockquote { border-left: 4px solid var(--theme-color); background: #f7fafc; }
     .markdown-section code { color: #2c7a7b; }
+    .markdown-section .mermaid { margin: 1.5rem 0; text-align: center; overflow-x: auto; }
+    .markdown-section .mermaid svg { max-width: 100%; height: auto; }
   </style>
 </head>
 <body>
   <div id="app">Loading…</div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
   <script>
+    mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
+
     window.$docsify = {
       name: 'Reservoir',
       repo: '',
@@ -26,6 +31,32 @@
       subMaxLevel: 2,
       auto2top: true,
       homepage: 'README.md',
+      markdown: {
+        renderer: {
+          code: function (code, lang) {
+            if (lang === 'mermaid') {
+              // Escape so mermaid reads the source from textContent rather than
+              // letting the browser parse <br/> in labels as real markup.
+              var source = String(code)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+              return '<div class="mermaid">' + source + '</div>';
+            }
+            return this.origin.code.apply(this, arguments);
+          },
+        },
+      },
+      plugins: [
+        function (hook) {
+          hook.doneEach(function () {
+            var nodes = document.querySelectorAll('.mermaid:not([data-processed])');
+            if (nodes.length) {
+              mermaid.run({ nodes: nodes });
+            }
+          });
+        },
+      ],
     };
   </script>
   <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
