@@ -356,6 +356,21 @@ Two properties fall out of this design:
   is nonzero. The kernel then requires capacity to equal the payment *exactly*,
   so an uncertain reserve stops the fill before any claim moves.
 
+The live deployment closed its books and the arithmetic reconciles to the wei:
+
+| Reserve ledger | Wei |
+|---|---:|
+| Funded | `10000000000000000` |
+| Paid to the seller | `4987500000000000` |
+| Arithmetic remainder | `5012500000000000` |
+| Actually recovered | `5012537039871751` |
+| **Aave yield earned while standing ready** | **`37039871751`** |
+
+That last row is the productive-reserve argument as a measured quantity rather
+than a claim: the reserve was withdrawable on demand for the whole period *and*
+earned while it waited. It is a tiny number because the demo was tiny; the
+point is the sign, not the size.
+
 The factor's position over time:
 
 ```mermaid
@@ -536,6 +551,18 @@ stateDiagram-v2
     Halted --> Recovery: withdrawAssets / withdrawShares
     Halted --> Active: setPaused(false)
 ```
+
+The mainnet deployment has now traversed that machine end to end and stopped:
+the kernel and funding account are **paused**, the funding account holds zero
+shares, and the factor holds all recovered WETH. The demo contracts are
+retired. One item is still outstanding — unstETH #130880, claimable after Lido
+finalizes it, which is leg 6 of the flow in §3.1.
+
+The `Paused → Recovered` edge is therefore not hypothetical; it was executed,
+with receipts recorded in
+[`deployments/mainnet-v2.json`](../deployments/mainnet-v2.json) under
+`recovery`. Recovery is deliberately reachable only while paused, so it can
+never race a live fill.
 
 `seal()` on the kernel requires at least one allowlisted adapter, a sealed
 funding account that points back at this kernel, and a configured payment
