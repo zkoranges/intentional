@@ -36,6 +36,8 @@ test-invariants:
 
 test-fork:
 	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required" && exit 1)
+	@test -s test/spikes/fixtures/uniswap-route.json || (echo "fixture missing: run \`node frontend/scripts/fetch-uniswap-route.mjs\`" && exit 1)
+	@test -s test/spikes/fixtures/uniswap-payout-route.json || (echo "fixture missing: run \`MODE=payout node frontend/scripts/fetch-uniswap-route.mjs\`" && exit 1)
 	forge test --match-path "test/fork/*" --fork-url "$(ETH_RPC_URL)"
 
 demo:

@@ -25,9 +25,12 @@ interface ILidoStETHPayout is IERC20 {
 ///         factors a canonical Lido claim and is paid in USDC through the
 ///         live Uniswap Trading API route — funding materialized from
 ///         canonical Aave StataWETH, executor dustless, failure atomic.
-/// @dev Skips with a clear message when no fixture is present. The fixture is
-///      produced by `MODE=payout frontend/scripts/fetch-uniswap-route.mjs`,
-///      which derives this test's deterministic executor address as swapper.
+/// @dev This suite lives under `test/fork/`, which every deterministic
+///      invocation excludes (`Makefile`, `ci.yml`). So an explicit fork run
+///      always intends to execute it: a missing RPC or fixture is an operator
+///      error and must fail loudly. The fixture is produced by
+///      `MODE=payout frontend/scripts/fetch-uniswap-route.mjs`, which derives
+///      this test's deterministic executor address as swapper.
 contract UniswapPayoutMainnetForkTest is Test {
     using stdJson for string;
 
@@ -64,19 +67,19 @@ contract UniswapPayoutMainnetForkTest is Test {
     bytes private payoutData;
 
     function setUp() public {
-        try vm.readFile(FIXTURE_PATH) returns (string memory fixture) {
-            amountIn = vm.parseUint(fixture.readString(".amountInWei"));
-            apiQuotedOut = vm.parseUint(fixture.readString(".apiQuotedOut"));
-            swapTo = fixture.readAddress(".swapTo");
-            swapData = fixture.readBytes(".swapData");
-            apiQuoteHash = fixture.readBytes32(".apiQuoteHash");
-            fetchedAtBlock = fixture.readUint(".fetchedAtBlock");
-            seller = fixture.readAddress(".recipient");
-            fixtureLoaded = true;
-        } catch {
-            fixtureLoaded = false;
-            return;
-        }
+        string memory fixture = vm.readFile(FIXTURE_PATH);
+        require(
+            bytes(fixture).length != 0,
+            "fork payout: fixture is empty; run `MODE=payout node frontend/scripts/fetch-uniswap-route.mjs`"
+        );
+        amountIn = vm.parseUint(fixture.readString(".amountInWei"));
+        apiQuotedOut = vm.parseUint(fixture.readString(".apiQuotedOut"));
+        swapTo = fixture.readAddress(".swapTo");
+        swapData = fixture.readBytes(".swapData");
+        apiQuoteHash = fixture.readBytes32(".apiQuoteHash");
+        fetchedAtBlock = fixture.readUint(".fetchedAtBlock");
+        seller = fixture.readAddress(".recipient");
+        fixtureLoaded = true;
 
         factorKey = uint256(keccak256("reservoir.payout.fork.factor"));
         factor = vm.addr(factorKey);
@@ -138,10 +141,7 @@ contract UniswapPayoutMainnetForkTest is Test {
     }
 
     modifier requiresFixture() {
-        if (!fixtureLoaded) {
-            emit log_string("SKIP: no fixture; run MODE=payout node frontend/scripts/fetch-uniswap-route.mjs first");
-            return;
-        }
+        require(fixtureLoaded, "fork payout: fixture not loaded");
         _;
     }
 
