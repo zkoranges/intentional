@@ -65,12 +65,40 @@ This is an unaudited hackathon beta. Mainnet funding is deliberately separate
 from deployment and occurs only after the exact chain-1 rehearsal, full test
 matrix, frontend checks, and AI-assisted release review.
 
-**Current deployment status:** the public frontend is live, but no Reservoir
-contract is deployed or funded on a persistent network. The current build
-enables the canonical Lido
-originate/claim flows and keeps instant Reservoir fills disabled. After the
-reviewed kernel and Lido adapter are deployed, their exact public addresses
-must be compiled into the frontend before that route can request approval.
+**Current deployment status: LIVE ON ETHEREUM MAINNET (2026-07-25).** The
+mainnet end-to-end proof is complete — see
+[`docs/MAINNET_MICRO_DEMO.md`](docs/MAINNET_MICRO_DEMO.md) and the manifests
+in [`deployments/`](deployments/):
+
+- Aqua intent fill through canonical Aqua:
+  [`0xdfb6b280…f64d37`](https://etherscan.io/tx/0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37)
+  — exact-input wstETH → WETH, output exactly equal to the router's quote.
+- Factoring settlement:
+  [`0x6c7dfd20…71d611`](https://etherscan.io/tx/0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611)
+  — canonical unstETH #130880 minted to the factor, seller paid exactly
+  0.0049875 WETH atomically.
+- Kernel `0x50b619295e00990feB28E79fA939B5f42aF6AF53`, Lido adapter
+  `0xfC2c5bcAeFF85E72f13ecf78101C4D4262eBd027` (both Etherscan-verified,
+  compiled into the frontend build), Aqua router
+  `0x15a82271F280D4D1485CCE1980AC3C3799b483D9`, maker
+  `0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6`.
+
+The public quote endpoint remains deliberately fail-closed: firm quotes are
+signed by the operator CLI and pasted into the UI (operator-assisted beta).
+The demo used controlled team wallets and operator pricing — it proves
+machinery, atomicity, and real protocol integration, not market demand.
+
+**Bytecode attestation for the two explorer-unverified contracts** (Etherscan's
+via-IR pipeline rejects a byte-exact match; verify locally in seconds):
+
+```sh
+# Router — expect 0xd8ac4a51d5994d12b862a303c471237bd28a497b6360c382cab3752977bf0519
+cast keccak "$(cast code 0x15a82271F280D4D1485CCE1980AC3C3799b483D9 --rpc-url "$ETH_RPC_URL")"
+# Maker — expect 0x553ff057aaa9b0172b6720e7889fddaf575c3213febfe0472065a231be646937
+cast keccak "$(cast code 0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6 --rpc-url "$ETH_RPC_URL")"
+# Both creation transactions carry calldata equal to `forge inspect <artifact> bytecode`
+# plus the constructor args recorded in deployments/mainnet-aqua.json.
+```
 
 The paused deployment, separately capped funding, Etherscan source
 verification, one-operation activation, and read-only binding-verification

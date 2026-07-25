@@ -1,0 +1,37 @@
+{
+  "version": "reservoir-v2-lido-1",
+  "chainId": 1,
+  "kernel": "0x50b619295e00990feB28E79fA939B5f42aF6AF53",
+  "quote": {
+    "factor": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+    "seller": "0x528C4E1d59fD4b187461BE9c61C668928C3cf9c3",
+    "adapter": "0xfC2c5bcAeFF85E72f13ecf78101C4D4262eBd027",
+    "claimController": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+    "claimReceiver": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+    "paymentAsset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "paymentAmount": "4987500000000000",
+    "claimDataHash": "0xf96a4b94bd9d6e74bb8996acbf590e290fcd0ba54fc2610b8e8ae8ca68c7b6b6",
+    "boundsHash": "0xaecc71b27562e2f8ca66de46d810b3ddb9691cb54d75e28b3d95f4c327546628",
+    "nonce": "313905129244444925192785308587842531750",
+    "deadline": "1785006467"
+  },
+  "claimData": "0x000000000000000000000000889edc2edab5f40e902b864ad4d7ade8e412f9b1000000000000000000000000ae7ab96520de3a18e5e111b5eaab095312d7fe840000000000000000000000000000000000000000000000000011c37937e08000",
+  "boundsData": "0x0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000e52d0d30c1352",
+  "factorSignature": "0x05c1bd7739f62d9bad2635d4917ecdd244ba18236384502a4424522c0b436eac757cfbd9397071cdeb5a1bd7782de9b34560cc19075f6f98056de577ce8cd4ca1c",
+  "pricing": {
+    "mode": "operator-priced-firm-quote",
+    "source": "factor-set gross factoring spread; not a market-price guarantee",
+    "evidenceNote": "informational metadata; only the EIP-712 ClaimQuote fields are factor-signed",
+    "grossSpreadBps": "25",
+    "aquaIntentProofTx": "0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37",
+    "signedAtUnix": "1785005876",
+    "aquaProofVerification": "receipt-and-calldata-verified",
+    "aquaRouter": "0x15a82271F280D4D1485CCE1980AC3C3799b483D9",
+    "aquaStrategyHash": "0x80ccae4c9e1c0f64303fb3009f9be95f6a8da14343941dfea1d96c68748702be",
+    "aquaTakerWstEthWei": "48380478256900",
+    "aquaWethOutWei": "57142857142857",
+    "queueUnfinalizedStEthWei": "999568750531812229648",
+    "queueUnfinalizedRequests": "19"
+  },
+  "_archiveNote": "Archived post-settlement evidence for the successful factoring fill 0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611 (unstETH #130880). The quote nonce is consumed on-chain, making this envelope inert. The pricing.evidence fields are operator-CLI provenance validated BEFORE signing; only the quote struct fields are covered by the EIP-712 factor signature (see judge finding 1)."
+}

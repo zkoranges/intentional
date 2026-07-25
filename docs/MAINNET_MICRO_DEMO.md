@@ -1,15 +1,31 @@
 # Mainnet micro-demo — locked objective
 
-> Status: **PROVEN IN PRODUCTION — 2026-07-25.** Both objective proofs exist
-> on Ethereum mainnet:
+> Status: **MAINNET END-TO-END PROOF COMPLETE — 2026-07-25.** Both objective
+> proofs exist on Ethereum mainnet:
 > Aqua intent fill `0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37`
 > (block 25611688; 48380478256900 wei wstETH → 57142857142857 wei WETH, output
-> exactly equal to the router quote) and factoring settlement
+> exactly equal to the router's historical quote, minimum bound at quote minus
+> 30 bps) and factoring settlement
 > `0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611`
 > (block 25611746; seller paid exactly 0.0049875 WETH, canonical unstETH
-> #130880 minted to the factor). Outstanding: recovery + unstETH claim after
-> Lido finalization (tracked in G-M), router/maker source verification, final
-> judge review.
+> #130880 minted to the factor; after stETH's one-wei share rounding the
+> originated claim is 4999999999999999 wei with the 1 wei residual refunded —
+> the adapter's measured-delta protection working as designed).
+>
+> Scope honesty (independent judge review, accepted): the two proofs are
+> technically independent — the Aqua output did not finance the factoring
+> payment; the operator CLI validated the Aqua receipt, calldata, strategy
+> hash, amount, and WETH transfer **before signing**, and the kernel then
+> verified and settled the **signed economic quote** (the provenance evidence
+> is CLI-side, not covered by the EIP-712 signature). Both wallets were
+> controlled demo accounts with operator pricing (25 bps): this proves
+> machinery, atomicity, and real protocol integration — not market demand or
+> price discovery. The exact successful quote envelope (queue snapshot at
+> signing: 999.568750531812229648 stETH unfinalized across 19 requests) is
+> archived at `deployments/quote-envelope-unsteth-130880.json`.
+> Outstanding: reserve recovery + unstETH claim after Lido finalization
+> (tracked in G-M), router/maker explorer verification (bytecode attestation
+> published in the README), final review reconciliation.
 > This document is the single source of truth for the production demo. Any
 > change to a frozen parameter must be edited here first, then applied.
 
@@ -160,12 +176,12 @@ broadcast phase in both the complete rehearsal and the mainnet sequence.
 | G-E | `ETHERSCAN_API_KEY` in `.env` | user | **DONE** |
 | G-F | `FACTOR_PRIVATE_KEY` deriving `0x894E…fc99` in `.env` | user | **DONE** (verified; an empty duplicate template line in `.env` was removed) |
 | G-G | Factor funding for gas solvency | user | **DONE** (0.04 ETH at nonce 0) |
-| G-H | Commit clean tree; preflight (`EXPECTED_DEPLOYER_NONCE=0`) | user go, agent | pending |
+| G-H | Commit clean tree; preflight (`EXPECTED_DEPLOYER_NONCE=0`) | user go, agent | **DONE** (`693cb85`, preflight PASS at nonce 0) |
 | G-I | **v2 leg first (nonce 0)**: deploy paused `--verify` → verifier → manifest → fund 0.01 → activate → verifier | simulate agent / broadcast user-authorized | **DONE on mainnet** — all four contracts live at predicted addresses, Etherscan-verified, ACTIVE; manifest `deployments/mainnet-v2.json` |
-| G-J | **Aqua leg second**: router via `cast send --create`, then deploy/seed/ship script, then the quote-bound fill | simulate agent / broadcast user-authorized | **router + maker + strategy LIVE on canonical Aqua** (manifest `deployments/mainnet-aqua.json`; strategy `0x80ccae4c…02be`); **fill awaiting explicit authorization** — live-resume rehearsal green |
-| G-K | Frontend gate: pin `NEXT_PUBLIC_*` in Vercel, redeploy, then **accept**: public URL renders both pinned addresses with explorer links, `verify:deployment` passes against a production RPC, a wallet connects on chain 1, and the quote/fill card simulates | user + agent verification | env pinned; production deploy + acceptance in progress |
-| G-L | Seller staged (staked + exact 0.005 approval on-chain); operator firm quote (receipt-verified Aqua proof); wallet-signed fill; Etherscan receipts archived | user-authorized | seller staged on mainnet; fill awaiting Aqua receipt + authorization |
-| G-M | Recovery: pause settlement + funding, withdraw StataWETH shares; after Lido finalization, claim unstETH; confirm all recoverable value back under operator control | agent commands, user-authorized | pending — **mandatory, not optional** |
+| G-J | **Aqua leg second**: router via `cast send --create`, then deploy/seed/ship script, then the quote-bound fill | simulate agent / broadcast user-authorized | **DONE on mainnet** — strategy `0x80ccae4c…02be` on canonical Aqua; fill `0xdfb6b280…f64d37` (block 25611688), output exactly equal to the router quote |
+| G-K | Frontend gate: pin `NEXT_PUBLIC_*` in Vercel, redeploy, then **accept**: public URL renders both pinned addresses with explorer links, `verify:deployment` passes against a production RPC, a wallet connects on chain 1, and the quote/fill card simulates | user + agent verification | **DONE** — pins committed in `frontend/.env.production`, confirmed inside the served production bundle by in-browser probe; zero console errors; firm-quote endpoint deliberately fail-closed (operator-assisted beta) |
+| G-L | Seller staged (staked + exact 0.005 approval on-chain); operator firm quote (CLI-validated Aqua proof); fill; receipts + envelope archived | user-authorized | **DONE on mainnet** — fill `0x6c7dfd20…71d611` (block 25611746); first attempt `0xe2b579…69984e` exhausted its gas limit during the final WETH payment (after the Aave withdrawal path) and was fixed with an explicit ×1.5 gas cushion |
+| G-M | Recovery: pause settlement + funding, withdraw StataWETH shares; after Lido finalization, claim unstETH #130880; confirm all recoverable value back under operator control | agent commands, user-authorized | pending — **mandatory, tracked** (Lido finalization ≈ 4.7 days from fill) |
 
 Every broadcast is simulated first with the identical command minus
 `--broadcast`.

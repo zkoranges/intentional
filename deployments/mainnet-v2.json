@@ -52,9 +52,16 @@
     "aquaProofTx": "0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37",
     "revertedFirstAttempt": {
       "txHash": "0xe2b5792d443b30b2d7aa4a4582ed316ff26fe47518c4373d3d1380fefb69984e",
-      "cause": "OutOfGas inside Aave withdraw during exact materialization; fixed with x1.5 gas cushion"
+      "cause": "the first transaction underprovided total execution gas and exhausted it during the final WETH payment, after the Aave withdrawal path completed; fixed client-side with an explicit x1.5 gas-limit cushion (operational hardening based on one live observation, not a proven universal bound)"
     },
-    "note": "seller WETH delta exactly equals payment; unstETH minted directly to factor",
-    "unstETHRequestId": "130880"
+    "note": "seller authorized 0.005 stETH; after stETH one-wei share rounding the adapter measured 4999999999999999 wei, originated the Lido request on the measured amount, and refunded the 1 wei residual — the measured-delta protection working as designed. Seller WETH delta exactly equals the payment; unstETH #130880 minted directly to the factor.",
+    "unstETHRequestId": "130880",
+    "actualRequestedStETHWei": "4999999999999999",
+    "residualReturnedToSellerWei": "1",
+    "quoteEnvelopeArchive": "deployments/quote-envelope-unsteth-130880.json",
+    "queueSnapshotAtSigning": {
+      "unfinalizedStETHWei": "999568750531812229648",
+      "unfinalizedRequests": "19"
+    }
   }
 }
