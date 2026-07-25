@@ -13,7 +13,7 @@ set -Eeuo pipefail
 #
 # Required env (from the repo .env): DEPLOY_HOST, DEPLOY_SSH_KEY,
 # ETH_RPC_URL, FACTOR_PRIVATE_KEY, SIGNER_SECRET.
-# Reads contract addresses from deployments/mainnet-v2.json.
+# Reads contract addresses from a required active deployment manifest.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
@@ -27,6 +27,7 @@ MAX_QUOTE_WEI="${MAX_QUOTE_WEI:-6000000000000000}"
 SPREAD_BPS="${SPREAD_BPS:-25}"
 QUOTE_TTL_SECONDS="${QUOTE_TTL_SECONDS:-120}"
 NODE_VERSION="${NODE_VERSION:-22.13.0}"
+MANIFEST_PATH="${DEPLOYMENT_MANIFEST_PATH:-deployments/mainnet-v3.json}"
 SVC_USER=impatience
 SVC_HOME="/home/${SVC_USER}"
 APP="${SVC_HOME}/app"
@@ -38,21 +39,15 @@ manifest() {
     'import fs from "node:fs"; let o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); for (const k of process.argv[2].split(".")) o=o[k]; console.log(o);' \
     "$1" "$2"
 }
-RELEASE_STATE="$(manifest deployments/mainnet-v2.json releaseState)"
-case "${RELEASE_STATE}" in
-  retired-paused | claim-collected)
-    cat >&2 <<RETIRED
-ABORT: deployments/mainnet-v2.json reports releaseState=${RELEASE_STATE}.
-That deployment is permanently retired — its immutable factor key was exposed
-and it must never be re-armed or quoted against. Deploying the quote desk
-against it would point live infrastructure at a compromised, paused instance.
-Wait for the fresh v3 deployment and point this script at its manifest.
-RETIRED
-    exit 1
-    ;;
-esac
-KERNEL="$(manifest deployments/mainnet-v2.json contracts.kernel.address)"
-LIDO_ADAPTER="$(manifest deployments/mainnet-v2.json contracts.lidoAdapter.address)"
+[[ -f "${MANIFEST_PATH}" ]] || { echo "active deployment manifest missing: ${MANIFEST_PATH}" >&2; exit 1; }
+RELEASE_STATE="$(manifest "${MANIFEST_PATH}" releaseState)"
+[[ "${RELEASE_STATE}" == "active" ]] || {
+  echo "ABORT: ${MANIFEST_PATH} releaseState=${RELEASE_STATE}; only active is allowed" >&2
+  exit 1
+}
+KERNEL="$(manifest "${MANIFEST_PATH}" contracts.kernel.address)"
+LIDO_ADAPTER="$(manifest "${MANIFEST_PATH}" contracts.lidoAdapter.address)"
+LIDO_UNSTETH_ADAPTER="$(manifest "${MANIFEST_PATH}" contracts.lidoUnstETHExitAdapter.address)"
 
 echo "==> preflight: co-tenant safety and disk"
 "${SSH[@]}" bash -s <<PREFLIGHT
@@ -99,6 +94,7 @@ echo "==> syncing the service source"
 rsync -az -e "ssh -i ${KEY}" --delete \
   --exclude node_modules --exclude .env \
   services/quote-signer/ "${HOST}:${APP}/"
+rsync -az -e "ssh -i ${KEY}" "${MANIFEST_PATH}" "${HOST}:${APP}/deployment-manifest.json"
 "${SSH[@]}" "chown -R ${SVC_USER}:${SVC_USER} ${APP}"
 
 echo "==> writing the service environment (0600, never logged)"
@@ -109,6 +105,8 @@ ETH_RPC_URL=${RPC}
 FACTOR_PRIVATE_KEY=${FACTOR_KEY}
 KERNEL_ADDRESS=${KERNEL}
 LIDO_ADAPTER_ADDRESS=${LIDO_ADAPTER}
+LIDO_UNSTETH_ADAPTER_ADDRESS=${LIDO_UNSTETH_ADAPTER}
+DEPLOYMENT_MANIFEST=${APP}/deployment-manifest.json
 SIGNER_SECRET=${SECRET}
 MAX_QUOTE_WEI=${MAX_QUOTE_WEI}
 SPREAD_BPS=${SPREAD_BPS}

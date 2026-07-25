@@ -7,6 +7,7 @@ import { ERC4626ReserveAdapter } from "../src/adapters/ERC4626ReserveAdapter.sol
 import { AsyncClaimSettlement } from "../src/claims/AsyncClaimSettlement.sol";
 import { ProductiveFundingAccount } from "../src/claims/ProductiveFundingAccount.sol";
 import { LidoWithdrawalClaimAdapter } from "../src/claims/adapters/LidoWithdrawalClaimAdapter.sol";
+import { LidoUnstETHExitAdapter } from "../src/claims/adapters/LidoUnstETHExitAdapter.sol";
 
 abstract contract V2MainnetOpsBase is Script {
     address internal constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
@@ -20,10 +21,12 @@ abstract contract V2MainnetOpsBase is Script {
         ERC4626ReserveAdapter reserveAdapter;
         AsyncClaimSettlement settlement;
         LidoWithdrawalClaimAdapter lidoAdapter;
+        LidoUnstETHExitAdapter lidoUnstETHExitAdapter;
         bytes32 fundingCodeHash;
         bytes32 reserveCodeHash;
         bytes32 kernelCodeHash;
         bytes32 lidoAdapterCodeHash;
+        bytes32 lidoUnstETHExitAdapterCodeHash;
     }
 
     function _loadDeployment() internal view returns (LiveDeployment memory deployed) {
@@ -32,10 +35,12 @@ abstract contract V2MainnetOpsBase is Script {
         deployed.reserveAdapter = ERC4626ReserveAdapter(vm.envAddress("RESERVE_ADAPTER_ADDRESS"));
         deployed.settlement = AsyncClaimSettlement(vm.envAddress("KERNEL_ADDRESS"));
         deployed.lidoAdapter = LidoWithdrawalClaimAdapter(vm.envAddress("LIDO_ADAPTER_ADDRESS"));
+        deployed.lidoUnstETHExitAdapter = LidoUnstETHExitAdapter(vm.envAddress("LIDO_UNSTETH_ADAPTER_ADDRESS"));
         deployed.fundingCodeHash = vm.envBytes32("EXPECTED_FUNDING_CODEHASH");
         deployed.reserveCodeHash = vm.envBytes32("EXPECTED_RESERVE_CODEHASH");
         deployed.kernelCodeHash = vm.envBytes32("EXPECTED_KERNEL_CODEHASH");
         deployed.lidoAdapterCodeHash = vm.envBytes32("EXPECTED_LIDO_ADAPTER_CODEHASH");
+        deployed.lidoUnstETHExitAdapterCodeHash = vm.envBytes32("EXPECTED_LIDO_UNSTETH_ADAPTER_CODEHASH");
     }
 
     function _requireReviewedBindings(LiveDeployment memory deployed) internal view {
@@ -46,6 +51,10 @@ abstract contract V2MainnetOpsBase is Script {
         require(address(deployed.settlement).codehash == deployed.kernelCodeHash, "kernel codehash mismatch");
         require(
             address(deployed.lidoAdapter).codehash == deployed.lidoAdapterCodeHash, "Lido adapter codehash mismatch"
+        );
+        require(
+            address(deployed.lidoUnstETHExitAdapter).codehash == deployed.lidoUnstETHExitAdapterCodeHash,
+            "unstETH adapter codehash mismatch"
         );
 
         require(deployed.fundingAccount.factor() == deployed.factor, "funding factor mismatch");
@@ -69,12 +78,22 @@ abstract contract V2MainnetOpsBase is Script {
             address(deployed.settlement.fundingAccount()) == address(deployed.fundingAccount), "kernel funding mismatch"
         );
         require(deployed.settlement.isSealed(), "kernel not sealed");
-        require(deployed.settlement.adapterCount() == 1, "unexpected adapter count");
+        require(deployed.settlement.adapterCount() == 2, "unexpected adapter count");
         require(deployed.settlement.nonceFloor() == 0, "unexpected nonce floor");
         require(deployed.settlement.isAdapterAllowed(address(deployed.lidoAdapter)), "Lido adapter not allowed");
+        require(
+            deployed.settlement.isAdapterAllowed(address(deployed.lidoUnstETHExitAdapter)),
+            "unstETH adapter not allowed"
+        );
 
         require(deployed.lidoAdapter.settlement() == address(deployed.settlement), "adapter kernel mismatch");
         require(address(deployed.lidoAdapter.stETH()) == STETH, "adapter stETH mismatch");
         require(address(deployed.lidoAdapter.queue()) == QUEUE, "adapter queue mismatch");
+        require(
+            deployed.lidoUnstETHExitAdapter.settlement() == address(deployed.settlement),
+            "unstETH adapter kernel mismatch"
+        );
+        require(address(deployed.lidoUnstETHExitAdapter.stETH()) == STETH, "unstETH adapter stETH mismatch");
+        require(address(deployed.lidoUnstETHExitAdapter.queue()) == QUEUE, "unstETH adapter queue mismatch");
     }
 }

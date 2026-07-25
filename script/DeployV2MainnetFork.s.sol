@@ -10,6 +10,7 @@ import { ERC4626ReserveAdapter } from "../src/adapters/ERC4626ReserveAdapter.sol
 import { AsyncClaimSettlement } from "../src/claims/AsyncClaimSettlement.sol";
 import { ProductiveFundingAccount } from "../src/claims/ProductiveFundingAccount.sol";
 import { LidoWithdrawalClaimAdapter } from "../src/claims/adapters/LidoWithdrawalClaimAdapter.sol";
+import { LidoUnstETHExitAdapter } from "../src/claims/adapters/LidoUnstETHExitAdapter.sol";
 import { ILidoWithdrawalQueue } from "../src/claims/interfaces/ILidoWithdrawalQueue.sol";
 
 interface IMainnetWETH is IERC20 {
@@ -24,7 +25,7 @@ interface IMainnetStETH is IERC20 {
 /// @dev This script refuses every other chain. It is used only by the
 ///      disposable production rehearsal and never writes a secret to output.
 contract DeployV2MainnetFork is Script {
-    uint256 private constant PINNED_BLOCK = 25_604_561;
+    uint256 private constant PINNED_BLOCK = 25_612_678;
     uint256 private constant FUNDING_WETH = 5 ether;
     uint256 private constant SELLER_STAKE_ETH = 1 ether;
 
@@ -58,6 +59,8 @@ contract DeployV2MainnetFork is Script {
         AsyncClaimSettlement settlement = new AsyncClaimSettlement(factor, fundingAccount);
         LidoWithdrawalClaimAdapter lidoAdapter =
             new LidoWithdrawalClaimAdapter(address(settlement), IERC20(STETH), ILidoWithdrawalQueue(QUEUE));
+        LidoUnstETHExitAdapter lidoUnstETHExitAdapter =
+            new LidoUnstETHExitAdapter(address(settlement), IERC20(STETH), ILidoWithdrawalQueue(QUEUE));
 
         weth.deposit{ value: FUNDING_WETH }();
         require(weth.transfer(address(fundingAccount), FUNDING_WETH), "WETH funding transfer failed");
@@ -65,6 +68,7 @@ contract DeployV2MainnetFork is Script {
         fundingAccount.configureSettlement(address(settlement));
         fundingAccount.seal();
         settlement.allowAdapter(address(lidoAdapter));
+        settlement.allowAdapter(address(lidoUnstETHExitAdapter));
         settlement.seal();
         vm.stopBroadcast();
 
@@ -78,6 +82,7 @@ contract DeployV2MainnetFork is Script {
         require(stETH.balanceOf(seller) > 0.9 ether, "seller received insufficient stETH");
         require(settlement.factorSigner() == factor, "factor binding mismatch");
         require(settlement.isAdapterAllowed(address(lidoAdapter)), "adapter not allowed");
+        require(settlement.isAdapterAllowed(address(lidoUnstETHExitAdapter)), "unstETH adapter not allowed");
 
         console2.log("RESERVOIR_LIVE_DEPLOYMENT_BEGIN");
         console2.log(
@@ -94,6 +99,8 @@ contract DeployV2MainnetFork is Script {
                 vm.toString(address(settlement)),
                 '","lidoAdapter":"',
                 vm.toString(address(lidoAdapter)),
+                '","lidoUnstETHExitAdapter":"',
+                vm.toString(address(lidoUnstETHExitAdapter)),
                 '","fundingCodeHash":"',
                 vm.toString(address(fundingAccount).codehash),
                 '","reserveCodeHash":"',
@@ -102,6 +109,8 @@ contract DeployV2MainnetFork is Script {
                 vm.toString(address(settlement).codehash),
                 '","lidoAdapterCodeHash":"',
                 vm.toString(address(lidoAdapter).codehash),
+                '","lidoUnstETHExitAdapterCodeHash":"',
+                vm.toString(address(lidoUnstETHExitAdapter).codehash),
                 '","paymentAsset":"',
                 vm.toString(WETH),
                 '","vault":"',

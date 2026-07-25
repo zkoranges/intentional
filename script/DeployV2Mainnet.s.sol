@@ -9,6 +9,7 @@ import { ERC4626ReserveAdapter } from "../src/adapters/ERC4626ReserveAdapter.sol
 import { AsyncClaimSettlement } from "../src/claims/AsyncClaimSettlement.sol";
 import { ProductiveFundingAccount } from "../src/claims/ProductiveFundingAccount.sol";
 import { LidoWithdrawalClaimAdapter } from "../src/claims/adapters/LidoWithdrawalClaimAdapter.sol";
+import { LidoUnstETHExitAdapter } from "../src/claims/adapters/LidoUnstETHExitAdapter.sol";
 import { ILidoWithdrawalQueue } from "../src/claims/interfaces/ILidoWithdrawalQueue.sol";
 import { V2MainnetOpsBase } from "./V2MainnetOpsBase.sol";
 
@@ -38,12 +39,15 @@ contract DeployV2Mainnet is V2MainnetOpsBase {
         AsyncClaimSettlement settlement = new AsyncClaimSettlement(factor, fundingAccount);
         LidoWithdrawalClaimAdapter lidoAdapter =
             new LidoWithdrawalClaimAdapter(address(settlement), IERC20(STETH), ILidoWithdrawalQueue(QUEUE));
+        LidoUnstETHExitAdapter lidoUnstETHExitAdapter =
+            new LidoUnstETHExitAdapter(address(settlement), IERC20(STETH), ILidoWithdrawalQueue(QUEUE));
 
         fundingAccount.configureSettlement(address(settlement));
         fundingAccount.setPaused(true);
         fundingAccount.seal();
 
         settlement.allowAdapter(address(lidoAdapter));
+        settlement.allowAdapter(address(lidoUnstETHExitAdapter));
         settlement.setPaused(true);
         settlement.seal();
         vm.stopBroadcast();
@@ -55,8 +59,9 @@ contract DeployV2Mainnet is V2MainnetOpsBase {
         require(fundingAccount.settlement() == address(settlement), "settlement binding mismatch");
         require(fundingAccount.isSealed() && fundingAccount.isPaused(), "funding not sealed and paused");
         require(settlement.factorSigner() == factor, "settlement factor mismatch");
-        require(settlement.adapterCount() == 1 && settlement.nonceFloor() == 0, "kernel state mismatch");
+        require(settlement.adapterCount() == 2 && settlement.nonceFloor() == 0, "kernel state mismatch");
         require(settlement.isAdapterAllowed(address(lidoAdapter)), "Lido adapter not allowed");
+        require(settlement.isAdapterAllowed(address(lidoUnstETHExitAdapter)), "unstETH adapter not allowed");
         require(settlement.isSealed() && settlement.isPaused(), "settlement not sealed and paused");
         require(IERC20(WETH).balanceOf(address(fundingAccount)) == 0, "unexpected idle WETH");
         require(IERC20(STATA_WETH).balanceOf(address(fundingAccount)) == 0, "unexpected vault shares");
@@ -75,6 +80,8 @@ contract DeployV2Mainnet is V2MainnetOpsBase {
                 vm.toString(address(settlement)),
                 '","lidoAdapter":"',
                 vm.toString(address(lidoAdapter)),
+                '","lidoUnstETHExitAdapter":"',
+                vm.toString(address(lidoUnstETHExitAdapter)),
                 '","fundingCodeHash":"',
                 vm.toString(address(fundingAccount).codehash),
                 '","reserveCodeHash":"',
@@ -83,6 +90,8 @@ contract DeployV2Mainnet is V2MainnetOpsBase {
                 vm.toString(address(settlement).codehash),
                 '","lidoAdapterCodeHash":"',
                 vm.toString(address(lidoAdapter).codehash),
+                '","lidoUnstETHExitAdapterCodeHash":"',
+                vm.toString(address(lidoUnstETHExitAdapter).codehash),
                 '","paymentAsset":"',
                 vm.toString(WETH),
                 '","vault":"',
