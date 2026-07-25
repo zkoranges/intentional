@@ -12,7 +12,8 @@ const pageAsset = assetNames.find((name) => name.startsWith("page-"));
 
 assert.ok(pageAsset, "pinned client page bundle is missing");
 const pageBundle = await readFile(join(assetsDirectory.pathname, pageAsset), "utf8");
-assert.match(pageBundle, /Use a firm quote/);
+assert.match(pageBundle, /Factoring markets/);
+assert.match(pageBundle, /Sell now/);
 assert.match(pageBundle, /WETH now/);
 assert.match(pageBundle, /Approve stETH/);
 assert.match(pageBundle, new RegExp(expectedKernel, "i"));

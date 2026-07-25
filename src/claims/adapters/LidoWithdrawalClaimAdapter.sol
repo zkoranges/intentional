@@ -54,9 +54,7 @@ contract LidoWithdrawalClaimAdapter is IClaimAdapter {
     error InsufficientRequestShares(uint256 actual, uint256 minimum);
     error RequestAlreadyClaimed(uint256 requestId);
     error ResidualQueueAllowance(uint256 allowance);
-    error PreexistingStETHShares(uint256 shares);
     error ResidualStETHShares(uint256 shares);
-    error ResidualStETH(uint256 balance);
 
     uint256 public constant MIN_STETH_WITHDRAWAL_AMOUNT = 100;
     uint256 public constant MAX_STETH_WITHDRAWAL_AMOUNT = 1000 ether;

@@ -24,6 +24,8 @@ contract AsyncClaimSettlement is EIP712, ReentrancyGuardTransient {
     error OnlySeller(address caller, address seller);
     error QuoteFactorMismatch(address supplied);
     error ClaimPartyMissing();
+    error ClaimControllerIsSeller(address seller);
+    error ClaimReceiverIsSeller(address seller);
     error PaymentAssetMismatch(address supplied, address expected);
     error InvalidPaymentAmount();
     error ClaimDataHashMismatch(bytes32 supplied, bytes32 expected);
@@ -69,6 +71,8 @@ contract AsyncClaimSettlement is EIP712, ReentrancyGuardTransient {
     address public immutable factorSigner;
     ProductiveFundingAccount public immutable fundingAccount;
 
+    // Core bindings are sealed, while this trust boundary intentionally
+    // remains factor-controlled for emergency revocation and adapter upgrades.
     mapping(address adapter => bool allowed) public isAdapterAllowed;
     mapping(uint256 nonce => bool used) public nonceUsed;
 
@@ -191,6 +195,12 @@ contract AsyncClaimSettlement is EIP712, ReentrancyGuardTransient {
         }
         if (quote.claimController == address(0) || quote.claimReceiver == address(0)) {
             revert ClaimPartyMissing();
+        }
+        if (quote.claimController == quote.seller) {
+            revert ClaimControllerIsSeller(quote.seller);
+        }
+        if (quote.claimReceiver == quote.seller) {
+            revert ClaimReceiverIsSeller(quote.seller);
         }
 
         address expectedPaymentAsset = address(fundingAccount.paymentAsset());

@@ -69,6 +69,9 @@ const account = privateKeyToAccount(factorKey);
 const kernel = address("KERNEL_ADDRESS");
 const adapter = address("LIDO_ADAPTER_ADDRESS");
 const seller = address("SELLER_ADDRESS");
+if (seller === account.address) {
+  throw new Error("SELLER_ADDRESS must differ from the factor claim destination");
+}
 const requestedStEth = parseEther(required("REQUESTED_STETH"));
 const paymentAmount = parseEther(required("PAYMENT_WETH"));
 const maxStEthShortfall = unsigned(

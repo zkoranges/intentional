@@ -574,6 +574,13 @@ main {
   color: white;
   font-size: 10px;
   font-weight: 820;
+  overflow: hidden;
+}
+
+.tokenIcon img {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .stethIcon {
@@ -708,6 +715,21 @@ main {
   border-radius: 50%;
 }
 
+.quoteStatus {
+  padding: 4px 7px;
+  border-radius: 8px;
+}
+
+.quoteStatus.firm {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.quoteStatus.indicative {
+  background: var(--pink-soft);
+  color: #b9a0f8;
+}
+
 .impatienceRoute {
   background: var(--pink);
   box-shadow: 0 0 0 3px var(--pink-soft);
@@ -752,6 +774,18 @@ main {
   background: var(--surface-soft);
   box-shadow: none;
   color: #66666f;
+}
+
+.actionButton.indicativeAction {
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--pink-soft);
+  box-shadow: none;
+  color: #c3affb;
+}
+
+.actionButton.indicativeAction:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.2);
+  box-shadow: none;
 }
 
 .statusBar {

@@ -5,6 +5,7 @@ import {
   formatEther,
   getAddress,
   parseEther,
+  zeroAddress,
   type Address,
   type Hash,
 } from "viem";
@@ -30,6 +31,11 @@ import {
   type LiveWalletSnapshot,
   type ReservoirQuoteCheck,
 } from "../lib/ethereum";
+import {
+  formatQuoteAmount,
+  requestLidoQuote,
+  type LidoQuoteResponse,
+} from "../lib/lido-quote";
 
 type ActionState = "idle" | "connecting" | "reading" | "signing" | "mining";
 type ExitMode = "instant" | "queue";
@@ -51,7 +57,8 @@ const MARKETS = [
     payout: "ETH",
     status: "Open",
     active: true,
-    icon: "S",
+    icon: "/icons/steth.svg",
+    iconAlt: "stETH",
     iconClass: "stethIcon",
   },
   {
@@ -61,7 +68,8 @@ const MARKETS = [
     payout: "ETH",
     status: "Next",
     active: false,
-    icon: "E",
+    icon: "/icons/etherfi.svg",
+    iconAlt: "Ether.fi",
     iconClass: "etherfiIcon",
   },
   {
@@ -71,7 +79,8 @@ const MARKETS = [
     payout: "Vault asset",
     status: "Planned",
     active: false,
-    icon: "V",
+    icon: "/icons/vault.svg",
+    iconAlt: "Vault",
     iconClass: "vaultIcon",
   },
 ] as const;
@@ -142,17 +151,17 @@ export default function Home() {
   const [status, setStatus] = useState(
     "Connect your wallet to start an exit.",
   );
-  const [mode, setMode] = useState<ExitMode>(
-    RESERVOIR_DEPLOYMENT ? "instant" : "queue",
-  );
+  const [mode, setMode] = useState<ExitMode>("instant");
   const [amountInput, setAmountInput] = useState("0.00");
   const [actions, setActions] = useState<CompletedAction[]>([]);
   const [lastMintedRequest, setLastMintedRequest] = useState<bigint | null>(
     null,
   );
-  const [quoteInput, setQuoteInput] = useState("");
   const [quoteCheck, setQuoteCheck] = useState<ReservoirQuoteCheck | null>(null);
-  const [quoteModalOpen, setQuoteModalOpen] = useState(false);
+  const [lidoQuote, setLidoQuote] = useState<LidoQuoteResponse | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
 
   const busy = action !== "idle";
   const amount = useMemo(() => {
@@ -162,9 +171,10 @@ export default function Home() {
       return 0n;
     }
   }, [amountInput]);
+  const amountWithinLidoLimits =
+    amount >= MIN_LIDO_REQUEST && amount <= MAX_LIDO_REQUEST;
   const amountValid =
-    amount >= MIN_LIDO_REQUEST &&
-    amount <= MAX_LIDO_REQUEST &&
+    amountWithinLidoLimits &&
     Boolean(snapshot && amount <= snapshot.stEthBalance);
   const queueApproved = Boolean(
     snapshot && amount > 0n && snapshot.queueAllowance === amount,
@@ -245,19 +255,69 @@ export default function Home() {
   }, [account, refresh]);
 
   useEffect(() => {
-    if (!quoteModalOpen) return;
+    if (mode !== "instant" || !amountWithinLidoLimits) {
+      setLidoQuote(null);
+      setQuoteCheck(null);
+      setQuoteError(null);
+      setQuoteLoading(false);
+      return;
+    }
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setQuoteModalOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      setQuoteLoading(true);
+      setQuoteError(null);
+      setLidoQuote(null);
+      setQuoteCheck(null);
+      void requestLidoQuote(
+        account ?? zeroAddress,
+        amountInput,
+        controller.signal,
+      )
+        .then(async (nextQuote) => {
+          if (controller.signal.aborted) return;
+          if (nextQuote.kind === "firm") {
+            const injected = getInjectedProvider();
+            if (
+              !account ||
+              !injected ||
+              !nextQuote.envelope ||
+              !RESERVOIR_DEPLOYMENT
+            ) {
+              throw new Error(
+                "The firm quote deployment is not pinned in this app build",
+              );
+            }
+            const checked = await verifyReservoirQuote(
+              injected,
+              account,
+              JSON.stringify(nextQuote.envelope),
+            );
+            if (controller.signal.aborted) return;
+            setQuoteCheck(checked);
+          }
+          setLidoQuote(nextQuote);
+        })
+        .catch((error) => {
+          if (controller.signal.aborted) return;
+          setQuoteError(errorMessage(error));
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setQuoteLoading(false);
+        });
+    }, 350);
+
     return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
+      window.clearTimeout(timeout);
+      controller.abort();
     };
-  }, [quoteModalOpen]);
+  }, [
+    account,
+    amountInput,
+    amountWithinLidoLimits,
+    mode,
+    quoteRefreshKey,
+  ]);
 
   async function connect() {
     const injected = getInjectedProvider();
@@ -382,36 +442,6 @@ export default function Home() {
     }
   }
 
-  async function inspectQuote() {
-    const injected = getInjectedProvider();
-    if (
-      !injected ||
-      !account ||
-      !quoteInput.trim() ||
-      !RESERVOIR_DEPLOYMENT
-    )
-      return;
-    setAction("reading");
-    setQuoteCheck(null);
-    setStatus("Checking quote terms and available liquidity.");
-    try {
-      const checked = await verifyReservoirQuote(
-        injected,
-        account,
-        quoteInput,
-      );
-      setQuoteCheck(checked);
-      setQuoteModalOpen(false);
-      setStatus(
-        `Firm quote ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH.`,
-      );
-    } catch (error) {
-      setStatus(errorMessage(error));
-    } finally {
-      setAction("idle");
-    }
-  }
-
   async function approveReservoir() {
     const injected = getInjectedProvider();
     if (!injected || !account || !quoteCheck) return;
@@ -428,8 +458,10 @@ export default function Home() {
         ...current,
         { label: "stETH approved for Impatience", hash: receipt.transactionHash },
       ]);
-      setStatus("Approval confirmed. Re-check the quote before exiting.");
+      setStatus("Approval confirmed. Refreshing your firm quote.");
       setQuoteCheck(null);
+      setLidoQuote(null);
+      setQuoteRefreshKey((value) => value + 1);
     } catch (error) {
       await handleMinedActionError(
         error,
@@ -474,9 +506,7 @@ export default function Home() {
     setMode(nextMode);
     setStatus(
       nextMode === "instant"
-        ? RESERVOIR_DEPLOYMENT
-          ? "Import a firm quote to continue."
-          : "Instant exits are not active yet. The Lido queue remains available."
+        ? "Enter an amount to receive a live Lido factoring quote."
         : "Use Lido directly and keep the withdrawal claim in your wallet.",
     );
   }
@@ -489,9 +519,13 @@ export default function Home() {
   }
 
   const instantPayment = quoteCheck
-    ? formatMainnetAmount(BigInt(quoteCheck.envelope.quote.paymentAmount))
-    : "—";
-  const discount = quoteDiscount(quoteCheck);
+    ? formatQuoteAmount(quoteCheck.envelope.quote.paymentAmount)
+    : lidoQuote
+      ? formatQuoteAmount(lidoQuote.paymentAmount)
+      : "0.00";
+  const discount = lidoQuote
+    ? `${(lidoQuote.discountBps / 100).toFixed(2)}%`
+    : quoteDiscount(quoteCheck);
 
   return (
     <>
@@ -552,7 +586,7 @@ export default function Home() {
               >
                 <div className="marketIdentity">
                   <span className={`tokenIcon ${market.iconClass}`}>
-                    {market.icon}
+                    <img src={market.icon} alt={market.iconAlt} width={18} height={18} />
                   </span>
                   <div>
                     <strong>{market.name}</strong>
@@ -644,7 +678,9 @@ export default function Home() {
                 placeholder="0.00"
               />
               <div className="tokenSelect">
-                <span className="tokenIcon stethIcon">S</span>
+                <span className="tokenIcon stethIcon">
+                  <img src="/icons/steth.svg" alt="stETH" width={18} height={18} />
+                </span>
                 stETH
               </div>
             </div>
@@ -684,7 +720,17 @@ export default function Home() {
           <div className="tokenPanel outputPanel">
             <div className="tokenPanelLabel">
               <span>You receive</span>
-              <span>{mode === "instant" ? "Firm quote" : "After request"}</span>
+              <span>
+                {mode === "instant"
+                  ? quoteLoading
+                    ? "Finding quote"
+                    : lidoQuote?.kind === "firm"
+                      ? "Firm quote"
+                      : lidoQuote
+                        ? "Indicative quote"
+                        : "Live quote"
+                  : "After request"}
+              </span>
             </div>
             <div className="tokenRow">
               <output>
@@ -698,7 +744,12 @@ export default function Home() {
                 <span
                   className={`tokenIcon ${mode === "instant" ? "wethIcon" : "nftIcon"}`}
                 >
-                  {mode === "instant" ? "W" : "N"}
+                  <img
+                    src={mode === "instant" ? "/icons/weth.svg" : "/icons/unsteth.svg"}
+                    alt={mode === "instant" ? "WETH" : "unstETH"}
+                    width={18}
+                    height={18}
+                  />
                 </span>
                 {mode === "instant" ? "WETH" : "unstETH"}
               </div>
@@ -723,6 +774,22 @@ export default function Home() {
                 {mode === "instant" ? "Liquidity provider" : "You"}
               </strong>
             </div>
+            {mode === "instant" && lidoQuote && (
+              <div>
+                <span>Quote status</span>
+                <strong
+                  className={
+                    lidoQuote.kind === "firm"
+                      ? "quoteStatus firm"
+                      : "quoteStatus indicative"
+                  }
+                >
+                  {lidoQuote.kind === "firm"
+                    ? "Firm · fillable"
+                    : "Indicative · preview"}
+                </strong>
+              </div>
+            )}
           </div>
 
           <div className="primaryAction">
@@ -739,17 +806,29 @@ export default function Home() {
                 Switch to Ethereum
               </button>
             ) : mode === "instant" ? (
-              !RESERVOIR_DEPLOYMENT ? (
+              !amountValid ? (
                 <button className="actionButton" disabled>
-                  Instant liquidity is offline
+                  {amountIssue}
                 </button>
-              ) : !quoteCheck ? (
+              ) : quoteLoading ? (
+                <button className="actionButton" disabled>
+                  Finding your quote…
+                </button>
+              ) : quoteError || !lidoQuote ? (
                 <button
                   className="actionButton"
-                  onClick={() => setQuoteModalOpen(true)}
-                  disabled={busy || !amountValid}
+                  onClick={() => setQuoteRefreshKey((value) => value + 1)}
+                  disabled={busy}
                 >
-                  {amountIssue ?? "Use a firm quote"}
+                  {quoteError ? "Try quote again" : "Get quote"}
+                </button>
+              ) : lidoQuote.kind === "indicative" || !quoteCheck ? (
+                <button
+                  className="actionButton indicativeAction"
+                  onClick={() => setQuoteRefreshKey((value) => value + 1)}
+                  disabled={busy}
+                >
+                  Refresh indicative quote
                 </button>
               ) : quoteCheck.allowance !== quoteCheck.requestedStEth ? (
                 <button
@@ -799,7 +878,13 @@ export default function Home() {
                     : "statusDot"
               }
             />
-            <p>{status}</p>
+            <p>
+              {mode === "instant" && quoteError
+                ? quoteError
+                : mode === "instant" && lidoQuote?.kind === "indicative"
+                  ? "Indicative pricing is available. Firm settlement activates with the funded factor reserve."
+                  : status}
+            </p>
             {account && (
               <button onClick={() => refresh()} disabled={busy}>
                 Refresh
@@ -807,12 +892,12 @@ export default function Home() {
             )}
           </div>
 
-          {mode === "instant" && !RESERVOIR_DEPLOYMENT && (
+          {mode === "instant" && lidoQuote?.kind === "indicative" && (
             <button
               className="fallbackLink"
               onClick={() => selectMode("queue")}
             >
-              Continue with the Lido queue instead →
+              Need to withdraw today? Join the Lido queue →
             </button>
           )}
         </section>
@@ -831,7 +916,9 @@ export default function Home() {
               {snapshot.requests.map((request) => (
                 <article key={request.requestId.toString()}>
                   <div className="positionIdentity">
-                    <span className="tokenIcon nftIcon">N</span>
+                    <span className="tokenIcon nftIcon">
+                      <img src="/icons/unsteth.svg" alt="unstETH" width={18} height={18} />
+                    </span>
                     <div>
                       <strong>unstETH #{request.requestId}</strong>
                       <small>{unixDate(request.timestamp)}</small>
@@ -989,63 +1076,6 @@ export default function Home() {
         <p>Non-custodial beta · Review every wallet request before signing.</p>
       </footer>
 
-      {quoteModalOpen && (
-        <div
-          className="modalBackdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setQuoteModalOpen(false);
-          }}
-        >
-          <section
-            className="quoteModal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="quote-modal-title"
-          >
-            <div className="modalHeader">
-              <div>
-                <span>Exit now</span>
-                <h2 id="quote-modal-title">Use a firm quote</h2>
-              </div>
-              <button
-                className="closeButton"
-                onClick={() => setQuoteModalOpen(false)}
-                aria-label="Close quote dialog"
-              >
-                ×
-              </button>
-            </div>
-            <p>
-              Paste the signed quote supplied by your liquidity provider.
-              Impatience checks the amount, expiry, contracts and available
-              liquidity before requesting approval.
-            </p>
-            <textarea
-              value={quoteInput}
-              onChange={(event) => {
-                setQuoteInput(event.target.value);
-                setQuoteCheck(null);
-              }}
-              placeholder="Paste signed quote JSON"
-              aria-label="Signed Impatience quote"
-              spellCheck={false}
-              autoFocus
-            />
-            <button
-              className="actionButton"
-              onClick={inspectQuote}
-              disabled={busy || !quoteInput.trim()}
-            >
-              Check quote
-            </button>
-            <small>
-              Quotes are short-lived and bound to this wallet. Impatience never
-              stores your wallet key.
-            </small>
-          </section>
-        </div>
-      )}
     </>
   );
 }

@@ -201,6 +201,42 @@ contract LidoWithdrawalClaimForkTest is Test {
         _emitJuryProof(navBefore, navAfter, fixedShares, requestedStETH, acquired.pendingReceived);
     }
 
+    function test_ProductionLidoPathRejectsSellerAsClaimReceiverBeforeMovement() public {
+        bytes memory claimData = abi.encode(
+            LidoWithdrawalClaimAdapter.LidoOriginateData({
+                queue: QUEUE, stETH: STETH, requestedStETH: lidoAdapter.MIN_STETH_WITHDRAWAL_AMOUNT()
+            })
+        );
+        bytes memory boundsData = abi.encode(
+            LidoWithdrawalClaimAdapter.LidoOriginateBounds({ maxStETHShortfall: 0, minAmountOfShares: 1 })
+        );
+        ClaimTypes.Quote memory quote = ClaimTypes.Quote({
+            factor: factor,
+            seller: seller,
+            adapter: address(lidoAdapter),
+            claimController: factor,
+            claimReceiver: seller,
+            paymentAsset: WETH,
+            paymentAmount: PAYMENT_WETH,
+            claimDataHash: keccak256(claimData),
+            boundsHash: keccak256(boundsData),
+            nonce: QUOTE_NONCE,
+            deadline: block.timestamp + 10 minutes
+        });
+
+        uint256 lastRequestBefore = WITHDRAWAL_QUEUE.getLastRequestId();
+        uint256 sellerWethBefore = MAINNET_WETH.balanceOf(seller);
+        bytes memory signature = _sign(quote);
+
+        vm.prank(seller);
+        vm.expectRevert(abi.encodeWithSelector(AsyncClaimSettlement.ClaimReceiverIsSeller.selector, seller));
+        settlement.fill(quote, claimData, boundsData, signature);
+
+        assertEq(WITHDRAWAL_QUEUE.getLastRequestId(), lastRequestBefore);
+        assertEq(MAINNET_WETH.balanceOf(seller), sellerWethBefore);
+        assertFalse(settlement.nonceUsed(quote.nonce));
+    }
+
     function _assertFundingEntirelyInShares() private view {
         assertEq(MAINNET_WETH.balanceOf(address(fundingAccount)), 0);
         assertEq(MAINNET_WETH.balanceOf(address(reserveAdapter)), 0);

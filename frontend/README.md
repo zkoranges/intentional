@@ -22,10 +22,12 @@ With an injected wallet on Ethereum mainnet, the page:
    verifies canonical WETH payment plus canonical Lido ownership/share state
    after the receipt.
 
-The public frontend is live, but the current build keeps Reservoir fills
-disabled because no Reservoir contract is persistently deployed or funded.
-Canonical Lido queue operations remain live. There is deliberately no
-unauthenticated quote API or browser-held factor key.
+The same-origin `/api/quote/lido` endpoint returns immediate indicative pricing
+without requiring a wallet. It upgrades to a seller-bound, signed firm quote
+only when a reviewed kernel, funded reserve, RPC, and dedicated capped quote
+signer are all configured. The current public build remains indicative because
+no Reservoir contract is persistently deployed or funded. Canonical Lido queue
+operations remain live, and no signing key enters the browser.
 
 ## Quote validation
 
@@ -40,7 +42,7 @@ after the reviewed mainnet manifest exists. It then checks:
 - sealed kernel/funding account and allowlisted adapter;
 - EIP-712 signature from the factor EOA or ERC-1271 contract wallet;
 - claim and bounds hashes;
-- seller, factor, receiver, nonce, and deadline;
+- seller, factor, buyer-controlled claim destinations, nonce, and deadline;
 - productive reserve capacity for the exact payment;
 - the seller's current stETH balance and allowance; and
 - the signed stETH shortfall and Lido-share floor.
@@ -91,12 +93,29 @@ npm run quote:lido > /tmp/reservoir-quote.json
 ```
 
 All values are validated against the target chain before signing. The default
-deadline is ten minutes from the target chain's latest block timestamp. Never
-commit the output, environment, RPC credential, or factor key.
+deadline is ten minutes from the target chain's latest block timestamp. The
+kernel rejects deadlines more than fifteen minutes ahead, so generate the live
+quote only after the seller is ready to fill. The operator CLI and kernel both
+reject any quote that leaves the claim controller or receiver with the seller.
+Never commit the output, environment, RPC credential, or factor key.
 
 An EOA factor must have no EIP-7702 delegation code unless the delegated
 implementation validates the quote through ERC-1271. Otherwise use a reviewed
 ERC-1271 smart account.
+
+## In-app quote service
+
+The app requests a quote automatically after a valid stETH amount is entered.
+With no firm configuration, the endpoint returns a clearly labelled
+`indicative` quote using `LIDO_QUOTE_DISCOUNT_BPS`. This preview cannot be
+filled.
+
+Firm mode requires all server-side values in `.env.example`. The service
+rechecks chain 1, canonical Lido bindings, kernel state, reserve capacity, and
+queue state before signing a ten-minute quote. Use
+`LIDO_QUOTE_SIGNER_PRIVATE_KEY` only for a dedicated, capped quote signer; never
+reuse a permanent deployer or unrestricted treasury key. `FACTOR_ADDRESS` may
+point to a reviewed ERC-1271 account that authorizes the dedicated signer.
 
 ## Security boundary
 
@@ -127,7 +146,7 @@ Use `EXPECTED_RELEASE_STATE=funded-paused` or `active` with a nonzero
 `MIN_CAPACITY_WEI` only after separately authorized funding. See
 [`docs/LIVE_ACTIVATION.md`](../docs/LIVE_ACTIVATION.md).
 
-The frontend has no persistent backend. Local `.env*`, `.vercel`, build
-outputs, raw broadcast records, and quote files are ignored and must not be
-committed. A sanitized public deployment manifest is committed only through
-the review procedure in the activation runbook.
+The quote route is stateless and stores no requests or signatures. Local
+`.env*`, `.vercel`, build outputs, raw broadcast records, and quote files are
+ignored and must not be committed. A sanitized public deployment manifest is
+committed only through the review procedure in the activation runbook.

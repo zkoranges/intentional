@@ -147,7 +147,8 @@ The verifier checks:
 - chain ID, a code-free factor, and runtime code at every dependency;
 - exact equality to the four manifest-reviewed runtime code hashes;
 - factor, funding, reserve, settlement, and Lido-adapter bindings;
-- sealed configuration, adapter count, nonce floor, and allowlisting;
+- sealed core configuration plus the current factor-controlled adapter count,
+  nonce floor, and allowlisting;
 - zero idle threshold and zero liquidity buffer;
 - canonical WETH/StataWETH/stETH/queue endpoints; and
 - paused state, zero WETH, zero shares, and zero capacity.
@@ -235,9 +236,19 @@ Only after active verification:
 2. rebuild and redeploy the exact reviewed frontend commit;
 3. confirm the page visibly renders both exact pinned addresses with explorer
    links and no longer says `Awaiting reviewed deployment`;
-4. create a short-lived, seller-specific, nonce-bound quote offline;
-5. execute one deliberately small seller fill; and
-6. verify the public transaction, exact WETH delta, unstETH ownership and share
+4. configure the stateless quote route with the reviewed addresses, RPC,
+   discount policy, and a dedicated capped quote signer (preferably authorized
+   by a reviewed ERC-1271 factor account); never use a permanent deployer or
+   unrestricted treasury key in hosting;
+5. when the seller is ready, request a seller-specific, nonce-bound quote with
+   the default target-chain deadline of approximately ten minutes; the kernel
+   accepts only deadlines no more than fifteen minutes ahead, so do not
+   pre-sign the live quote earlier in the day;
+6. execute the rehearsed `0.9 stETH`-scale seller fill rather than using
+   Lido's rounding-sensitive protocol minimum; and
+7. verify the public transaction, exact WETH delta, unstETH ownership and share
    amount, zero seller allowance, and remaining reserve NAV.
 
-The factor signer never enters the frontend or a hosting provider.
+The factor signer never enters the browser. Hosting may hold only the dedicated
+capped quote signer described above; administrative and unrestricted treasury
+keys remain offline.

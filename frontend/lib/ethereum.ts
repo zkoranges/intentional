@@ -581,6 +581,14 @@ export async function verifyReservoirQuote(
   if (envelope.quote.seller.toLowerCase() !== account.toLowerCase()) {
     throw new Error("This quote is signed for a different seller");
   }
+  if (
+    envelope.quote.claimController.toLowerCase() ===
+      envelope.quote.seller.toLowerCase() ||
+    envelope.quote.claimReceiver.toLowerCase() ===
+      envelope.quote.seller.toLowerCase()
+  ) {
+    throw new Error("The seller cannot remain the claim controller or receiver");
+  }
   if (envelope.quote.paymentAsset !== ADDRESSES.weth) {
     throw new Error("The live Lido route only accepts WETH payment quotes");
   }

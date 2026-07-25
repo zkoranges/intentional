@@ -220,7 +220,7 @@ contract AsyncClaimLidoIntegrationTest is Test {
             factor: factor,
             seller: seller,
             adapter: address(lidoAdapter),
-            claimController: seller,
+            claimController: factor,
             claimReceiver: factor,
             paymentAsset: address(weth),
             paymentAmount: PAYMENT,

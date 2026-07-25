@@ -359,7 +359,7 @@ contract LidoWithdrawalClaimAdapterTest is Test {
     }
 
     function _context() private view returns (ClaimTypes.ClaimContext memory) {
-        return ClaimTypes.ClaimContext({ seller: seller, claimController: seller, claimReceiver: receiver });
+        return ClaimTypes.ClaimContext({ seller: seller, claimController: receiver, claimReceiver: receiver });
     }
 
     function _claimData(uint256 requested) private view returns (bytes memory) {

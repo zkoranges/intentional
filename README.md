@@ -148,8 +148,8 @@ Release record on 2026-07-25:
 
 | Surface | Result |
 |---|---:|
-| Deterministic Foundry suites | 186 passed, 0 failed, 0 skipped |
-| Production-contract fork suites | 9 passed, 0 failed, 0 skipped |
+| Deterministic Foundry suites | 187 passed, 0 failed, 0 skipped |
+| Production-contract fork suites | 10 passed, 0 failed, 0 skipped |
 | Exact deploy/sign/approve/fill rehearsal | passed |
 | Frontend rendered tests | 5 passed |
 | `npm test` Vinext build and rendered assertions | passed |
@@ -209,10 +209,11 @@ seller --+--> AsyncClaimSettlement
 ```
 
 [`AsyncClaimSettlement`](src/claims/AsyncClaimSettlement.sol) validates the
-sealed configuration, seller, signature, hashes, deadline, nonce, adapter, and
-full payment capacity. It consumes the nonce before external calls, acquires
-and verifies the claim, then materializes and pays exactly. Any later failure
-rolls the entire transaction back.
+sealed core configuration, seller, buyer-side claim destinations, signature,
+hashes, deadline, nonce, current mutable adapter allowlist, and full payment
+capacity. It consumes the nonce before external calls, acquires and verifies
+the claim, then materializes and pays exactly. Any later failure rolls the
+entire transaction back.
 
 [`ProductiveFundingAccount`](src/claims/ProductiveFundingAccount.sol) holds
 only WETH or StataWETH shares. It exposes view-safe capacity, exact
@@ -221,7 +222,8 @@ materialization, reinvestment/top-up, pause, and paused recovery.
 [`LidoWithdrawalClaimAdapter`](src/claims/adapters/LidoWithdrawalClaimAdapter.sol)
 pulls the signed maximum stETH, requests only the measured receipt, enforces
 live Lido limits and a signed shares floor, mints directly to the factor, and
-returns any transaction-relative residue.
+returns any transaction-relative residue. Pre-existing donated stETH shares
+remain untouched and are intentionally unrecoverable through the adapter.
 
 [`ERC8161RedeemClaimAdapter`](src/claims/adapters/ERC8161RedeemClaimAdapter.sol)
 handles both Pending and Claimable balances. It never assumes those states are
@@ -231,9 +233,10 @@ measured postconditions.
 ## Scope and risk
 
 v2 does not build a marketplace, solver network, indexer, price oracle,
-predictive model, quote backend, custody wallet, cross-currency settlement,
-request-ID-zero support, generic multi-ID routing, or live ERC-8161
-integration.
+predictive model, custody wallet, cross-currency settlement, request-ID-zero
+support, generic multi-ID routing, or live ERC-8161 integration. It includes a
+minimal stateless Lido quote endpoint: indicative pricing by default and
+capacity-checked, factor-signed quotes only after explicit live configuration.
 
 The factor prices queue time, impairment, slashing, gas, and capital cost
 offchain. Lido factoring is expected to be episodic stress liquidity, not an

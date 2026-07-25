@@ -33,8 +33,10 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "25%",
     "50%",
     "Max",
-    "Use a firm quote",
-    "Instant liquidity is offline",
+    "Finding your quote",
+    "Refresh indicative quote",
+    "Firm · fillable",
+    "Indicative · preview",
     "Request withdrawal",
     "Onchain claims",
     "Claim ETH",
@@ -109,11 +111,20 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
     new URL("lib/ethereum.ts", projectRoot),
     "utf8",
   );
+  const quoteClient = await readFile(
+    new URL("lib/lido-quote.ts", projectRoot),
+    "utf8",
+  );
+  const quoteCli = await readFile(
+    new URL("scripts/create-lido-quote.mjs", projectRoot),
+    "utf8",
+  );
 
   for (const guard of [
     "disabled until the reviewed deployment is pinned",
     "does not use the reviewed Reservoir deployment",
     "different seller",
+    "seller cannot remain the claim controller or receiver",
     "only accepts WETH",
     "quote has expired",
     "undeployed kernel or adapter",
@@ -131,9 +142,15 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(page, /snapshot\.queueAllowance === amount/);
   assert.match(page, /quoteCheck\.allowance !== quoteCheck\.requestedStEth/);
   assert.match(page, /RESERVOIR_DEPLOYMENT/);
-  assert.match(page, /Paste signed quote JSON/);
-  assert.match(page, /Use a firm quote/);
+  assert.match(page, /requestLidoQuote/);
+  assert.match(quoteClient, /api\/quote\/lido/);
   assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
+  assert.match(ethereum, /claimController\.toLowerCase\(\)/);
+  assert.match(ethereum, /claimReceiver\.toLowerCase\(\)/);
+  assert.match(
+    quoteCli,
+    /SELLER_ADDRESS must differ from the factor claim destination/,
+  );
   assert.match(ethereum, /hasExactAllowance\(currentAllowance, amount\)/);
   assert.match(ethereum, /hasExactAllowance\(fillAllowance, check\.requestedStEth\)/);
   assert.match(page, /error instanceof MinedTransactionVerificationError/);
@@ -163,7 +180,7 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Connect wallet/);
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
-  assert.match(pageBundle, /Instant liquidity is offline/);
+  assert.match(pageBundle, /Refresh indicative quote/);
   assert.match(pageBundle, /Future value, liquid today/);
   assert.match(pageBundle, /Insufficient stETH balance/);
   assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);

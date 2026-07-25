@@ -199,6 +199,32 @@ contract AsyncClaimSettlementTest is Test {
         settlement.fill(quote, claimData, boundsData, signature);
     }
 
+    function test_SellerCannotRemainClaimControllerOrReceiver() public {
+        ClaimTypes.Quote memory quote = _quote(81, address(claimAdapter));
+        quote.claimController = seller;
+        bytes memory signature = _sign(quote, FACTOR_KEY, settlement);
+
+        vm.prank(seller);
+        vm.expectRevert(abi.encodeWithSelector(AsyncClaimSettlement.ClaimControllerIsSeller.selector, seller));
+        settlement.fill(quote, claimData, boundsData, signature);
+
+        assertFalse(settlement.nonceUsed(quote.nonce));
+        assertEq(claimAdapter.acquireCount(), 0);
+        assertEq(paymentAsset.balanceOf(seller), 0);
+
+        quote = _quote(82, address(claimAdapter));
+        quote.claimReceiver = seller;
+        signature = _sign(quote, FACTOR_KEY, settlement);
+
+        vm.prank(seller);
+        vm.expectRevert(abi.encodeWithSelector(AsyncClaimSettlement.ClaimReceiverIsSeller.selector, seller));
+        settlement.fill(quote, claimData, boundsData, signature);
+
+        assertFalse(settlement.nonceUsed(quote.nonce));
+        assertEq(claimAdapter.acquireCount(), 0);
+        assertEq(paymentAsset.balanceOf(seller), 0);
+    }
+
     function test_ExpiredQuoteRevertsWithoutConsumingNonce() public {
         ClaimTypes.Quote memory quote = _quote(9, address(claimAdapter));
         quote.deadline = block.timestamp + 1;

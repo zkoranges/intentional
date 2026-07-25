@@ -124,7 +124,10 @@ Rules:
 - `inspect` is view-safe.
 - `acquire` is callable only by the immutable settlement kernel.
 - Every adapter is bound to one protocol endpoint or vault.
-- The kernel allowlists adapters before sealing.
+- The kernel requires at least one allowlisted adapter before sealing its core
+  bindings. The factor may still revoke or add adapters after sealing for
+  emergency response and upgrades; the current allowlist is a mutable trust
+  boundary and must be verified at fill time.
 - Adapter-specific claim and bounds bytes are hash-bound by the quote.
 - All acquisition-critical checks use state and balance deltas.
 - A successful call leaves no unintended token, share, NFT, WETH, or native
@@ -170,6 +173,7 @@ ERC-1271 contract wallet. A valid quote requires:
 - `paymentAsset` equals the funding account asset;
 - `paymentAmount > 0`;
 - `claimController` and `claimReceiver` are nonzero;
+- neither `claimController` nor `claimReceiver` equals the seller;
 - adapter-specific validation rejects the adapter itself as a claim custodian;
 - the supplied byte hashes equal the signed hashes;
 - `block.timestamp <= deadline`;
@@ -399,7 +403,8 @@ struct LidoOriginateBounds {
 Flow:
 
 1. require `context.seller == msg.sender` at the kernel and a nonzero NFT
-   receiver other than the adapter;
+   receiver other than the seller or adapter; `claimController` is signed
+   buyer-side metadata but Lido ownership is determined by `claimReceiver`;
 2. require immutable queue/stETH values match claim data;
 3. pull `requestedStETH` with `SafeERC20`;
 4. measure `receivedStETH`;
@@ -446,7 +451,9 @@ Release blockers:
 11. **Operator lifecycle:** revocation prevents later acquisition.
 12. **Adapter isolation and zero dust.**
 13. **Measured stETH:** Lido requests only the received transfer delta.
-14. **v1 non-regression.**
+14. **Buyer destination:** neither signed claim destination may remain the
+    seller.
+15. **v1 non-regression.**
 
 ## 10. Required tests
 
@@ -489,6 +496,7 @@ Release blockers:
 - measured amount below minimum and above maximum;
 - paused/request failure;
 - wrong returned ID/status/owner/amount;
+- seller as claim controller or NFT receiver;
 - share floor;
 - payment failure rollback;
 - zero adapter dust; and
