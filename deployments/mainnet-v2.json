@@ -3,7 +3,7 @@
   "network": "ethereum-mainnet",
   "chainId": 1,
   "gitCommit": "693cb859e975c9b3fe7f07069f805c9135f943fc",
-  "releaseState": "active",
+  "releaseState": "retired-paused",
   "factor": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
   "contracts": {
     "fundingAccount": {
@@ -62,7 +62,8 @@
     "queueSnapshotAtSigning": {
       "unfinalizedStETHWei": "999568750531812229648",
       "unfinalizedRequests": "19"
-    }
+    },
+    "unstETHShares": "4031706521408338"
   },
   "recovery": {
     "executedAtUnix": 1785008781,
@@ -76,5 +77,9 @@
     "operationalFinding": "first redeem gas-estimate reverted ExceededMaxRedeem(.,.,0) because the RPC node had not yet propagated the withdrawShares state; a fresh estimate seconds later succeeded — sequence-sensitive estimates should re-read state or retry once",
     "finalState": "kernel paused, funding paused, funding account zero shares, factor holds all recovered WETH; demo contracts retired",
     "outstanding": "claim unstETH #130880 after Lido finalization (~4.7 days from fill)"
+  },
+  "retirement": {
+    "note": "The mainnet settlement proof is COMPLETE and the deployment is retired: settlement and funding are paused and the reserve was recovered. This deployment must never be re-funded or reactivated — its factorSigner is immutable and that key was exposed in a working session transcript. A fresh key and a fresh deployment are required before any public firm quotes resume.",
+    "claimOutstanding": "unstETH #130880 — claim after Lido finalization, then update to claim collected"
   }
 }
