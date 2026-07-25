@@ -2,6 +2,17 @@
 
 Four steps, one onchain transaction.
 
+```mermaid
+flowchart TB
+    Q["1 · Quote<br/>factor signs off-chain<br/>valid ≤ 15 minutes"]
+    A["2 · Accept<br/>seller sends the only transaction"]
+    S["3 · Settle<br/>claim acquired, then payment released"]
+    C["4 · Collect<br/>factor redeems at par when the queue finalizes"]
+
+    Q --> A --> S --> C
+    S -.->|"any step fails"| R(["revert — nothing settles"])
+```
+
 ## 1. Quote
 
 The factor signs an EIP-712 offer offchain: a price for a specific claim, bound to a specific seller. The quote carries a nonce and a deadline and is valid for at most 15 minutes. The factor's key never sends a transaction.
@@ -20,6 +31,25 @@ Inside that transaction, the contract:
 4. pays the seller
 
 If any step fails, everything reverts. No partially settled state exists.
+
+Where the tokens actually go, in the Lido case:
+
+```mermaid
+flowchart TB
+    SELLER(["Seller"])
+    ADAPTER["Lido claim adapter"]
+    QUEUE["Lido withdrawal queue"]
+    FACTOR(["Factor"])
+    FUND["funding account"]
+    AAVE["Aave ERC-4626 vault"]
+
+    SELLER ==>|"stETH"| ADAPTER
+    ADAPTER ==>|"stETH"| QUEUE
+    QUEUE ==>|"withdrawal claim, minted to the factor"| FACTOR
+    AAVE ==>|"exact payment, nothing more"| FUND
+    FUND ==>|"WETH"| SELLER
+    QUEUE ==>|"ETH at par, days later"| FACTOR
+```
 
 ## 4. Collect
 

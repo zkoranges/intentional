@@ -2,23 +2,18 @@
 
 Four contracts, one invariant.
 
-```
-              signed quote
-                   │
-                   ▼
-        ┌──────────────────────┐
-        │ AsyncClaimSettlement │   payment iff acquisition
-        └──────────┬───────────┘
-                   │
-        ┌──────────┴───────────┐
-        ▼                      ▼
-┌────────────────┐    ┌─────────────────┐
-│   Productive   │    │  claim adapter  │
-│ FundingAccount │    │  (per protocol) │
-└───────┬────────┘    └────────┬────────┘
-        ▼                      ▼
-  ERC-4626 vault         Lido  /  ERC-7540
-   (Aave WETH)              vaults
+```mermaid
+flowchart TB
+    Q(["signed quote"])
+    K["AsyncClaimSettlement<br/>payment iff acquisition"]
+    F["ProductiveFundingAccount"]
+    A["claim adapter<br/>per protocol"]
+    V["ERC-4626 vault<br/>Aave WETH"]
+    P["Lido queue / ERC-7540 vaults"]
+
+    Q --> K
+    K --> F --> V
+    K --> A --> P
 ```
 
 ## AsyncClaimSettlement
@@ -58,6 +53,13 @@ Adapters confirm every acquisition by measuring balances before and after rather
 ## Testing
 
 187 deterministic tests (unit, integration, invariant) and 10 mainnet-fork suites pass. An invariant test moves a claim between Pending and Claimable between quote and fill; across 4096 randomized sequences, payment never occurs without complete acquisition. The Lido path runs against real mainnet contracts on a pinned fork: real stETH, the real withdrawal queue, real Aave.
+
+## Going deeper
+
+Every token movement, every validation gate and the error it reverts with, the
+factor's capital cycle, and the live mainnet settlement decoded wei by wei are
+documented with diagrams in
+[`docs/FUNDS_FLOW.md`](https://github.com/zkoranges/reservoir-v2-eth-lisbon/blob/main/docs/FUNDS_FLOW.md).
 
 ---
 
