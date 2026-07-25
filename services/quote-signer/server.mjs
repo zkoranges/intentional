@@ -5,23 +5,31 @@
 // seller-bound firm quote and receives a signed envelope it can fill directly.
 //
 // Security posture (deliberate, documented):
-//   * binds 127.0.0.1 only; public exposure is a tunnel/proxy in front
+//   * binds 127.0.0.1 only; public exposure is a tunnel/proxy in front —
+//     a non-loopback HOST is refused at startup unless ALLOW_NONLOCAL_BIND=1
 //   * shared-secret header, constant-time compared
 //   * HARD ceiling (MAX_QUOTE_WEI) independent of measured reserve capacity —
 //     a signing key can never authorize more than this per quote
 //   * single-flight: one outstanding unexpired quote at a time, so concurrent
 //     requests cannot oversubscribe the reserve and hand a user a quote that
-//     reverts at fill time
+//     reverts at fill time. Reservations persist in SQLite across restarts
+//     and are released when the kernel reports the nonce consumed on-chain.
 //   * short expiry (default 120s) well inside the kernel's 15-minute bound
-//   * fails closed on paused settlement, paused/bunker Lido, or thin capacity
+//   * refuses retired / mismatched deployments as a first-class readiness
+//     state; fails closed on paused settlement, paused/bunker Lido, thin
+//     capacity, or a chain-id mismatch
 //   * every signature is appended to a structured JSONL audit log
+//   * /health reports readiness, chain id, addresses, pause state, and
+//     capacity — and is asserted free of secret material before it is sent
 //
 // The factor key lives only in this process's env. It is never returned, never
-// logged, and never sent to the browser.
+// logged, and never sent to the browser. Pricing is a fixed operator spread —
+// never presented as a market or oracle price.
 
 import { appendFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { dirname, join, resolve } from "node:path";
 import {
   createPublicClient,
   encodeAbiParameters,
@@ -33,6 +41,10 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
+
+import { assertBindSafe, assertNoSecretMaterial, verifyDeploymentConfig } from "./guards.mjs";
+import { buildHealthPayload } from "./health.mjs";
+import { ReservationStore } from "./reservations.mjs";
 
 const STETH = getAddress("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
 const WETH = getAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
@@ -46,6 +58,13 @@ function required(name) {
 
 const HOST = process.env.HOST?.trim() || "127.0.0.1";
 const PORT = Number(process.env.PORT?.trim() || "8791");
+
+// Bind safety comes before anything else: refusing a non-loopback bind must
+// not depend on the rest of the configuration being present.
+for (const warning of assertBindSafe(HOST, process.env.ALLOW_NONLOCAL_BIND?.trim())) {
+  console.error(warning);
+}
+
 const RPC_URL = required("ETH_RPC_URL");
 const FACTOR_PRIVATE_KEY = required("FACTOR_PRIVATE_KEY");
 const KERNEL = getAddress(required("KERNEL_ADDRESS"));
@@ -59,13 +78,36 @@ const QUOTE_TTL_SECONDS = BigInt(process.env.QUOTE_TTL_SECONDS?.trim() || "120")
 const MAX_STETH_SHORTFALL = BigInt(process.env.MAX_STETH_SHORTFALL_WEI?.trim() || "2");
 const AUDIT_LOG = process.env.AUDIT_LOG?.trim() || "./quote-audit.jsonl";
 const AQUA_PROOF_TX = process.env.AQUA_INTENT_PROOF_TX?.trim() || "";
+const EXPECTED_CHAIN_ID = Number(process.env.EXPECTED_CHAIN_ID?.trim() || "1");
+const DEPLOYMENT_MANIFEST = process.env.DEPLOYMENT_MANIFEST?.trim() || "";
+// The reservation store defaults to living beside the audit log: both are the
+// desk's durable operating record and belong in the same operator-owned dir.
+const RESERVATIONS_DB =
+  process.env.RESERVATIONS_DB?.trim() ||
+  join(dirname(resolve(AUDIT_LOG)), "quote-reservations.sqlite");
 
 if (SIGNER_SECRET.length < 32) throw new Error("SIGNER_SECRET must be at least 32 characters");
 if (SPREAD_BPS > MAX_SPREAD_BPS) throw new Error("SPREAD_BPS exceeds MAX_SPREAD_BPS");
 if (QUOTE_TTL_SECONDS > 840n) throw new Error("QUOTE_TTL_SECONDS must stay inside the kernel's 15-minute bound");
+if (!Number.isInteger(EXPECTED_CHAIN_ID) || EXPECTED_CHAIN_ID <= 0) {
+  throw new Error("EXPECTED_CHAIN_ID must be a positive integer");
+}
 
 const account = privateKeyToAccount(FACTOR_PRIVATE_KEY);
 const client = createPublicClient({ chain: mainnet, transport: viemHttp(RPC_URL) });
+
+// Config-level deployment verification — computed once (the inputs are process
+// configuration and cannot change until restart), enforced on every request,
+// and reported as the "refused" readiness state on /health.
+const { refusals: configRefusals } = verifyDeploymentConfig({
+  expectedChainId: EXPECTED_CHAIN_ID,
+  kernel: KERNEL,
+  lidoAdapter: LIDO_ADAPTER,
+  rpcUrl: RPC_URL,
+  manifestPath: DEPLOYMENT_MANIFEST,
+});
+
+const reservations = new ReservationStore(RESERVATIONS_DB);
 
 const kernelAbi = parseAbi([
   "function factorSigner() view returns (address)",
@@ -93,14 +135,102 @@ const queueAbi = parseAbi([
   "function unfinalizedRequestNumber() view returns (uint256)",
 ]);
 
-// ---- single-flight state -------------------------------------------------
-// One outstanding unexpired quote at a time. The kernel would reject an
-// oversubscribed second fill anyway, but a user must never be handed a
-// valid-looking quote that cannot fill.
-let outstanding = null;
+const MAX_PAYMENT_WEI = MAX_QUOTE_WEI - (MAX_QUOTE_WEI * SPREAD_BPS) / 10_000n;
 
-function outstandingActive(nowSeconds) {
-  return outstanding !== null && BigInt(nowSeconds) < outstanding.deadline;
+const healthConfig = {
+  expectedChainId: EXPECTED_CHAIN_ID,
+  kernel: KERNEL,
+  lidoAdapter: LIDO_ADAPTER,
+  weth: WETH,
+  stETH: STETH,
+  queue: QUEUE,
+  manifestPath: DEPLOYMENT_MANIFEST,
+  factorAddress: account.address,
+  spreadBps: SPREAD_BPS,
+  minQuoteWei: MIN_QUOTE_WEI,
+  maxQuoteWei: MAX_QUOTE_WEI,
+  maxPaymentWei: MAX_PAYMENT_WEI,
+  quoteTtlSeconds: QUOTE_TTL_SECONDS,
+};
+
+function redactRpc(text) {
+  return typeof text === "string" ? text.split(RPC_URL).join("<rpc>") : String(text);
+}
+
+// ---- chain snapshot for /health ------------------------------------------
+// /health never blocks on the RPC: it serves the latest snapshot and kicks a
+// background refresh when the snapshot is stale. Quote requests always make
+// their own authoritative reads.
+const SNAPSHOT_TTL_MS = 5_000;
+let chainSnapshot = null;
+let snapshotRefresh = null;
+
+function snapshotStale() {
+  return chainSnapshot === null || Date.now() - chainSnapshot.fetchedAtMs > SNAPSHOT_TTL_MS;
+}
+
+function refreshChainSnapshot() {
+  if (snapshotRefresh) return snapshotRefresh;
+  snapshotRefresh = (async () => {
+    const fetchedAtUnix = Math.floor(Date.now() / 1000);
+    try {
+      const [observedChainId, factorSigner, fundingAccount, adapterAllowed, kernelSealed, kernelPaused] =
+        await Promise.all([
+          client.getChainId(),
+          client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "factorSigner" }),
+          client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "fundingAccount" }),
+          client.readContract({
+            address: KERNEL,
+            abi: kernelAbi,
+            functionName: "isAdapterAllowed",
+            args: [LIDO_ADAPTER],
+          }),
+          client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "isSealed" }),
+          client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "isPaused" }),
+        ]);
+      const funding = getAddress(fundingAccount);
+      const [paymentAsset, fundingSealed, capacity, queuePaused, bunkerMode] = await Promise.all([
+        client.readContract({ address: funding, abi: fundingAbi, functionName: "paymentAsset" }),
+        client.readContract({ address: funding, abi: fundingAbi, functionName: "isSealed" }),
+        client.readContract({
+          address: funding,
+          abi: fundingAbi,
+          functionName: "availableFor",
+          args: [MAX_PAYMENT_WEI],
+        }),
+        client.readContract({ address: QUEUE, abi: queueAbi, functionName: "isPaused" }),
+        client.readContract({ address: QUEUE, abi: queueAbi, functionName: "isBunkerModeActive" }),
+      ]);
+      chainSnapshot = {
+        fetchedAtUnix,
+        fetchedAtMs: Date.now(),
+        error: false,
+        observedChainId,
+        factorSignerMatches: getAddress(factorSigner) === account.address,
+        fundingAccount: funding,
+        adapterAllowed,
+        kernelSealed,
+        kernelPaused,
+        paymentAssetOk: getAddress(paymentAsset) === WETH,
+        fundingSealed,
+        capacityWei: capacity,
+        queuePaused,
+        bunkerMode,
+      };
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          at: new Date().toISOString(),
+          event: "chain_snapshot_failed",
+          reason: redactRpc(error?.message ?? "unknown"),
+        }),
+      );
+      chainSnapshot = { fetchedAtUnix, fetchedAtMs: Date.now(), error: true };
+    } finally {
+      snapshotRefresh = null;
+    }
+  })();
+  return snapshotRefresh;
 }
 
 function secretMatches(supplied) {
@@ -120,15 +250,16 @@ async function audit(event) {
   console.log(line);
 }
 
+function stringifyBody(body) {
+  return JSON.stringify(body, (_, value) => (typeof value === "bigint" ? value.toString() : value));
+}
+
 function json(response, status, body) {
-  const payload = JSON.stringify(body, (_, value) =>
-    typeof value === "bigint" ? value.toString() : value,
-  );
   response.writeHead(status, {
     "content-type": "application/json",
     "cache-control": "no-store, max-age=0",
   });
-  response.end(payload);
+  response.end(stringifyBody(body));
 }
 
 async function readJsonBody(request, limitBytes = 8192) {
@@ -145,7 +276,31 @@ async function readJsonBody(request, limitBytes = 8192) {
 async function buildQuote({ seller, requestedStEth }) {
   const nowSeconds = Math.floor(Date.now() / 1000);
 
-  if (outstandingActive(nowSeconds)) {
+  // First-class refusal: a retired or mismatched deployment never gets as far
+  // as pricing, reads, or signing.
+  if (configRefusals.length > 0) {
+    const error = new Error("this deployment is refused; see /health readiness for the reasons");
+    error.status = 503;
+    error.code = "REFUSED_DEPLOYMENT";
+    throw error;
+  }
+
+  // Sweep the reservation store before deciding single-flight: expired
+  // reservations fall away, and a reservation whose nonce the kernel reports
+  // consumed (the fill landed) is released instead of blocking until TTL.
+  const swept = await reservations.sweep({
+    nowUnix: nowSeconds,
+    isNonceConsumed: (nonce) =>
+      client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "nonceUsed", args: [nonce] }),
+  });
+  for (const releasedReservation of swept.released) {
+    await audit({
+      event: "reservation_released",
+      nonce: releasedReservation.nonce.toString(),
+      reason: releasedReservation.reason,
+    });
+  }
+  if (swept.active.length > 0) {
     const error = new Error("another quote is currently outstanding; retry shortly");
     error.status = 409;
     error.code = "SINGLE_FLIGHT";
@@ -176,8 +331,9 @@ async function buildQuote({ seller, requestedStEth }) {
     throw error;
   }
 
-  const [factorSigner, fundingAccount, adapterAllowed, kernelSealed, kernelPaused, nonceFloor] =
+  const [observedChainId, factorSigner, fundingAccount, adapterAllowed, kernelSealed, kernelPaused, nonceFloor] =
     await Promise.all([
+      client.getChainId(),
       client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "factorSigner" }),
       client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "fundingAccount" }),
       client.readContract({
@@ -191,6 +347,14 @@ async function buildQuote({ seller, requestedStEth }) {
       client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "nonceFloor" }),
     ]);
 
+  if (Number(observedChainId) !== EXPECTED_CHAIN_ID) {
+    const error = new Error(
+      `RPC chain id ${observedChainId} does not match the configured chain id ${EXPECTED_CHAIN_ID}`,
+    );
+    error.status = 503;
+    error.code = "CHAIN_MISMATCH";
+    throw error;
+  }
   if (getAddress(factorSigner) !== account.address) {
     const error = new Error("configured key is not the kernel's factor signer");
     error.status = 500;
@@ -332,7 +496,12 @@ async function buildQuote({ seller, requestedStEth }) {
   };
 
   const factorSignature = await account.signTypedData({
-    domain: { name: "Reservoir v2", version: "1", chainId: 1, verifyingContract: KERNEL },
+    domain: {
+      name: "Reservoir v2",
+      version: "1",
+      chainId: EXPECTED_CHAIN_ID,
+      verifyingContract: KERNEL,
+    },
     types: {
       ClaimQuote: [
         { name: "factor", type: "address" },
@@ -352,7 +521,16 @@ async function buildQuote({ seller, requestedStEth }) {
     message: quote,
   });
 
-  outstanding = { nonce, deadline, seller, paymentAmount };
+  // Durable single-flight: the reservation must survive a restart, so it is
+  // recorded before the envelope leaves the process.
+  reservations.reserve({
+    nonce,
+    seller,
+    requestedStEthWei: requestedStEth,
+    paymentWei: paymentAmount,
+    deadlineUnix: deadline,
+    nowUnix: nowSeconds,
+  });
 
   await audit({
     event: "quote_signed",
@@ -368,7 +546,7 @@ async function buildQuote({ seller, requestedStEth }) {
 
   return {
     version: "reservoir-v2-lido-1",
-    chainId: 1,
+    chainId: EXPECTED_CHAIN_ID,
     kernel: KERNEL,
     quote,
     claimData,
@@ -376,6 +554,7 @@ async function buildQuote({ seller, requestedStEth }) {
     factorSignature,
     pricing: {
       mode: "operator-priced-firm-quote",
+      basis: "fixed operator spread; not a market or oracle price",
       evidenceNote:
         "informational metadata; only the EIP-712 ClaimQuote fields are factor-signed",
       grossSpreadBps: SPREAD_BPS.toString(),
@@ -392,16 +571,26 @@ const server = createServer(async (request, response) => {
 
   if (request.method === "GET" && url.pathname === "/health") {
     const nowSeconds = Math.floor(Date.now() / 1000);
-    return json(response, 200, {
-      ok: true,
-      factor: account.address,
-      kernel: KERNEL,
-      adapter: LIDO_ADAPTER,
-      maxQuoteWei: MAX_QUOTE_WEI,
-      spreadBps: SPREAD_BPS,
-      quoteTtlSeconds: QUOTE_TTL_SECONDS,
-      outstanding: outstandingActive(nowSeconds),
+    if (snapshotStale()) void refreshChainSnapshot();
+    const payload = buildHealthPayload({
+      config: healthConfig,
+      refusals: configRefusals,
+      snapshot: chainSnapshot,
+      activeReservations: reservations.active(nowSeconds).length,
     });
+    const body = stringifyBody(payload);
+    // Nothing from the environment may leak through /health: assert the exact
+    // bytes about to be sent contain no secret material.
+    try {
+      assertNoSecretMaterial(body, [SIGNER_SECRET, FACTOR_PRIVATE_KEY, RPC_URL]);
+    } catch {
+      return json(response, 500, { error: "health payload failed the secret-hygiene assertion" });
+    }
+    response.writeHead(200, {
+      "content-type": "application/json",
+      "cache-control": "no-store, max-age=0",
+    });
+    return response.end(body);
   }
 
   if (request.method !== "POST" || url.pathname !== "/quote") {
@@ -441,7 +630,7 @@ const server = createServer(async (request, response) => {
       status,
       seller: body.seller,
       requestedStEth: body.requestedStEth,
-      reason: error.message,
+      reason: redactRpc(error.message),
     });
     // Internal errors never leak their message to the caller.
     return json(response, status, {
@@ -451,18 +640,45 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
+server.listen(PORT, HOST, async () => {
+  const bound = server.address();
   console.log(
     JSON.stringify({
       at: new Date().toISOString(),
       event: "listening",
       host: HOST,
-      port: PORT,
+      port: bound?.port ?? PORT,
       factor: account.address,
       kernel: KERNEL,
+      expectedChainId: EXPECTED_CHAIN_ID,
+      deploymentManifest: DEPLOYMENT_MANIFEST || null,
+      reservationsDb: RESERVATIONS_DB,
       maxQuoteWei: MAX_QUOTE_WEI.toString(),
       spreadBps: SPREAD_BPS.toString(),
       quoteTtlSeconds: QUOTE_TTL_SECONDS.toString(),
+      readiness: configRefusals.length > 0 ? "refused" : "pending",
     }),
   );
+  if (configRefusals.length > 0) {
+    for (const refusal of configRefusals) console.error(`DEPLOYMENT REFUSED: ${refusal}`);
+    await audit({ event: "deployment_refused", reasons: configRefusals });
+  } else {
+    // Warm the /health snapshot; quote requests do their own reads.
+    void refreshChainSnapshot();
+  }
 });
+
+function shutdown(signal) {
+  console.log(JSON.stringify({ at: new Date().toISOString(), event: "shutdown", signal }));
+  try {
+    reservations.close();
+  } catch {
+    // the store is already closed or the process is being torn down
+  }
+  server.close(() => process.exit(0));
+  // A reservation-holding fill in flight is on-chain state, not ours: nothing
+  // here needs a grace period beyond closing the listener.
+  setTimeout(() => process.exit(0), 1_000).unref();
+}
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));
