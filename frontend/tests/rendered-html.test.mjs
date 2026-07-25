@@ -160,6 +160,8 @@ test("the production build contains the dark responsive wallet interface", async
   assert.match(pageBundle, /Run verified fork replay/);
   assert.match(pageBundle, /0\.725747813572212141/);
   assert.match(pageBundle, /0\.897750 WETH/);
+  assert.match(pageBundle, /4\.1023 WETH/);
+  assert.doesNotMatch(pageBundle, /4\.1022500[0-9]+/);
   assert.match(pageBundle, /30159264327/);
   assert.match(stylesheet, /#080a0c/);
   assert.match(stylesheet, /prefers-reduced-motion/);

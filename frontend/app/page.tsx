@@ -59,8 +59,8 @@ const JURY_METRICS = [
   },
   {
     label: "Productive NAV left",
-    value: "4.102250019398133931",
-    note: "WETH in StataWETH",
+    value: "≈ 4.1023 WETH",
+    note: "accrual varies with fork timestamp",
   },
   {
     label: "Release result",
@@ -75,7 +75,7 @@ const JURY_STEPS = [
   "Canonical unstETH #130835 minted directly to the factor.",
   "0.725747813572212141 Lido share units were acquired.",
   "Seller received exactly 0.89775 WETH after acquisition.",
-  "4.102250019398133931 WETH of productive reserve NAV remained.",
+  "More than 4.10 WETH of productive reserve NAV remained in StataWETH.",
 ] as const;
 
 function short(value: string) {
@@ -498,10 +498,12 @@ export default function Home() {
           </div>
         </header>
         <p className="juryBoundary">
-          This replays the exact release output from production Lido and Aave
-          contracts on a disposable chain-1 fork. It is not a persistent
-          mainnet fill. The companion Aqua/SwapVM swap is a separate gated fork
-          proof, as required by the 1inch track.
+          This replays the release sequence and stable economic measurements
+          from production Lido and Aave contracts on a disposable chain-1 fork.
+          Residual Aave NAV is rounded because it accrues with the fork startup
+          timestamp. It is not a persistent mainnet fill. The companion
+          Aqua/SwapVM swap is a separate gated fork proof, as required by the
+          1inch track.
         </p>
         <div className="juryMetrics" aria-label="Verified release measurements">
           {JURY_METRICS.map((metric) => (
