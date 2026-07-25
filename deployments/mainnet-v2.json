@@ -63,5 +63,18 @@
       "unfinalizedStETHWei": "999568750531812229648",
       "unfinalizedRequests": "19"
     }
+  },
+  "recovery": {
+    "executedAtUnix": 1785008781,
+    "pauseKernelTx": "0x7c0ea37ef327e3ae312a060482d3c449d278ccc642caf037acbc0cd8028b39de",
+    "pauseFundingTx": "0x7ddc70ca904b1e8198dfdfeb8fd3659e1d7db1a8730709b69037548689cf7749",
+    "withdrawSharesTx": "0xffcce68f46bee5857a3b68219210a4c88a0f72e56a5c1954fdec9de7cdfb4747",
+    "redeemToWethTx": "0x43402367b7416ae16d042f68e9a3472f62e3bf6d199e6bb53ad9d68ad4f545cd",
+    "sharesRecovered": "4691059400908610",
+    "wethRedeemed": "5012537039871751",
+    "ledger": "funded 10000000000000000 wei WETH; paid seller 4987500000000000; recovered 5012537039871751 — the +37039871751 wei above the arithmetic remainder is Aave yield earned while the reserve stood ready",
+    "operationalFinding": "first redeem gas-estimate reverted ExceededMaxRedeem(.,.,0) because the RPC node had not yet propagated the withdrawShares state; a fresh estimate seconds later succeeded — sequence-sensitive estimates should re-read state or retry once",
+    "finalState": "kernel paused, funding paused, funding account zero shares, factor holds all recovered WETH; demo contracts retired",
+    "outstanding": "claim unstETH #130880 after Lido finalization (~4.7 days from fill)"
   }
 }

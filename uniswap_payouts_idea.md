@@ -657,10 +657,49 @@ recorded at route-fetch time:
 - forced-failure case: an excessive `minimumPayoutAmount` reverts and rolls
   back the Lido request, the nonce, and every token delta
 
-Fixture handling: `fetch-uniswap-route.mjs` records the route **and** the block
-number at fetch time. The test replays at that block, so a retained fixture
-reproduces deterministically in CI without a live key. The test skips with a
-clear message when no fixture is present.
+#### Fixture schema
+
+`fetch-uniswap-route.mjs` writes `test/fixtures/uniswap-route.json` after
+applying every §8 validation rule; an invalid bundle is never written. The
+file is **committed** — it contains no secret, only a public API response and
+public addresses, and committing it is what lets CI and the jury replay the
+proof without a key.
+
+```json
+{
+  "schemaVersion": 1,
+  "chainId": 1,
+  "blockNumber": "25611734",
+  "fetchedAtUnix": "1753473600",
+  "quoteRequestId": "cfe8e6a4-…",
+  "swapRequestId": "15942d10-…",
+  "apiQuoteHash": "0x…",
+  "tokenIn": "0xC02aaA39…",
+  "tokenOut": "0xA0b86991…",
+  "amountIn": "5000000000000000",
+  "apiQuotedOut": "18234567",
+  "slippageToleranceBps": "50",
+  "swapper": "0x…",
+  "recipient": "0x…",
+  "swap": { "to": "0x…", "value": "0", "data": "0x2894adf9…" }
+}
+```
+
+Every numeric value is a **decimal string**, not a JSON number, so
+`vm.parseJsonUint` reads it without precision loss. The test reads keys
+individually — `vm.parseJsonUint(json, ".blockNumber")`,
+`vm.parseJsonAddress(json, ".swap.to")`, `vm.parseJsonBytes(json, ".swap.data")`
+— rather than decoding the whole object into a struct, because struct decoding
+is order-sensitive and brittle across edits.
+
+The test forks at `blockNumber`, and re-asserts the §8 invariants against the
+fixture before using it, so a hand-edited or stale fixture fails loudly. It
+skips with a clear message when the file is absent. Note the archive-RPC
+retention constraint in §2.1.
+
+The retained `apiQuoteHash` must equal the hash bound into `payoutDataHash` at
+signing time; the fork proof asserts this so the demo cannot drift from the
+evidence it displays.
 
 ### 10.5 Non-regression
 
@@ -670,18 +709,23 @@ frontend lint, tests, and Vercel build all pass.
 
 ## 11. Build plan
 
-| Step | Work | Estimate | Blocks |
-|---|---|---|---|
-| S-1 | Fork-side Gate 0 spike (§2.1) | 1–2 h | everything |
-| S-2 | `IPayoutExecutor`, `UniswapPayoutExecutor`, `UniswapPayoutSettlement` | 2–3 h | S-1 |
-| S-3 | Unit suites §10.1, §10.2 | 3 h | S-2 |
-| S-4 | `fetch-uniswap-route.mjs`, integration §10.3, fork proof §10.4 | 2–3 h | S-2 |
-| S-5 | `create-uniswap-payout-quote.mjs` with §8 validation | 1–2 h | S-2 |
-| S-6 | `FEEDBACK.md`, README integration links, demo script | 1–2 h | S-4 |
-| S-7 | *Optional* mainnet deployment (§11.2) | 2–4 h + budget | S-6 |
+| Step | Work | Est. | Blocks | Done when |
+|---|---|---|---|---|
+| S-1 | Fork-side spike (§2.1) | 1–2 h | everything | assertions 1–5 pass or abort per §2.2; 6–7 reported numerically |
+| S-2 | `PayoutTypes`, `IPayoutExecutor`, `UniswapPayoutExecutor`, `UniswapPayoutSettlement` | 2–3 h | S-1 | `forge build` and `forge fmt --check` clean |
+| S-3 | Unit suites §10.1, §10.2 + `MockUniswapProxy` | 3 h | S-2 | every listed case present and green |
+| S-4 | `fetch-uniswap-route.mjs`, integration §10.3, fork proof §10.4 | 2–3 h | S-2 | fork proof green in both directions; fixture committed and replays |
+| S-5 | `create-uniswap-payout-quote.mjs` with §8 + §8.1 | 1–2 h | S-2 | refuses every invalid bundle in a negative-path checklist |
+| S-5b | `execute-uniswap-payout-quote.mjs` + Makefile targets | 1 h | S-5 | `make demo-uniswap-payout` runs the four acts unattended |
+| S-6 | `FEEDBACK.md`, README integration links, demo script | 1–2 h | S-4, S-5b | §13 checklist fully ticked |
+| S-7 | *Optional* mainnet deployment (§11.2) | 2–4 h + budget | S-6 | bindings asserted onchain; see the verification risk below |
 
 Fork-complete through S-6 is approximately one focused day. S-7 is a separate
-decision with its own budget and authorization.
+decision with its own budget and explicit per-broadcast authorization.
+
+**Non-regression gate, run before declaring any step done:** the full command
+list in `README.md` under "Complete verification". v1 and v2 must stay green
+throughout; this leg adds files and never edits existing ones.
 
 ### 11.1 Deadline policy
 
@@ -713,6 +757,21 @@ the deployer nonce, as the existing preflight already does for the v2 stack
 (`EXPECTED_DEPLOYER_NONCE`), and assert both bindings after deployment.
 Deploy paused and unfunded; fund and activate with separate scripts and
 separate acknowledgements, per `docs/LIVE_ACTIVATION.md`.
+
+Two known hazards carried over from the v2 and Aqua mainnet runs, both
+recorded in `docs/MAINNET_MICRO_DEMO.md`:
+
+- **Etherscan verification under `via_ir`.** The Aqua router's mainnet
+  verification failed on a bytecode mismatch despite a proven byte-exact local
+  match. Budget time for it, use `--resume --verify` rather than redeploying,
+  and treat an unverified contract as a submission problem — a judge clicking
+  through to unverified source undercuts the proof.
+- **Constructor-argument encoding.** `forge`'s broadcast encoder
+  nondeterministically mis-decoded a string constructor argument when a parent
+  artifact shared a creation-code prefix. `UniswapPayoutExecutor` and
+  `UniswapPayoutSettlement` take no string arguments, so this should not
+  recur — but if it does, deploy via `cast send --create` (flags **before**
+  `--create`) and pass the resulting address into the script.
 
 ## 12. Path to any payout asset
 
