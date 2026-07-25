@@ -33,12 +33,14 @@
 
 html {
   background: var(--canvas);
+  overflow-x: hidden;
   scroll-behavior: smooth;
 }
 
 body {
   min-width: 320px;
   margin: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 50% -16%, rgba(139, 92, 246, 0.08), transparent 32rem),
     var(--canvas);
@@ -84,25 +86,18 @@ a {
   color: inherit;
 }
 
-.fintechTexture {
+.gavelBackdrop {
   position: absolute;
   z-index: 0;
-  top: 96px;
-  width: min(620px, 44vw);
-  height: min(620px, calc(100svh - 96px));
+  top: 72px;
+  right: 0;
+  width: min(720px, 54vw);
+  height: min(430px, calc(100svh - 72px));
   pointer-events: none;
-  background: url("/textures/impatience-flow.svg") right bottom / contain
-    no-repeat;
-  opacity: 0.25;
-}
-
-.fintechTextureLeft {
-  left: -112px;
-}
-
-.fintechTextureRight {
-  right: -112px;
-  transform: scaleX(-1);
+  background:
+    linear-gradient(90deg, var(--canvas) 0%, rgba(5, 5, 5, 0) 45%),
+    url("/textures/gavel-impact-line.png") right bottom / contain no-repeat;
+  opacity: 0.18;
 }
 
 .appHeader {
@@ -1447,7 +1442,7 @@ footer p {
 }
 
 @media (max-width: 760px) {
-  .fintechTexture {
+  .gavelBackdrop {
     display: none;
   }
 

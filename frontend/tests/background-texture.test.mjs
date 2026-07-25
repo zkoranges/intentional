@@ -4,32 +4,26 @@ import test from "node:test";
 
 const projectRoot = new URL("../", import.meta.url);
 
-test("the app includes subtle mirrored time-compression textures", async () => {
+test("the app includes a restrained gavel line-art backdrop", async () => {
   const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
   const stylesheet = await readFile(
     new URL("app/globals.css", projectRoot),
     "utf8",
   );
 
-  assert.match(page, /fintechTexture fintechTextureLeft/);
-  assert.match(page, /fintechTexture fintechTextureRight/);
-  assert.match(stylesheet, /\.fintechTexture \{/);
+  assert.match(page, /className="gavelBackdrop"/);
+  assert.match(stylesheet, /\.gavelBackdrop \{/);
   assert.match(stylesheet, /position: absolute/);
-  assert.match(stylesheet, /top: 96px/);
-  assert.match(stylesheet, /left: -112px/);
-  assert.match(stylesheet, /right: -112px/);
-  assert.match(stylesheet, /transform: scaleX\(-1\)/);
-  assert.match(stylesheet, /opacity: 0.25/);
+  assert.match(stylesheet, /top: 72px/);
+  assert.match(stylesheet, /right: 0/);
+  assert.match(stylesheet, /opacity: 0.18/);
   assert.match(stylesheet, /display: none/);
-  assert.match(stylesheet, /impatience-flow\.svg/);
+  assert.match(stylesheet, /gavel-impact-line\.png/);
   assert.match(stylesheet, /pointer-events: none/);
-  assert.doesNotMatch(stylesheet, /repeating-radial-gradient/);
+  assert.match(stylesheet, /overflow-x: hidden/);
 
   const texture = await readFile(
-    new URL("public/textures/impatience-flow.svg", projectRoot),
-    "utf8",
+    new URL("public/textures/gavel-impact-line.png", projectRoot),
   );
-  assert.match(texture, /id="timeline"/);
-  assert.match(texture, /id="ticks"/);
-  assert.doesNotMatch(texture, /#A78BFA|#8B5CF6/i);
+  assert.ok(texture.byteLength > 10_000);
 });
