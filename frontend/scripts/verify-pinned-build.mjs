@@ -6,6 +6,7 @@ import { join } from "node:path";
 
 const expectedKernel = "0x1111111111111111111111111111111111111111";
 const expectedAdapter = "0x2222222222222222222222222222222222222222";
+const expectedUnstETHAdapter = "0x4444444444444444444444444444444444444444";
 const assetsDirectory = new URL("../dist/client/assets/", import.meta.url);
 const assetNames = await readdir(assetsDirectory);
 const pageAsset = assetNames.find((name) => name.startsWith("page-"));
@@ -18,6 +19,7 @@ assert.match(pageBundle, /WETH now/);
 assert.match(pageBundle, /Approve stETH/);
 assert.match(pageBundle, new RegExp(expectedKernel, "i"));
 assert.match(pageBundle, new RegExp(expectedAdapter, "i"));
+assert.match(pageBundle, new RegExp(expectedUnstETHAdapter, "i"));
 
 console.log(
   "PINNED FRONTEND BUILD PASS | firm-quote flow and deployment bindings compiled",

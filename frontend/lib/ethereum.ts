@@ -43,12 +43,16 @@ const configuredKernel = configuredAddress(
 const configuredLidoAdapter = configuredAddress(
   process.env.NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER,
 );
+const configuredLidoUnstETHAdapter = configuredAddress(
+  process.env.NEXT_PUBLIC_RESERVOIR_LIDO_UNSTETH_ADAPTER,
+);
 
 export const RESERVOIR_DEPLOYMENT =
-  configuredKernel && configuredLidoAdapter
+  configuredKernel && configuredLidoAdapter && configuredLidoUnstETHAdapter
     ? {
         kernel: configuredKernel,
         lidoAdapter: configuredLidoAdapter,
+        lidoUnstETHAdapter: configuredLidoUnstETHAdapter,
       }
     : null;
 
@@ -67,6 +71,10 @@ export const lidoQueueAbi = parseAbi([
   "function isBunkerModeActive() view returns (bool)",
   "function getLastRequestId() view returns (uint256)",
   "function getLastFinalizedRequestId() view returns (uint256)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
+  "function getApproved(uint256 tokenId) view returns (address)",
+  "function isApprovedForAll(address owner,address operator) view returns (bool)",
+  "function approve(address to,uint256 tokenId)",
 ]);
 
 export const settlementAbi = parseAbi([
@@ -162,6 +170,7 @@ export type ClaimQuote = {
 
 export type SignedLidoQuoteEnvelope = {
   version: "reservoir-v2-lido-1";
+  mode: "originate" | "existing-unsteth";
   chainId: 1;
   kernel: Address;
   quote: ClaimQuote;
@@ -173,10 +182,10 @@ export type SignedLidoQuoteEnvelope = {
 export type ReservoirQuoteCheck = {
   envelope: SignedLidoQuoteEnvelope;
   requestedStEth: bigint;
-  maxStEthShortfall: bigint;
-  minAmountOfShares: bigint;
+  requestId: bigint | null;
+  amountOfShares: bigint;
   capacity: bigint;
-  allowance: bigint;
+  approvalSatisfied: boolean;
   fundingAccount: Address;
   quoteHash: Hex;
 };
@@ -308,7 +317,10 @@ export async function readLiveWallet(
     ...codeAddresses.map((address) => publicClient.getCode({ address })),
   ]);
 
-  const recentIds = requestIds.slice(-4).reverse();
+  // Keep the browser read bounded while still surfacing a realistic wallet's
+  // recent claim inventory. The production demo position is never hidden
+  // behind an arbitrary four-item cap.
+  const recentIds = requestIds.slice(-20).reverse();
   const rawStatuses =
     recentIds.length === 0
       ? []
@@ -361,6 +373,53 @@ export async function approveExact(
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
       "The approval transaction mined but reverted",
+      hash,
+    );
+  }
+  return receipt;
+}
+
+export async function approveUnstETH(
+  provider: InjectedEthereum,
+  account: Address,
+  adapter: Address,
+  requestId: bigint,
+) {
+  const { publicClient, walletClient } = clients(provider, account);
+  if (!walletClient) throw new Error("Wallet client unavailable");
+  const owner = await publicClient.readContract({
+    address: ADDRESSES.lidoQueue,
+    abi: lidoQueueAbi,
+    functionName: "ownerOf",
+    args: [requestId],
+  });
+  if (owner !== account) {
+    throw new Error("The connected wallet no longer owns this unstETH");
+  }
+  const { request } = await publicClient.simulateContract({
+    account,
+    address: ADDRESSES.lidoQueue,
+    abi: lidoQueueAbi,
+    functionName: "approve",
+    args: [adapter, requestId],
+  });
+  const hash = await walletClient.writeContract(request);
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new MinedTransactionVerificationError(
+      "The unstETH approval transaction mined but reverted",
+      hash,
+    );
+  }
+  const approved = await publicClient.readContract({
+    address: ADDRESSES.lidoQueue,
+    abi: lidoQueueAbi,
+    functionName: "getApproved",
+    args: [requestId],
+  });
+  if (approved !== adapter) {
+    throw new MinedTransactionVerificationError(
+      "Ethereum did not record the expected unstETH approval",
       hash,
     );
   }
@@ -531,11 +590,15 @@ export function parseSignedQuoteEnvelope(
   if (value.version !== "reservoir-v2-lido-1" || value.chainId !== 1) {
     throw new Error("Unsupported quote version or chain");
   }
+  if (value.mode !== "originate" && value.mode !== "existing-unsteth") {
+    throw new Error("Unsupported Lido quote mode");
+  }
   const rawQuote = value.quote as Record<string, unknown>;
   if (!rawQuote) throw new Error("Quote body missing");
 
   return {
     version: "reservoir-v2-lido-1",
+    mode: value.mode,
     chainId: 1,
     kernel: parseAddress(value.kernel, "kernel"),
     quote: {
@@ -572,9 +635,13 @@ export async function verifyReservoirQuote(
   if (!RESERVOIR_DEPLOYMENT) {
     throw new Error("Firm quotes are disabled until the reviewed deployment is pinned");
   }
+  const expectedAdapter =
+    envelope.mode === "originate"
+      ? RESERVOIR_DEPLOYMENT.lidoAdapter
+      : RESERVOIR_DEPLOYMENT.lidoUnstETHAdapter;
   if (
     envelope.kernel !== RESERVOIR_DEPLOYMENT.kernel ||
-    envelope.quote.adapter !== RESERVOIR_DEPLOYMENT.lidoAdapter
+    envelope.quote.adapter !== expectedAdapter
   ) {
     throw new Error("This quote does not use the reviewed deployment");
   }
@@ -776,56 +843,150 @@ export async function verifyReservoirQuote(
     throw new Error("The factor reserve cannot currently deliver this quote");
   }
 
-  const [claim] = decodeAbiParameters(
-    [
-      {
-        type: "tuple",
-        components: [
-          { name: "queue", type: "address" },
-          { name: "stETH", type: "address" },
-          { name: "requestedStETH", type: "uint256" },
-        ],
-      },
-    ],
-    envelope.claimData,
-  );
-  const [bounds] = decodeAbiParameters(
-    [
-      {
-        type: "tuple",
-        components: [
-          { name: "maxStETHShortfall", type: "uint256" },
-          { name: "minAmountOfShares", type: "uint256" },
-        ],
-      },
-    ],
-    envelope.boundsData,
-  );
-  if (claim.queue !== ADDRESSES.lidoQueue || claim.stETH !== ADDRESSES.stEth) {
-    throw new Error("Quote claim data is not bound to canonical Lido");
-  }
-  if (
-    claim.requestedStETH < MIN_LIDO_REQUEST ||
-    claim.requestedStETH > MAX_LIDO_REQUEST
-  ) {
-    throw new Error("The signed stETH amount is outside canonical Lido bounds");
-  }
-  const [sellerBalance, allowance] = await Promise.all([
-    publicClient.readContract({
-      address: ADDRESSES.stEth,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [account],
-    }),
-    publicClient.readContract({
-      address: ADDRESSES.stEth,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [account, envelope.quote.adapter],
-    }),
-  ]);
-  if (sellerBalance < claim.requestedStETH) {
-    throw new Error("The connected wallet has insufficient stETH for this quote");
+  let requestedStEth: bigint;
+  let requestId: bigint | null = null;
+  let amountOfShares: bigint;
+  let approvalSatisfied: boolean;
+
+  if (envelope.mode === "originate") {
+    const [claim] = decodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "queue", type: "address" },
+            { name: "stETH", type: "address" },
+            { name: "requestedStETH", type: "uint256" },
+          ],
+        },
+      ],
+      envelope.claimData,
+    );
+    const [bounds] = decodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "maxStETHShortfall", type: "uint256" },
+            { name: "minAmountOfShares", type: "uint256" },
+          ],
+        },
+      ],
+      envelope.boundsData,
+    );
+    if (claim.queue !== ADDRESSES.lidoQueue || claim.stETH !== ADDRESSES.stEth) {
+      throw new Error("Quote claim data is not bound to canonical Lido");
+    }
+    requestedStEth = claim.requestedStETH;
+    amountOfShares = bounds.minAmountOfShares;
+    if (
+      requestedStEth < MIN_LIDO_REQUEST ||
+      requestedStEth > MAX_LIDO_REQUEST
+    ) {
+      throw new Error("The signed stETH amount is outside canonical Lido bounds");
+    }
+    const [sellerBalance, allowance] = await Promise.all([
+      publicClient.readContract({
+        address: ADDRESSES.stEth,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [account],
+      }),
+      publicClient.readContract({
+        address: ADDRESSES.stEth,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [account, envelope.quote.adapter],
+      }),
+    ]);
+    if (sellerBalance < requestedStEth) {
+      throw new Error("The connected wallet has insufficient stETH for this quote");
+    }
+    approvalSatisfied = hasExactAllowance(allowance, requestedStEth);
+  } else {
+    const [claim] = decodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "queue", type: "address" },
+            { name: "stETH", type: "address" },
+            { name: "requestId", type: "uint256" },
+          ],
+        },
+      ],
+      envelope.claimData,
+    );
+    const [bounds] = decodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "minAmountOfStETH", type: "uint256" },
+            { name: "maxAmountOfStETH", type: "uint256" },
+            { name: "minAmountOfShares", type: "uint256" },
+            { name: "maxAmountOfShares", type: "uint256" },
+          ],
+        },
+      ],
+      envelope.boundsData,
+    );
+    if (
+      claim.queue !== ADDRESSES.lidoQueue ||
+      claim.stETH !== ADDRESSES.stEth ||
+      claim.requestId === 0n
+    ) {
+      throw new Error("Quote claim data is not bound to a canonical unstETH request");
+    }
+    if (
+      bounds.minAmountOfStETH !== bounds.maxAmountOfStETH ||
+      bounds.minAmountOfShares !== bounds.maxAmountOfShares ||
+      bounds.minAmountOfShares === 0n
+    ) {
+      throw new Error("The existing-claim quote does not bind exact economics");
+    }
+    requestId = claim.requestId;
+    requestedStEth = bounds.minAmountOfStETH;
+    amountOfShares = bounds.minAmountOfShares;
+    const [statuses, owner, approved, approvedForAll] = await Promise.all([
+      publicClient.readContract({
+        address: ADDRESSES.lidoQueue,
+        abi: lidoQueueAbi,
+        functionName: "getWithdrawalStatus",
+        args: [[requestId]],
+      }),
+      publicClient.readContract({
+        address: ADDRESSES.lidoQueue,
+        abi: lidoQueueAbi,
+        functionName: "ownerOf",
+        args: [requestId],
+      }),
+      publicClient.readContract({
+        address: ADDRESSES.lidoQueue,
+        abi: lidoQueueAbi,
+        functionName: "getApproved",
+        args: [requestId],
+      }),
+      publicClient.readContract({
+        address: ADDRESSES.lidoQueue,
+        abi: lidoQueueAbi,
+        functionName: "isApprovedForAll",
+        args: [account, envelope.quote.adapter],
+      }),
+    ]);
+    const status = statuses[0];
+    if (
+      statuses.length !== 1 ||
+      !status ||
+      status.isClaimed ||
+      status.owner !== account ||
+      owner !== account ||
+      status.amountOfStETH !== requestedStEth ||
+      status.amountOfShares !== amountOfShares
+    ) {
+      throw new Error("The owned unstETH position no longer matches the signed quote");
+    }
+    approvalSatisfied = approved === envelope.quote.adapter || approvedForAll;
   }
   const [queuePaused, bunkerMode] = await Promise.all([
     publicClient.readContract({
@@ -848,11 +1009,11 @@ export async function verifyReservoirQuote(
 
   return {
     envelope,
-    requestedStEth: claim.requestedStETH,
-    maxStEthShortfall: bounds.maxStETHShortfall,
-    minAmountOfShares: bounds.minAmountOfShares,
+    requestedStEth,
+    requestId,
+    amountOfShares,
     capacity,
-    allowance,
+    approvalSatisfied,
     fundingAccount,
     quoteHash,
   };
@@ -866,24 +1027,52 @@ export async function fillReservoirQuote(
   const { envelope } = check;
   const { publicClient, walletClient } = clients(provider, account);
   if (!walletClient) throw new Error("Wallet client unavailable");
-  const [sellerWethBefore, fillAllowance] = await Promise.all([
-    publicClient.readContract({
-      address: ADDRESSES.weth,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [account],
-    }),
-    publicClient.readContract({
+  const sellerWethBefore = await publicClient.readContract({
+    address: ADDRESSES.weth,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [account],
+  });
+  if (envelope.mode === "originate") {
+    const fillAllowance = await publicClient.readContract({
       address: ADDRESSES.stEth,
       abi: erc20Abi,
       functionName: "allowance",
       args: [account, envelope.quote.adapter],
-    }),
-  ]);
-  if (!hasExactAllowance(fillAllowance, check.requestedStEth)) {
-    throw new Error(
-      "The adapter allowance changed; approve the exact signed stETH amount again",
-    );
+    });
+    if (!hasExactAllowance(fillAllowance, check.requestedStEth)) {
+      throw new Error(
+        "The adapter allowance changed; approve the exact signed stETH amount again",
+      );
+    }
+  } else {
+    if (check.requestId === null) throw new Error("The signed unstETH request is missing");
+    const [owner, approved, approvedForAll] = await Promise.all([
+      publicClient.readContract({
+        address: ADDRESSES.lidoQueue,
+        abi: lidoQueueAbi,
+        functionName: "ownerOf",
+        args: [check.requestId],
+      }),
+      publicClient.readContract({
+        address: ADDRESSES.lidoQueue,
+        abi: lidoQueueAbi,
+        functionName: "getApproved",
+        args: [check.requestId],
+      }),
+      publicClient.readContract({
+        address: ADDRESSES.lidoQueue,
+        abi: lidoQueueAbi,
+        functionName: "isApprovedForAll",
+        args: [account, envelope.quote.adapter],
+      }),
+    ]);
+    if (
+      owner !== account ||
+      (approved !== envelope.quote.adapter && !approvedForAll)
+    ) {
+      throw new Error("The unstETH ownership or approval changed; approve this claim again");
+    }
   }
   const quote = {
     ...envelope.quote,
@@ -903,7 +1092,22 @@ export async function fillReservoirQuote(
       envelope.factorSignature,
     ],
   });
-  const hash = await walletClient.writeContract(request);
+  const estimatedGas = await publicClient.estimateContractGas({
+    account,
+    address: envelope.kernel,
+    abi: settlementAbi,
+    functionName: "fill",
+    args: [
+      quote,
+      envelope.claimData,
+      envelope.boundsData,
+      envelope.factorSignature,
+    ],
+  });
+  const hash = await walletClient.writeContract({
+    ...request,
+    gas: (estimatedGas * 15n) / 10n,
+  });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
@@ -948,7 +1152,7 @@ export async function fillReservoirQuote(
       hash,
     );
   }
-  const [sellerWethAfter, statuses, remainingAllowance] = await Promise.all([
+  const [sellerWethAfter, statuses] = await Promise.all([
     publicClient.readContract({
       address: ADDRESSES.weth,
       abi: erc20Abi,
@@ -961,20 +1165,29 @@ export async function fillReservoirQuote(
       functionName: "getWithdrawalStatus",
       args: [[settled.args.claimId]],
     }),
-    publicClient.readContract({
-      address: ADDRESSES.stEth,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [account, envelope.quote.adapter],
-    }),
   ]);
+  const approvalCleared =
+    envelope.mode === "originate"
+      ? (await publicClient.readContract({
+          address: ADDRESSES.stEth,
+          abi: erc20Abi,
+          functionName: "allowance",
+          args: [account, envelope.quote.adapter],
+        })) === 0n
+      : (await publicClient.readContract({
+          address: ADDRESSES.lidoQueue,
+          abi: lidoQueueAbi,
+          functionName: "getApproved",
+          args: [settled.args.claimId],
+        })) === "0x0000000000000000000000000000000000000000";
+  const acquiredUnits = settled.args.pendingUnits + settled.args.claimableUnits;
   if (
     sellerWethAfter - sellerWethBefore !== settled.args.paymentAmount ||
     statuses.length !== 1 ||
     statuses[0].owner !== envelope.quote.claimReceiver ||
-    statuses[0].amountOfShares !== settled.args.pendingReceived ||
+    statuses[0].amountOfShares !== acquiredUnits ||
     statuses[0].isClaimed ||
-    remainingAllowance !== 0n
+    !approvalCleared
   ) {
     throw new MinedTransactionVerificationError(
       "Settlement receipt failed canonical payment or claim checks",

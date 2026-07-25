@@ -16,6 +16,7 @@ import {
   MinedTransactionVerificationError,
   RESERVOIR_DEPLOYMENT,
   approveExact,
+  approveUnstETH,
   claimLidoWithdrawal,
   connectInjectedWallet,
   ensureMainnet,
@@ -29,6 +30,7 @@ import {
   verifyReservoirQuote,
   type LiveWalletSnapshot,
   type ReservoirQuoteCheck,
+  type WithdrawalStatus,
 } from "../lib/ethereum";
 import {
   formatQuoteAmount,
@@ -198,6 +200,8 @@ export default function Home() {
     null,
   );
   const [quoteCheck, setQuoteCheck] = useState<ReservoirQuoteCheck | null>(null);
+  const [claimQuoteCheck, setClaimQuoteCheck] =
+    useState<ReservoirQuoteCheck | null>(null);
   const [lidoQuote, setLidoQuote] = useState<LidoQuoteResponse | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -479,6 +483,7 @@ export default function Home() {
     setAccount(null);
     setSnapshot(null);
     setQuoteCheck(null);
+    setClaimQuoteCheck(null);
     setActions([]);
     setLastMintedRequest(null);
     setStatus("Wallet disconnected. Your funds remain in your wallet.");
@@ -625,6 +630,7 @@ export default function Home() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          mode: "originate",
           seller: account,
           requestedStEth: amount.toString(),
         }),
@@ -659,47 +665,136 @@ export default function Home() {
     }
   }
 
-  async function approveReservoir() {
+  async function approveReservoir(
+    selectedCheck: ReservoirQuoteCheck | null = quoteCheck,
+  ) {
     const injected = getInjectedProvider();
-    if (!injected || !account || !quoteCheck) return;
+    if (!injected || !account || !selectedCheck) return;
     setAction("signing");
-    setStatus("Confirm the exact stETH approval for this exit.");
+    setStatus(
+      selectedCheck.envelope.mode === "existing-unsteth"
+        ? `Approve unstETH #${selectedCheck.requestId} for this sale.`
+        : "Confirm the exact stETH approval for this exit.",
+    );
     try {
-      const receipt = await approveExact(
-        injected,
-        account,
-        quoteCheck.envelope.quote.adapter,
-        quoteCheck.requestedStEth,
-      );
+      const receipt =
+        selectedCheck.envelope.mode === "existing-unsteth" &&
+        selectedCheck.requestId !== null
+          ? await approveUnstETH(
+              injected,
+              account,
+              selectedCheck.envelope.quote.adapter,
+              selectedCheck.requestId,
+            )
+          : await approveExact(
+              injected,
+              account,
+              selectedCheck.envelope.quote.adapter,
+              selectedCheck.requestedStEth,
+            );
       setActions((current) => [
         ...current,
-        { label: "stETH approved for Intentional", hash: receipt.transactionHash },
+        {
+          label:
+            selectedCheck.envelope.mode === "existing-unsteth"
+              ? `unstETH #${selectedCheck.requestId} approved`
+              : "stETH approved for Intentional",
+          hash: receipt.transactionHash,
+        },
       ]);
       const checked = await verifyReservoirQuote(
         injected,
         account,
-        JSON.stringify(quoteCheck.envelope),
+        JSON.stringify(selectedCheck.envelope),
       );
-      setQuoteCheck(checked);
+      if (checked.envelope.mode === "existing-unsteth") {
+        setClaimQuoteCheck(checked);
+      } else {
+        setQuoteCheck(checked);
+      }
       setStatus("Approval confirmed. The same firm quote is ready to fill.");
     } catch (error) {
       await handleMinedActionError(
         error,
         "Intentional approval confirmed with a verification warning",
-        true,
+        selectedCheck.envelope.mode === "originate",
       );
+      if (selectedCheck.envelope.mode === "existing-unsteth") {
+        setClaimQuoteCheck(null);
+      }
     } finally {
       setAction("idle");
     }
   }
 
-  async function fillQuote() {
+  async function requestExistingClaimQuote(request: WithdrawalStatus) {
     const injected = getInjectedProvider();
-    if (!injected || !account || !quoteCheck) return;
+    if (!injected || !account || request.isClaimed) return;
+    if (!marketLive) {
+      setStatus(marketStatus.detail);
+      return;
+    }
+    if (!RESERVOIR_DEPLOYMENT) {
+      setStatus("The firm quote deployment is not pinned in this app build");
+      return;
+    }
+
+    setAction("reading");
+    setClaimQuoteCheck(null);
+    setStatus(`Requesting a firm offer for unstETH #${request.requestId}.`);
+    try {
+      const response = await fetch("/api/quote/lido", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "existing-unsteth",
+          seller: account,
+          requestId: request.requestId.toString(),
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const message =
+          typeof payload === "object" &&
+          payload !== null &&
+          typeof (payload as { error?: unknown }).error === "string"
+            ? (payload as { error: string }).error
+            : "Firm offers are unavailable right now";
+        throw new Error(message);
+      }
+      const checked = await verifyReservoirQuote(
+        injected,
+        account,
+        JSON.stringify(payload),
+      );
+      if (
+        checked.envelope.mode !== "existing-unsteth" ||
+        checked.requestId !== request.requestId ||
+        checked.requestedStEth !== request.amountOfStETH ||
+        checked.amountOfShares !== request.amountOfShares
+      ) {
+        throw new Error("The firm offer does not match this unstETH position");
+      }
+      setClaimQuoteCheck(checked);
+      setStatus(
+        `Firm offer ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH for unstETH #${request.requestId}.`,
+      );
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setAction("idle");
+    }
+  }
+
+  async function fillQuote(
+    selectedCheck: ReservoirQuoteCheck | null = quoteCheck,
+  ) {
+    const injected = getInjectedProvider();
+    if (!injected || !account || !selectedCheck) return;
     setAction("signing");
     setStatus("Confirm your instant exit.");
     try {
-      const result = await fillReservoirQuote(injected, account, quoteCheck);
+      const result = await fillReservoirQuote(injected, account, selectedCheck);
       setActions((current) => [
         ...current,
         {
@@ -707,18 +802,29 @@ export default function Home() {
           hash: result.hash,
         },
       ]);
-      setLastMintedRequest(result.requestId);
+      if (selectedCheck.envelope.mode === "originate") {
+        setLastMintedRequest(result.requestId);
+      }
       setStatus(
-        `Exit complete. ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`,
+        selectedCheck.envelope.mode === "existing-unsteth"
+          ? `Sale complete. unstETH #${result.requestId} moved to the buyer and ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`
+          : `Exit complete. ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`,
       );
-      setQuoteCheck(null);
+      if (selectedCheck.envelope.mode === "existing-unsteth") {
+        setClaimQuoteCheck(null);
+      } else {
+        setQuoteCheck(null);
+      }
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
         error,
         "Instant exit confirmed with a verification warning",
-        true,
+        selectedCheck.envelope.mode === "originate",
       );
+      if (selectedCheck.envelope.mode === "existing-unsteth") {
+        setClaimQuoteCheck(null);
+      }
     }
   }
 
@@ -1130,10 +1236,10 @@ export default function Home() {
                 >
                   {action === "reading" ? "Getting your quote…" : "Get firm quote"}
                 </button>
-              ) : quoteCheck.allowance !== quoteCheck.requestedStEth ? (
+              ) : !quoteCheck.approvalSatisfied ? (
                 <button
                   className="actionButton"
-                  onClick={approveReservoir}
+                  onClick={() => approveReservoir()}
                   disabled={busy}
                 >
                   Approve stETH
@@ -1141,7 +1247,7 @@ export default function Home() {
               ) : (
                 <button
                   className="actionButton"
-                  onClick={fillQuote}
+                  onClick={() => fillQuote()}
                   disabled={busy}
                 >
                   Get {instantPayment} WETH now
@@ -1300,8 +1406,17 @@ export default function Home() {
 
           {snapshot?.requests.length ? (
             <div className="positionList">
-              {snapshot.requests.map((request) => (
-                <article key={request.requestId.toString()}>
+                  {snapshot.requests.map((request) => {
+                    const activeOffer =
+                      claimQuoteCheck?.envelope.mode === "existing-unsteth" &&
+                      claimQuoteCheck.requestId === request.requestId
+                        ? claimQuoteCheck
+                        : null;
+                    return (
+                    <article
+                      className={activeOffer ? "positionWithOffer" : ""}
+                      key={request.requestId.toString()}
+                    >
                   <div className="positionIdentity">
                     <span className="tokenIcon nftIcon">
                       <img src="/icons/unsteth.svg" alt="unstETH" width={18} height={18} />
@@ -1335,16 +1450,9 @@ export default function Home() {
                           : "Pending"}
                     </strong>
                   </div>
-                  <div className="positionAction">
-                    {request.isFinalized && !request.isClaimed ? (
-                      <button
-                        onClick={() => claimRequest(request.requestId)}
-                        disabled={busy}
-                      >
-                        Claim ETH
-                      </button>
-                    ) : (
-                      <a
+                      <div className="positionAction">
+                        {request.isClaimed ? (
+                          <a
                         href={etherscanToken(
                           ADDRESSES.lidoQueue,
                           request.requestId,
@@ -1352,12 +1460,51 @@ export default function Home() {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        View ↗
-                      </a>
-                    )}
-                  </div>
-                </article>
-              ))}
+                            View ↗
+                          </a>
+                        ) : activeOffer ? (
+                          !activeOffer.approvalSatisfied ? (
+                            <button
+                              onClick={() => approveReservoir(activeOffer)}
+                              disabled={busy}
+                            >
+                              Approve claim
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => fillQuote(activeOffer)}
+                              disabled={busy}
+                            >
+                              Sell for{" "}
+                              {formatMainnetAmount(
+                                BigInt(activeOffer.envelope.quote.paymentAmount),
+                                6,
+                              )}{" "}
+                              WETH
+                            </button>
+                          )
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => requestExistingClaimQuote(request)}
+                              disabled={busy || !marketLive}
+                            >
+                              {marketLive ? "Get firm offer" : "Offers paused"}
+                            </button>
+                            {request.isFinalized && (
+                              <button
+                                onClick={() => claimRequest(request.requestId)}
+                                disabled={busy}
+                              >
+                                Claim ETH
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </article>
+                    );
+                  })}
             </div>
           ) : (
             <div className="emptyPositions">

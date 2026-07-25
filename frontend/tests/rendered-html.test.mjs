@@ -169,7 +169,11 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(ethereum, /sellerWethAfter - sellerWethBefore/);
   assert.match(ethereum, /statuses\[0\]\.owner/);
   assert.match(page, /snapshot\.queueAllowance === amount/);
-  assert.match(page, /quoteCheck\.allowance !== quoteCheck\.requestedStEth/);
+  assert.match(page, /!quoteCheck\.approvalSatisfied/);
+  assert.match(page, /requestExistingClaimQuote/);
+  assert.match(page, /Get firm offer/);
+  assert.match(page, /Approve claim/);
+  assert.match(page, /Sell for/);
   assert.match(page, /RESERVOIR_DEPLOYMENT/);
   assert.match(page, /requestLidoQuote/);
   assert.match(quoteClient, /api\/quote\/lido/);
@@ -179,7 +183,7 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(page, /requestFirmQuote/);
   assert.match(page, /"\/api\/quote\/lido"/);
   assert.doesNotMatch(page, /Paste signed quote JSON|quoteModalOpen|<textarea/);
-  assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
+  assert.match(ethereum, /requestedStEth < MIN_LIDO_REQUEST/);
   assert.match(ethereum, /claimController\.toLowerCase\(\)/);
   assert.match(ethereum, /claimReceiver\.toLowerCase\(\)/);
   assert.match(
@@ -188,6 +192,9 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   );
   assert.match(ethereum, /hasExactAllowance\(currentAllowance, amount\)/);
   assert.match(ethereum, /hasExactAllowance\(fillAllowance, check\.requestedStEth\)/);
+  assert.match(ethereum, /approveUnstETH/);
+  assert.match(ethereum, /existing-unsteth/);
+  assert.match(ethereum, /ownerOf/);
   assert.match(page, /error instanceof MinedTransactionVerificationError/);
   assert.match(page, /Instant exit confirmed with a verification warning/);
   assert.match(ethereum, /event WithdrawalClaimed/);

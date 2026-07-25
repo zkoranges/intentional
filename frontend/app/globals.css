@@ -1107,7 +1107,15 @@ main {
 }
 
 .positionAction {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
   text-align: right;
+}
+
+.positionWithOffer {
+  border-color: rgba(139, 92, 246, 0.42) !important;
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.08);
 }
 
 .positionAction button,

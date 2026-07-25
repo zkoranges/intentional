@@ -63,11 +63,14 @@ export async function GET() {
   const expectedAdapter = configuredAddress(
     process.env.NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER,
   );
+  const expectedUnstETHAdapter = configuredAddress(
+    process.env.NEXT_PUBLIC_RESERVOIR_LIDO_UNSTETH_ADAPTER,
+  );
   const firmQuoteConfigured = Boolean(
     process.env.SIGNER_URL?.trim() && process.env.SIGNER_SECRET?.trim(),
   );
 
-  if (!rpcUrl || !kernel || !expectedAdapter) {
+  if (!rpcUrl || !kernel || !expectedAdapter || !expectedUnstETHAdapter) {
     return response(
       "Unavailable",
       0n,
@@ -85,14 +88,17 @@ export async function GET() {
       chainId,
       kernelCode,
       adapterCode,
+      unstETHAdapterCode,
       kernelPaused,
       kernelSealed,
       adapterAllowed,
+      unstETHAdapterAllowed,
       funding,
     ] = await Promise.all([
         client.getChainId(),
         client.getCode({ address: kernel }),
         client.getCode({ address: expectedAdapter }),
+        client.getCode({ address: expectedUnstETHAdapter }),
         client.readContract({
           address: kernel,
           abi: kernelAbi,
@@ -112,6 +118,12 @@ export async function GET() {
         client.readContract({
           address: kernel,
           abi: kernelAbi,
+          functionName: "isAdapterAllowed",
+          args: [expectedUnstETHAdapter],
+        }),
+        client.readContract({
+          address: kernel,
+          abi: kernelAbi,
           functionName: "fundingAccount",
         }),
       ]);
@@ -122,7 +134,10 @@ export async function GET() {
       kernelCode === "0x" ||
       !adapterCode ||
       adapterCode === "0x" ||
-      !adapterAllowed
+      !unstETHAdapterCode ||
+      unstETHAdapterCode === "0x" ||
+      !adapterAllowed ||
+      !unstETHAdapterAllowed
     ) {
       return response(
         "Unavailable",
