@@ -31,7 +31,8 @@ unauthenticated quote API or browser-held factor key.
 
 Before enabling settlement, the browser requires
 `NEXT_PUBLIC_RESERVOIR_KERNEL` and `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` to be
-compiled into the build. It then checks:
+compiled into the build. Copy `.env.example` to a local `.env.local` only
+after the reviewed mainnet manifest exists. It then checks:
 
 - chain ID 1 and exact equality to those reviewed addresses;
 - kernel and adapter bytecode;

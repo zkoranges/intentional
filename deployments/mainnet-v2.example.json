@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "network": "ethereum-mainnet",
+  "chainId": 1,
+  "gitCommit": "<40-character reviewed commit>",
+  "releaseState": "paused-unfunded",
+  "factor": "0x0000000000000000000000000000000000000000",
+  "contracts": {
+    "fundingAccount": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "runtimeCodeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "deploymentTxHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "blockNumber": 0,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x0000000000000000000000000000000000000000#code"
+    },
+    "reserveAdapter": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "runtimeCodeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "deploymentTxHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "blockNumber": 0,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x0000000000000000000000000000000000000000#code"
+    },
+    "kernel": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "runtimeCodeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "deploymentTxHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "blockNumber": 0,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x0000000000000000000000000000000000000000#code"
+    },
+    "lidoAdapter": {
+      "address": "0x0000000000000000000000000000000000000000",
+      "runtimeCodeHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "deploymentTxHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "blockNumber": 0,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x0000000000000000000000000000000000000000#code"
+    }
+  },
+  "canonical": {
+    "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "stataWeth": "0x0bfc9d54Fc184518A81162F8fB99c2eACa081202",
+    "stETH": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+    "lidoWithdrawalQueue": "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"
+  }
+}

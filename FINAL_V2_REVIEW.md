@@ -224,9 +224,14 @@ The review confirmed:
   signer; raw keys appear only in disposable fork tooling;
 - wrong acknowledgement, over-cap funding, and wrong runtime hash fail for
   their exact expected reasons;
-- deployment identities are reproduced through two independent RPC providers
-  and explorer source verification before capital moves; and
+- deployment identities are reproduced through live RPC reads and explorer
+  source verification before capital moves; and
 - no persistent transaction was broadcast.
+
+The team later made a second RPC an optional operator cross-check rather than
+a release gate. This procedural simplification does not change the verifier,
+runtime-codehash bindings, Etherscan source-verification requirement, or
+contract safety boundary.
 
 The reviewer approved the non-persistent release for commit and push. Its
 remaining low-severity suggestions were also folded in:

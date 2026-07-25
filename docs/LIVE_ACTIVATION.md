@@ -13,6 +13,10 @@ Only activate a clean, reviewed commit whose deterministic suite,
 production-contract fork suite, `make live-product-e2e`, frontend builds, and
 exact-model Opus 5 review have passed.
 
+One healthy Ethereum mainnet RPC is sufficient. Source verification on
+Etherscan is a separate required check before funding. A second RPC may be
+used as an operator cross-check, but it is not an activation gate.
+
 The first jury release is:
 
 - Ethereum mainnet only;
@@ -57,7 +61,21 @@ only in a temporary directory and are removed on exit.
 Use an encrypted Foundry keystore, Ledger, Trezor, or interactive signing. Do
 not export the permanent factor key as `FACTOR_PRIVATE_KEY`.
 
-First simulate. This example uses a Foundry keystore named `reservoir-factor`:
+Load the non-secret operator inputs and run the read-only preflight:
+
+```sh
+set -a
+source .env
+set +a
+make preflight-mainnet-v2
+```
+
+The preflight requires chain 1, the reviewed factor nonce, a code-free factor,
+canonical dependency code and StataWETH binding, sufficient live gas headroom,
+an Etherscan key, and a clean Git tree. It never signs or broadcasts.
+
+Then simulate. This example uses a Foundry keystore named
+`reservoir-factor`:
 
 ```sh
 RESERVOIR_MAINNET_ACK=DEPLOY_PAUSED_UNFUNDED_RESERVOIR_V2 \
@@ -69,9 +87,18 @@ forge script script/DeployV2Mainnet.s.sol:DeployV2Mainnet \
   -vvvv
 ```
 
-An authorized human may separately add `--broadcast --slow` after reviewing
-the simulation. `--ledger`, `--trezor`, or `--interactive` can replace
-`--account reservoir-factor`.
+After reviewing the simulation, an authorized human may run the same command
+with:
+
+```text
+--broadcast --slow --verify --verifier etherscan
+```
+
+Foundry reads `ETHERSCAN_API_KEY` through the checked-in `mainnet` verifier
+configuration. If automatic verification is delayed, rerun the identical
+script command with `--resume --verify --verifier etherscan`; do not redeploy.
+`--ledger`, `--trezor`, or `--interactive` can replace `--account
+reservoir-factor`.
 
 The script refuses non-chain-1 execution, checks the canonical endpoints and
 StataWETH asset, seals all single-assignment bindings, and leaves funding and
@@ -79,7 +106,9 @@ settlement paused with zero WETH and zero vault shares.
 
 Extract the JSON between
 `RESERVOIR_MAINNET_DEPLOYMENT_BEGIN/END`. Create
-`deployments/mainnet-v2.json` containing:
+`deployments/mainnet-v2.json` from
+[`deployments/mainnet-v2.example.json`](../deployments/mainnet-v2.example.json),
+containing:
 
 - the exact Git commit;
 - the four Reservoir addresses;
@@ -89,17 +118,17 @@ Extract the JSON between
 - explorer source-verification links.
 
 Do not fund yet. Commit that public manifest on a review branch, reproduce the
-hashes from at least two independent Ethereum RPC providers, verify all four
-contracts' source on a block explorer, and request exact-model Opus 5 review.
-The manifest—not operator-supplied getters—is the reviewed identity used by
-the next two scripts.
+hashes through the configured Ethereum RPC, verify all four contracts' source
+on Etherscan, and request exact-model Opus 5 review. The manifest—not
+operator-supplied getters—is the reviewed identity used by the next two
+scripts.
 
 ## 4. Verify the paused deployment
 
-Run the read-only verifier once per independent RPC:
+Run the read-only verifier:
 
 ```sh
-ETH_RPC_URL="$FIRST_ETH_RPC_URL" \
+ETH_RPC_URL="$ETH_RPC_URL" \
 FACTOR_ADDRESS="0x..." \
 KERNEL_ADDRESS="0x..." \
 FUNDING_ACCOUNT_ADDRESS="0x..." \
@@ -113,10 +142,10 @@ EXPECTED_RELEASE_STATE=paused-unfunded \
 npm --prefix frontend run verify:deployment
 ```
 
-Repeat with `SECOND_ETH_RPC_URL`. The verifier checks:
+The verifier checks:
 
 - chain ID, a code-free factor, and runtime code at every dependency;
-- exact equality to the four independently reviewed runtime code hashes;
+- exact equality to the four manifest-reviewed runtime code hashes;
 - factor, funding, reserve, settlement, and Lido-adapter bindings;
 - sealed configuration, adapter count, nonce floor, and allowlisting;
 - zero idle threshold and zero liquidity buffer;
@@ -163,10 +192,10 @@ still consists of three sequential transactions; if contemporary chain state
 causes one to fail after an earlier transaction lands, settlement remains
 paused and the factor uses the documented pause/recovery controls.
 
-Run the verifier against both independent RPCs with
+Run the verifier with
 `EXPECTED_RELEASE_STATE=funded-paused` and `MIN_CAPACITY_WEI` set. Confirm the
-funding transaction and StataWETH share balance in the block explorer. Do not
-activate until both outputs agree.
+funding transaction and StataWETH share balance in Etherscan. Do not activate
+until both checks agree.
 
 ## 6. Activate one verified release
 
@@ -193,15 +222,16 @@ forge script script/ActivateV2Mainnet.s.sol:ActivateV2Mainnet \
 ```
 
 Simulate first; an authorized human may separately add `--broadcast --slow`.
-Then verify `EXPECTED_RELEASE_STATE=active` from both RPCs and inspect the
-activation transaction on the explorer.
+Then verify `EXPECTED_RELEASE_STATE=active` through the configured RPC and
+inspect the activation transaction on Etherscan.
 
 ## 7. Pin and redeploy the frontend
 
 Only after active verification:
 
-1. set `NEXT_PUBLIC_RESERVOIR_KERNEL` and
-   `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` as public build-time values;
+1. use [`frontend/.env.example`](../frontend/.env.example) as the template for
+   local or hosting build variables, then set `NEXT_PUBLIC_RESERVOIR_KERNEL` and
+   `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` from the reviewed manifest;
 2. rebuild and redeploy the exact reviewed frontend commit;
 3. confirm the page visibly renders both exact pinned addresses with explorer
    links and no longer says `Awaiting reviewed deployment`;

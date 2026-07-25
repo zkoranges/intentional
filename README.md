@@ -46,10 +46,11 @@ originate/claim flows and keeps instant Reservoir fills disabled. After the
 reviewed kernel and Lido adapter are deployed, their exact public addresses
 must be compiled into the frontend before that route can request approval.
 
-The paused deployment, separately capped funding, independent verification,
-one-operation activation, and read-only binding-verification procedure is
-frozen in [`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). The tooling is
-prepared but has not broadcast a persistent transaction.
+The paused deployment, separately capped funding, Etherscan source
+verification, one-operation activation, and read-only binding-verification
+procedure is frozen in
+[`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). The tooling is prepared
+but has not broadcast a persistent transaction.
 
 ## What is working
 
