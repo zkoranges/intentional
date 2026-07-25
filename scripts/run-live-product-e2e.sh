@@ -179,7 +179,8 @@ LIDO_ADAPTER_ADDRESS="${lido_adapter_address}" \
 SELLER_ADDRESS="${seller_address}" \
 REQUESTED_STETH="0.9" \
 PAYMENT_WETH="0.89775" \
-node frontend/scripts/create-lido-quote.mjs >"${QUOTE_FILE}"
+ALLOW_TEST_PAYMENT_OVERRIDE=1 \
+node --experimental-strip-types frontend/scripts/create-lido-quote.mjs >"${QUOTE_FILE}"
 
 if [[ "${JURY_BROWSER_MODE:-0}" == "1" ]]; then
   echo

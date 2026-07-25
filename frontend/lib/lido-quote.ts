@@ -1,6 +1,8 @@
 import { formatEther, isAddress, parseEther } from "viem";
 
-export type LidoQuoteKind = "indicative" | "firm";
+export const MIN_LIVE_LIDO_QUOTE = parseEther("0.001");
+
+export type LidoQuoteKind = "market" | "firm";
 
 export type LidoQuoteResponse = {
   kind: LidoQuoteKind;
@@ -9,6 +11,17 @@ export type LidoQuoteResponse = {
   paymentAmount: string;
   paymentAsset: "WETH";
   discountBps: number;
+  recommendedRoute: "cow" | "reservoir";
+  cowPaymentAmount: string;
+  reservoirPaymentAmount: string | null;
+  underwritingCap: string;
+  estimatedWaitMs: number;
+  fundingCost: string;
+  riskCost: string;
+  claimGasCost: string;
+  userImprovement: string;
+  source: "cow-live+lido-live";
+  sourceTimestamp: string;
   expiresAt: number | null;
   envelope: Record<string, unknown> | null;
 };
@@ -16,20 +29,6 @@ export type LidoQuoteResponse = {
 export type LidoQuoteError = {
   error: string;
 };
-
-export function calculatePaymentAmount(
-  requestedStEth: bigint,
-  discountBps: number,
-) {
-  if (
-    !Number.isSafeInteger(discountBps) ||
-    discountBps < 0 ||
-    discountBps >= 10_000
-  ) {
-    throw new Error("The factoring discount must be between 0 and 9,999 bps");
-  }
-  return (requestedStEth * BigInt(10_000 - discountBps)) / 10_000n;
-}
 
 export function formatQuoteAmount(value: string) {
   const amount = Number(formatEther(BigInt(value)));
@@ -73,7 +72,10 @@ export async function requestLidoQuote(
   if (
     result.market !== "lido" ||
     result.requestedStEth !== requestedStEth.toString() ||
-    !/^\d+$/.test(result.paymentAmount)
+    !/^\d+$/.test(result.paymentAmount) ||
+    !/^\d+$/.test(result.cowPaymentAmount) ||
+    !["cow", "reservoir"].includes(result.recommendedRoute) ||
+    result.source !== "cow-live+lido-live"
   ) {
     throw new Error("The quote service returned an invalid Lido quote");
   }

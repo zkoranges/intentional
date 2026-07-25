@@ -839,8 +839,11 @@ main {
 }
 
 .actionButton {
+  display: flex;
   width: 100%;
   min-height: 56px;
+  align-items: center;
+  justify-content: center;
   padding: 0 18px;
   border-radius: 18px;
   background: var(--pink);
@@ -848,6 +851,7 @@ main {
   color: white;
   font-size: 16px;
   font-weight: 750;
+  text-decoration: none;
   transition:
     background 150ms ease,
     transform 150ms ease,
@@ -936,6 +940,13 @@ main {
   color: #aa8cf7;
   font-size: 12px;
   font-weight: 650;
+}
+
+.quoteAlternatives {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 12px;
 }
 
 .positionsSection,

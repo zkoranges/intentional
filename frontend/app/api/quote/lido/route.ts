@@ -1,68 +1,36 @@
-import {
-  createPublicClient,
-  encodeAbiParameters,
-  getAddress,
-  http,
-  isAddress,
-  keccak256,
-  parseAbi,
-  type Address,
-  type Hex,
-} from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { mainnet } from "viem/chains";
+import { formatEther, isAddress } from "viem";
 
+import { ADDRESSES, MAX_LIDO_REQUEST } from "../../../../lib/ethereum";
 import {
-  ADDRESSES,
-  MAX_LIDO_REQUEST,
-  MIN_LIDO_REQUEST,
-} from "../../../../lib/ethereum";
-import {
-  calculatePaymentAmount,
+  MIN_LIVE_LIDO_QUOTE,
   type LidoQuoteResponse,
 } from "../../../../lib/lido-quote";
+import {
+  underwriteLidoExit,
+  type QuotePolicy,
+} from "../../../../lib/quote-policy";
 
 export const dynamic = "force-dynamic";
 
-const kernelAbi = parseAbi([
-  "function factorSigner() view returns (address)",
-  "function fundingAccount() view returns (address)",
-  "function isAdapterAllowed(address adapter) view returns (bool)",
-  "function isSealed() view returns (bool)",
-  "function isPaused() view returns (bool)",
-  "function nonceUsed(uint256 nonce) view returns (bool)",
-  "function nonceFloor() view returns (uint256)",
-]);
-const adapterAbi = parseAbi([
-  "function settlement() view returns (address)",
-  "function stETH() view returns (address)",
-  "function queue() view returns (address)",
-]);
-const fundingAbi = parseAbi([
-  "function paymentAsset() view returns (address)",
-  "function availableFor(uint256 wanted) view returns (uint256)",
-  "function isSealed() view returns (bool)",
-]);
-const stEthAbi = parseAbi([
-  "function getSharesByPooledEth(uint256 amount) view returns (uint256)",
-]);
-const queueAbi = parseAbi(["function isPaused() view returns (bool)"]);
+const COW_QUOTE_URL = "https://api.cow.fi/mainnet/api/v1/quote";
+const LIDO_WAIT_URL = "https://wq-api.lido.fi/v2/request-time/calculate";
+const MAX_WAIT_MS = 365 * 24 * 60 * 60 * 1_000;
 
-const quoteTypes = {
-  ClaimQuote: [
-    { name: "factor", type: "address" },
-    { name: "seller", type: "address" },
-    { name: "adapter", type: "address" },
-    { name: "claimController", type: "address" },
-    { name: "claimReceiver", type: "address" },
-    { name: "paymentAsset", type: "address" },
-    { name: "paymentAmount", type: "uint256" },
-    { name: "claimDataHash", type: "bytes32" },
-    { name: "boundsHash", type: "bytes32" },
-    { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint256" },
-  ],
-} as const;
+type CowResponse = {
+  quote?: {
+    buyAmount?: unknown;
+    gasPrice?: unknown;
+    validTo?: unknown;
+  };
+  expiration?: unknown;
+};
+
+type LidoWaitResponse = {
+  status?: unknown;
+  requestInfo?: {
+    finalizationIn?: unknown;
+  };
+};
 
 function json(body: LidoQuoteResponse | { error: string }, status = 200) {
   return Response.json(body, {
@@ -73,291 +41,99 @@ function json(body: LidoQuoteResponse | { error: string }, status = 200) {
   });
 }
 
-function readDiscountBps() {
-  const raw = process.env.LIDO_QUOTE_DISCOUNT_BPS?.trim() || "50";
-  if (!/^\d+$/.test(raw)) {
-    throw new Error("LIDO_QUOTE_DISCOUNT_BPS must be an unsigned integer");
-  }
+function readUnsignedPolicy(name: string, fallback: number, maximum: number) {
+  const raw = process.env[name]?.trim() || String(fallback);
+  if (!/^\d+$/.test(raw)) throw new Error("invalid quote policy");
   const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 0 || value > 2_000) {
-    throw new Error("LIDO_QUOTE_DISCOUNT_BPS must be between 0 and 2,000");
+  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+    throw new Error("invalid quote policy");
   }
   return value;
 }
 
-function configuredAddress(name: string) {
-  const value = process.env[name]?.trim();
-  return value && isAddress(value) ? getAddress(value) : null;
-}
-
-function firmConfiguration() {
-  const rpcUrl = process.env.ETH_RPC_URL?.trim();
-  const signerKey = process.env.LIDO_QUOTE_SIGNER_PRIVATE_KEY?.trim();
-  const factor = configuredAddress("FACTOR_ADDRESS");
-  const kernel =
-    configuredAddress("RESERVOIR_KERNEL") ??
-    configuredAddress("NEXT_PUBLIC_RESERVOIR_KERNEL");
-  const adapter =
-    configuredAddress("RESERVOIR_LIDO_ADAPTER") ??
-    configuredAddress("NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER");
-  const configured = [rpcUrl, signerKey, kernel, adapter];
-  if (configured.every(Boolean)) {
-    if (!/^0x[0-9a-fA-F]{64}$/.test(signerKey!)) {
-      throw new Error("LIDO_QUOTE_SIGNER_PRIVATE_KEY must be 32-byte hex");
-    }
-    return {
-      rpcUrl: rpcUrl!,
-      signerKey: signerKey! as Hex,
-      factor,
-      kernel: kernel!,
-      adapter: adapter!,
-    };
-  }
-  if (configured.some(Boolean)) {
-    throw new Error("The firm Lido quote service is only partially configured");
-  }
-  return null;
-}
-
-function makeIndicativeQuote(
-  requestedStEth: bigint,
-  discountBps: number,
-): LidoQuoteResponse {
+function quotePolicy(): QuotePolicy {
   return {
-    kind: "indicative",
-    market: "lido",
-    requestedStEth: requestedStEth.toString(),
-    paymentAmount: calculatePaymentAmount(
-      requestedStEth,
-      discountBps,
-    ).toString(),
-    paymentAsset: "WETH",
-    discountBps,
-    expiresAt: null,
-    envelope: null,
+    fundingAprBps: readUnsignedPolicy(
+      "LIDO_FUNDING_APR_BPS",
+      1_000,
+      10_000,
+    ),
+    riskBps: readUnsignedPolicy("LIDO_RISK_BPS", 15, 10_000),
+    userEdgeShareBps: readUnsignedPolicy(
+      "LIDO_USER_EDGE_SHARE_BPS",
+      5_000,
+      10_000,
+    ),
+    claimGasUnits: readUnsignedPolicy(
+      "LIDO_CLAIM_GAS_UNITS",
+      120_000,
+      1_000_000,
+    ),
   };
 }
 
-async function makeFirmQuote(
-  seller: Address,
+function unsigned(value: unknown, name: string) {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) {
+    throw new Error(`invalid ${name}`);
+  }
+  return BigInt(value);
+}
+
+async function fetchLiveMarket(
+  seller: string,
   requestedStEth: bigint,
-  discountBps: number,
-  config: NonNullable<ReturnType<typeof firmConfiguration>>,
-): Promise<LidoQuoteResponse> {
-  const signer = privateKeyToAccount(config.signerKey);
-  const factor = config.factor ?? signer.address;
-  if (seller === factor) {
-    throw new Error("The seller must differ from the factor claim destination");
-  }
-  const client = createPublicClient({
-    chain: mainnet,
-    transport: http(config.rpcUrl),
-  });
-  if ((await client.getChainId()) !== 1) {
-    throw new Error("The quote RPC is not connected to Ethereum mainnet");
-  }
-
-  const latestBlock = await client.getBlock({ blockTag: "latest" });
-  const deadline = latestBlock.timestamp + 10n * 60n;
-  const nonceBytes = crypto.getRandomValues(new Uint8Array(32));
-  const nonce = BigInt(
-    `0x${Array.from(nonceBytes, (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("")}`,
-  );
-  const paymentAmount = calculatePaymentAmount(requestedStEth, discountBps);
-  const maxStEthShortfall = 2n;
-
-  const [
-    factorSigner,
-    fundingAccount,
-    adapterAllowed,
-    settlementSealed,
-    settlementPaused,
-    nonceFloor,
-    adapterSettlement,
-    adapterStEth,
-    adapterQueue,
-  ] = await Promise.all([
-    client.readContract({
-      address: config.kernel,
-      abi: kernelAbi,
-      functionName: "factorSigner",
+  signal: AbortSignal,
+) {
+  const [cowResponse, lidoResponse] = await Promise.all([
+    fetch(COW_QUOTE_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "sell",
+        sellToken: ADDRESSES.stEth,
+        buyToken: ADDRESSES.weth,
+        sellAmountBeforeFee: requestedStEth.toString(),
+        from: seller,
+        receiver: seller,
+        validFor: 300,
+        signingScheme: "eip712",
+        priceQuality: "optimal",
+      }),
+      cache: "no-store",
+      signal,
     }),
-    client.readContract({
-      address: config.kernel,
-      abi: kernelAbi,
-      functionName: "fundingAccount",
-    }),
-    client.readContract({
-      address: config.kernel,
-      abi: kernelAbi,
-      functionName: "isAdapterAllowed",
-      args: [config.adapter],
-    }),
-    client.readContract({
-      address: config.kernel,
-      abi: kernelAbi,
-      functionName: "isSealed",
-    }),
-    client.readContract({
-      address: config.kernel,
-      abi: kernelAbi,
-      functionName: "isPaused",
-    }),
-    client.readContract({
-      address: config.kernel,
-      abi: kernelAbi,
-      functionName: "nonceFloor",
-    }),
-    client.readContract({
-      address: config.adapter,
-      abi: adapterAbi,
-      functionName: "settlement",
-    }),
-    client.readContract({
-      address: config.adapter,
-      abi: adapterAbi,
-      functionName: "stETH",
-    }),
-    client.readContract({
-      address: config.adapter,
-      abi: adapterAbi,
-      functionName: "queue",
+    fetch(`${LIDO_WAIT_URL}?amount=${formatEther(requestedStEth)}`, {
+      cache: "no-store",
+      signal,
     }),
   ]);
-  if (
-    factorSigner !== factor ||
-    adapterSettlement !== config.kernel ||
-    adapterStEth !== ADDRESSES.stEth ||
-    adapterQueue !== ADDRESSES.lidoQueue ||
-    !adapterAllowed ||
-    !settlementSealed ||
-    settlementPaused ||
-    nonce < nonceFloor
-  ) {
-    throw new Error("The active Lido settlement deployment is not healthy");
+  if (!cowResponse.ok || !lidoResponse.ok) {
+    throw new Error("live market source unavailable");
   }
 
-  const [fundingSealed, capacity, minAmountOfShares, queuePaused] =
-    await Promise.all([
-      client.readContract({
-        address: fundingAccount,
-        abi: fundingAbi,
-        functionName: "isSealed",
-      }),
-      client.readContract({
-        address: fundingAccount,
-        abi: fundingAbi,
-        functionName: "availableFor",
-        args: [paymentAmount],
-      }),
-      client.readContract({
-        address: ADDRESSES.stEth,
-        abi: stEthAbi,
-        functionName: "getSharesByPooledEth",
-        args: [requestedStEth - maxStEthShortfall],
-      }),
-      client.readContract({
-        address: ADDRESSES.lidoQueue,
-        abi: queueAbi,
-        functionName: "isPaused",
-      }),
-    ]);
-  const paymentAsset = await client.readContract({
-    address: fundingAccount,
-    abi: fundingAbi,
-    functionName: "paymentAsset",
-  });
+  const cow = (await cowResponse.json()) as CowResponse;
+  const lido = (await lidoResponse.json()) as LidoWaitResponse;
+  const cowBuyAmount = unsigned(cow.quote?.buyAmount, "CoW buy amount");
+  const gasPriceWei = unsigned(cow.quote?.gasPrice, "CoW gas price");
+  const estimatedWaitMs = lido.requestInfo?.finalizationIn;
   if (
-    paymentAsset !== ADDRESSES.weth ||
-    !fundingSealed ||
-    capacity !== paymentAmount
+    lido.status !== "calculated" ||
+    typeof estimatedWaitMs !== "number" ||
+    !Number.isSafeInteger(estimatedWaitMs) ||
+    estimatedWaitMs < 0 ||
+    estimatedWaitMs > MAX_WAIT_MS
   ) {
-    throw new Error("The factor reserve cannot cover this Lido quote");
+    throw new Error("invalid Lido wait estimate");
   }
-  if (queuePaused) {
-    throw new Error("Lido withdrawals are currently paused");
+  const expiration = Date.parse(String(cow.expiration));
+  if (!Number.isFinite(expiration)) {
+    throw new Error("invalid CoW quote expiration");
   }
-
-  const claimData = encodeAbiParameters(
-    [
-      {
-        type: "tuple",
-        components: [
-          { name: "queue", type: "address" },
-          { name: "stETH", type: "address" },
-          { name: "requestedStETH", type: "uint256" },
-        ],
-      },
-    ],
-    [
-      {
-        queue: ADDRESSES.lidoQueue,
-        stETH: ADDRESSES.stEth,
-        requestedStETH: requestedStEth,
-      },
-    ],
-  );
-  const boundsData = encodeAbiParameters(
-    [
-      {
-        type: "tuple",
-        components: [
-          { name: "maxStETHShortfall", type: "uint256" },
-          { name: "minAmountOfShares", type: "uint256" },
-        ],
-      },
-    ],
-    [{ maxStETHShortfall: maxStEthShortfall, minAmountOfShares }],
-  );
-  const quote = {
-    factor,
-    seller,
-    adapter: config.adapter,
-    claimController: factor,
-    claimReceiver: factor,
-    paymentAsset: ADDRESSES.weth,
-    paymentAmount,
-    claimDataHash: keccak256(claimData),
-    boundsHash: keccak256(boundsData),
-    nonce,
-    deadline,
-  };
-  const factorSignature = await signer.signTypedData({
-    domain: {
-      name: "Reservoir v2",
-      version: "1",
-      chainId: 1,
-      verifyingContract: config.kernel,
-    },
-    types: quoteTypes,
-    primaryType: "ClaimQuote",
-    message: quote,
-  });
-  const envelope = {
-    version: "reservoir-v2-lido-1",
-    chainId: 1,
-    kernel: config.kernel,
-    quote: {
-      ...quote,
-      paymentAmount: paymentAmount.toString(),
-      nonce: nonce.toString(),
-      deadline: deadline.toString(),
-    },
-    claimData,
-    boundsData,
-    factorSignature,
-  };
   return {
-    kind: "firm",
-    market: "lido",
-    requestedStEth: requestedStEth.toString(),
-    paymentAmount: paymentAmount.toString(),
-    paymentAsset: "WETH",
-    discountBps,
-    expiresAt: Number(deadline),
-    envelope,
+    cowBuyAmount,
+    gasPriceWei,
+    estimatedWaitMs,
+    expiresAt: Math.floor(expiration / 1_000),
   };
 }
 
@@ -376,34 +152,67 @@ export async function POST(request: Request) {
     ) {
       return json({ error: "Enter a valid stETH amount" }, 400);
     }
+
     const requestedStEth = BigInt(body.requestedStEth);
     if (
-      requestedStEth < MIN_LIDO_REQUEST ||
+      requestedStEth < MIN_LIVE_LIDO_QUOTE ||
       requestedStEth > MAX_LIDO_REQUEST
     ) {
-      return json({ error: "The amount is outside Lido withdrawal limits" }, 400);
+      return json(
+        { error: "Live quotes support 0.001 to 1,000 stETH" },
+        400,
+      );
     }
 
-    const discountBps = readDiscountBps();
-    const config = firmConfiguration();
-    if (
-      !config ||
-      getAddress(body.seller) ===
-        "0x0000000000000000000000000000000000000000"
-    ) {
-      return json(makeIndicativeQuote(requestedStEth, discountBps));
-    }
-    return json(
-      await makeFirmQuote(
-        getAddress(body.seller),
-        requestedStEth,
-        discountBps,
-        config,
-      ),
+    const market = await fetchLiveMarket(
+      body.seller,
+      requestedStEth,
+      AbortSignal.timeout(10_000),
     );
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "The Lido quote service failed";
-    return json({ error: message }, 503);
+    const underwritten = underwriteLidoExit({
+      requestedStEth,
+      cowBuyAmount: market.cowBuyAmount,
+      estimatedWaitMs: BigInt(market.estimatedWaitMs),
+      gasPriceWei: market.gasPriceWei,
+      policy: quotePolicy(),
+    });
+    const recommendedRoute = underwritten.reservoirAvailable
+      ? "reservoir"
+      : "cow";
+    const paymentAmount =
+      underwritten.reservoirPaymentAmount ?? market.cowBuyAmount;
+    const discountBps =
+      paymentAmount >= requestedStEth
+        ? 0
+        : Number(
+            ((requestedStEth - paymentAmount) * 10_000n) / requestedStEth,
+          );
+
+    return json({
+      kind: "market",
+      market: "lido",
+      requestedStEth: requestedStEth.toString(),
+      paymentAmount: paymentAmount.toString(),
+      paymentAsset: "WETH",
+      discountBps,
+      recommendedRoute,
+      cowPaymentAmount: market.cowBuyAmount.toString(),
+      reservoirPaymentAmount:
+        underwritten.reservoirPaymentAmount?.toString() ?? null,
+      underwritingCap: underwritten.underwritingCap.toString(),
+      estimatedWaitMs: market.estimatedWaitMs,
+      fundingCost: underwritten.fundingCost.toString(),
+      riskCost: underwritten.riskCost.toString(),
+      claimGasCost: underwritten.claimGasCost.toString(),
+      userImprovement: underwritten.userImprovement.toString(),
+      source: "cow-live+lido-live",
+      sourceTimestamp: new Date().toISOString(),
+      expiresAt: market.expiresAt,
+      envelope: null,
+    });
+  } catch {
+    // Never expose infrastructure details, upstream URLs, or internal error
+    // messages through this public endpoint.
+    return json({ error: "Live CoW/Lido pricing is temporarily unavailable" }, 503);
   }
 }

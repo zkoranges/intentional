@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import {
   createPublicClient,
   encodeAbiParameters,
+  formatEther,
   getAddress,
   http,
   isAddress,
@@ -13,6 +14,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
+import { underwriteLidoExit } from "../lib/quote-policy.ts";
 
 const STETH = getAddress("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
 const WETH = getAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
@@ -40,7 +42,10 @@ const fundingAbi = parseAbi([
 const stEthAbi = parseAbi([
   "function getSharesByPooledEth(uint256 amount) view returns (uint256)",
 ]);
-const queueAbi = parseAbi(["function isPaused() view returns (bool)"]);
+const queueAbi = parseAbi([
+  "function isPaused() view returns (bool)",
+  "function isBunkerModeActive() view returns (bool)",
+]);
 
 function required(name) {
   const value = process.env[name]?.trim();
@@ -59,6 +64,104 @@ function unsigned(value, name) {
   return BigInt(value);
 }
 
+function policyUint(name, fallback, maximum) {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isSafeInteger(value) || value < 0 || value > maximum) {
+    throw new Error(`${name} is outside its supported range`);
+  }
+  return value;
+}
+
+async function livePricing(seller, requestedStEth) {
+  const [cowResponse, lidoResponse] = await Promise.all([
+    fetch("https://api.cow.fi/mainnet/api/v1/quote", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "sell",
+        sellToken: STETH,
+        buyToken: WETH,
+        sellAmountBeforeFee: requestedStEth.toString(),
+        from: seller,
+        receiver: seller,
+        validFor: 300,
+        signingScheme: "eip712",
+        priceQuality: "optimal",
+      }),
+      signal: AbortSignal.timeout(10_000),
+    }),
+    fetch(
+      `https://wq-api.lido.fi/v2/request-time/calculate?amount=${formatEther(requestedStEth)}`,
+      { signal: AbortSignal.timeout(10_000) },
+    ),
+  ]);
+  if (!cowResponse.ok || !lidoResponse.ok) {
+    throw new Error("Live CoW or Lido pricing is unavailable; no firm quote was signed");
+  }
+
+  const cow = await cowResponse.json();
+  const lido = await lidoResponse.json();
+  const cowBuyAmount = unsigned(
+    String(cow.quote?.buyAmount ?? ""),
+    "CoW buy amount",
+  );
+  const gasPriceWei = unsigned(
+    String(cow.quote?.gasPrice ?? ""),
+    "CoW gas price",
+  );
+  const estimatedWaitMs = Number(lido.requestInfo?.finalizationIn);
+  if (
+    lido.status !== "calculated" ||
+    !Number.isSafeInteger(estimatedWaitMs) ||
+    estimatedWaitMs < 0 ||
+    estimatedWaitMs > 365 * 24 * 60 * 60 * 1_000
+  ) {
+    throw new Error("Lido returned an invalid finalization estimate");
+  }
+  const policy = {
+    fundingAprBps: policyUint("LIDO_FUNDING_APR_BPS", 1_000, 10_000),
+    riskBps: policyUint("LIDO_RISK_BPS", 15, 10_000),
+    userEdgeShareBps: policyUint(
+      "LIDO_USER_EDGE_SHARE_BPS",
+      5_000,
+      10_000,
+    ),
+    claimGasUnits: policyUint(
+      "LIDO_CLAIM_GAS_UNITS",
+      120_000,
+      1_000_000,
+    ),
+  };
+  const priced = underwriteLidoExit({
+    requestedStEth,
+    cowBuyAmount,
+    estimatedWaitMs: BigInt(estimatedWaitMs),
+    gasPriceWei,
+    policy,
+  });
+  if (!priced.reservoirAvailable || priced.reservoirPaymentAmount === null) {
+    throw new Error(
+      "CoW currently beats Reservoir's underwriting cap; no firm quote was signed",
+    );
+  }
+  return {
+    paymentAmount: priced.reservoirPaymentAmount,
+    evidence: {
+      mode: "live",
+      source: "cow-live+lido-live",
+      sourceTimestamp: new Date().toISOString(),
+      cowPaymentAmount: cowBuyAmount,
+      estimatedWaitMs,
+      underwritingCap: priced.underwritingCap,
+      fundingCost: priced.fundingCost,
+      riskCost: priced.riskCost,
+      claimGasCost: priced.claimGasCost,
+      userImprovement: priced.userImprovement,
+      policy,
+    },
+  };
+}
+
 const rpcUrl = required("ETH_RPC_URL");
 const factorKey = required("FACTOR_PRIVATE_KEY");
 if (!/^0x[0-9a-fA-F]{64}$/.test(factorKey)) {
@@ -73,7 +176,22 @@ if (seller === account.address) {
   throw new Error("SELLER_ADDRESS must differ from the factor claim destination");
 }
 const requestedStEth = parseEther(required("REQUESTED_STETH"));
-const paymentAmount = parseEther(required("PAYMENT_WETH"));
+const testPaymentOverride = process.env.ALLOW_TEST_PAYMENT_OVERRIDE === "1";
+if (process.env.PAYMENT_WETH && !testPaymentOverride) {
+  throw new Error(
+    "PAYMENT_WETH is test-only; live quotes must use CoW and Lido market data",
+  );
+}
+const pricing = testPaymentOverride
+  ? {
+      paymentAmount: parseEther(required("PAYMENT_WETH")),
+      evidence: {
+        mode: "test-override",
+        source: "explicit disposable-fork fixture",
+      },
+    }
+  : await livePricing(seller, requestedStEth);
+const paymentAmount = pricing.paymentAmount;
 const maxStEthShortfall = unsigned(
   process.env.MAX_STETH_SHORTFALL_WEI ?? "2",
   "MAX_STETH_SHORTFALL_WEI",
@@ -132,7 +250,7 @@ if (
   throw new Error("Kernel, signer, adapter, canonical Lido, or nonce validation failed");
 }
 
-const [paymentAsset, fundingSealed, capacity, minAmountOfShares, queuePaused] = await Promise.all([
+const [paymentAsset, fundingSealed, capacity, minAmountOfShares, queuePaused, bunkerMode] = await Promise.all([
   client.readContract({
     address: fundingAccount,
     abi: fundingAbi,
@@ -160,12 +278,20 @@ const [paymentAsset, fundingSealed, capacity, minAmountOfShares, queuePaused] = 
     abi: queueAbi,
     functionName: "isPaused",
   }),
+  client.readContract({
+    address: QUEUE,
+    abi: queueAbi,
+    functionName: "isBunkerModeActive",
+  }),
 ]);
 if (paymentAsset !== WETH || !fundingSealed || capacity !== paymentAmount) {
   throw new Error("The productive WETH reserve cannot currently cover this payment");
 }
 if (queuePaused) {
   throw new Error("Canonical Lido withdrawals are currently paused");
+}
+if (bunkerMode) {
+  throw new Error("Firm quotes are disabled while Lido bunker mode is active");
 }
 
 const claimData = encodeAbiParameters(
@@ -245,6 +371,7 @@ process.stdout.write(
       claimData,
       boundsData,
       factorSignature,
+      pricing: pricing.evidence,
     },
     stringifyBigInts,
     2,

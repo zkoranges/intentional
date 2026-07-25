@@ -4,8 +4,9 @@ FOUNDRY_PROFILE ?= ci
 FUZZ_SEED := 0x5245534552564f4952
 AAVE_FORK_TEST := test/fork/AaveStataUSDC.t.sol
 LIDO_V2_FORK_TEST := test/fork/LidoWithdrawalClaim.t.sol
+AQUA_INTENT_FORK_TEST := test/fork/AquaIntentWstETH.t.sol
 
-.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e rehearse-live-activation preflight-mainnet-v2 verify-live-v2
+.PHONY: build fmt test test-unit test-integration test-invariants test-fork demo demo-aave demo-aqua-intent demo-v2 jury-demo jury-ui demo-lido-v2 live-product-e2e rehearse-live-activation preflight-mainnet-v2 verify-live-v2
 
 build:
 	forge build
@@ -48,6 +49,17 @@ demo-aave:
 	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required" && exit 1)
 	forge test --match-path "$(AAVE_FORK_TEST)" --fork-url "$(ETH_RPC_URL)" -vv
 
+demo-aqua-intent:
+	@test -n "$(ETH_RPC_URL)" || (echo "ETH_RPC_URL is required for the current-mainnet Aqua intent proof" && exit 1)
+	@output="$$(AQUA_INTENT_CURRENT_MAINNET=1 forge test \
+		--match-path "$(AQUA_INTENT_FORK_TEST)" \
+		--match-test "test_ProductionAquaIntentQuotesAndFillsWstETHForWETH" \
+		--fork-url "$(ETH_RPC_URL)" -vv 2>&1)" || { \
+		printf '%s\n' "$$output" | perl -pe 's#https?://[^[:space:]]+#<RPC_URL>#g'; \
+		exit 1; \
+	}; \
+	printf '%s\n' "$$output" | sed -n '/\[PASS\].*test_ProductionAquaIntent/,/Suite result:/p'
+
 demo-v2:
 	@output="$$(forge script script/V2Demo.s.sol:V2Demo -vv 2>&1)" || { \
 		printf '%s\n' "$$output"; \
@@ -85,3 +97,7 @@ preflight-mainnet-v2:
 
 verify-live-v2:
 	npm --prefix frontend run verify:deployment
+
+docs:
+	@echo "Reservoir docs → http://localhost:3000"
+	@cd docs-site && python3 -m http.server 3000

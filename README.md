@@ -12,6 +12,32 @@ A seller receives an exact, factor-signed payment if and only if the complete
 quoted claim is irrevocably acquired in the same transaction. The factor's
 standby WETH stays productive in Aave StataWETH until that payment is needed.
 
+## Aqua intent proof
+
+Reservoir also proves a production-shaped, transaction-native intent on
+canonical Aqua:
+
+```text
+maker: ship one reusable wstETH/WETH strategy to Aqua
+taker: exact wstETH input + fixed recipient + minimum WETH + deadline
+fill:  quote and settle atomically while maker inventory stays in Aave vaults
+```
+
+Run it against the current Ethereum mainnet head:
+
+```sh
+ETH_RPC_URL="https://your-mainnet-rpc.example" make demo-aqua-intent
+```
+
+The proof uses production Aqua, Lido stETH/wstETH, WETH, and Aave
+StatawstETH/StataWETH bytecode. It obtains test inventory through canonical
+Lido and WETH deposit calls on a disposable fork; it does not replace any
+protocol or mint protocol tokens with a test helper. The maker authorizes the
+reusable strategy through `Aqua.ship`. The transaction sender is the taker,
+and SwapVM enforces the exact input call, explicit output recipient, minimum
+output, and deadline. See
+[`docs/AQUA_INTENT_DEMO.md`](docs/AQUA_INTENT_DEMO.md).
+
 The first live product is Lido:
 
 ```text

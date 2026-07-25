@@ -2,7 +2,8 @@
 
 > Version: proposed 0.1.0
 >
-> Status: design candidate; not approved for implementation
+> Status: second-priority design candidate; Gate 0 only after the Aqua intent
+> production proof remains green
 >
 > Target product release: Reservoir v2.1
 >

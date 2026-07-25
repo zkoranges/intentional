@@ -827,13 +827,23 @@ export async function verifyReservoirQuote(
   if (sellerBalance < claim.requestedStETH) {
     throw new Error("The connected wallet has insufficient stETH for this quote");
   }
-  const queuePaused = await publicClient.readContract({
-    address: ADDRESSES.lidoQueue,
-    abi: lidoQueueAbi,
-    functionName: "isPaused",
-  });
+  const [queuePaused, bunkerMode] = await Promise.all([
+    publicClient.readContract({
+      address: ADDRESSES.lidoQueue,
+      abi: lidoQueueAbi,
+      functionName: "isPaused",
+    }),
+    publicClient.readContract({
+      address: ADDRESSES.lidoQueue,
+      abi: lidoQueueAbi,
+      functionName: "isBunkerModeActive",
+    }),
+  ]);
   if (queuePaused) {
     throw new Error("Canonical Lido withdrawals are currently paused");
+  }
+  if (bunkerMode) {
+    throw new Error("Reservoir firm quotes are disabled while Lido bunker mode is active");
   }
 
   return {
