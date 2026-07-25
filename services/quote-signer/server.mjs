@@ -5,7 +5,7 @@
 // seller-bound firm quote and receives a signed envelope it can fill directly.
 //
 // Security posture (deliberate, documented):
-//   * binds 127.0.0.1 only; public exposure is a tunnel/proxy in front —
+//   * binds 127.0.0.1 only; public exposure is a reverse proxy in front —
 //     a non-loopback HOST is always refused at startup
 //   * shared-secret header, constant-time compared
 //   * HARD ceiling (MAX_QUOTE_WEI) independent of measured reserve capacity —

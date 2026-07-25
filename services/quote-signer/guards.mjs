@@ -1,5 +1,5 @@
 // Startup and per-request guards for the quote signer:
-//   - bind safety: the desk's posture is loopback-only behind a tunnel; a
+//   - bind safety: the desk's posture is loopback-only behind a reverse proxy; a
 //     non-loopback HOST is always refused at startup;
 //   - deployment refusal: retired / mismatched deployments are refused as a
 //     first-class readiness state, not discovered as a late runtime error;
@@ -42,12 +42,12 @@ function manifestAddressMatches(value, configured) {
   }
 }
 
-/** The desk binds loopback only; public exposure is a tunnel in front of it. */
+/** The desk binds loopback only; public exposure is a reverse proxy in front. */
 export function assertBindSafe(host) {
   if (isLoopbackHost(host)) return [];
   throw new Error(
     `refusing to bind non-loopback host ${host}: the quote desk's posture is ` +
-      "loopback-only behind an authenticated tunnel; there is no configuration override",
+      "loopback-only behind an authenticated reverse proxy; there is no configuration override",
   );
 }
 

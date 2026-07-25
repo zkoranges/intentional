@@ -33,7 +33,8 @@ what lane B4b still does afterward.
   crash: the process serves `/health` explaining itself and answers `/quote`
   with `503 REFUSED_DEPLOYMENT`; it never signs.
 - **Bind safety.** A non-loopback `HOST` always refuses to start. There is no
-  override. The reviewed posture is loopback-only behind an authenticated tunnel.
+  override. The reviewed posture is loopback-only behind an authenticated
+  reverse proxy.
 - **Both Lido modes.** The desk signs either a measured stETH origination or
   the purchase of one existing unstETH NFT. Existing-claim quotes bind the
   exact stETH/share economics but deliberately do not bind finalization state,
@@ -65,37 +66,16 @@ guarantees: reservation survival across restart, consumed-nonce release,
 the 409 condition, unconditional bind refusal, deployment refusal, and the `/health`
 shape with a no-secret-material assertion.
 
-## Ops prerequisite for go-live: the named `quotes.intentional.so` tunnel
+## Ops prerequisite for go-live: stable `quotes.intentional.so`
 
-The desk binds `127.0.0.1` only; the public hostname is a Cloudflare tunnel
-in front of it. Two hard requirements, surfaced now rather than at go-live:
+The desk binds `127.0.0.1` only. Dynadot must publish
+`A quotes 62.171.182.177`; the existing Caddy instance terminates TLS and
+proxies only this hostname to `127.0.0.1:8791`. Back up the shared Caddyfile,
+add one isolated site, run `caddy validate`, then reload—never restart or
+modify another service's site.
 
-1. **Named tunnel, not a quick tunnel.** A quick tunnel
-   (`cloudflared tunnel --url ...`) gets a random `trycloudflare.com`
-   hostname that CHANGES on every restart — the Vercel proxy's `SIGNER_URL`
-   would silently break at the first VPS reboot. The relaunch requires a
-   *named* tunnel with a pinned hostname.
-2. **Use the Intentional zone — NOT `outreach.sh`.** The public application
-   already uses `intentional.so`; the reviewed desk hostname is
-   `quotes.intentional.so`. The co-tenant zone belongs to a different owner
-   and is not part of this release.
-
-What is needed from the operator (one-time, on the VPS; credentials never in
-the repo):
-
-- access to the `intentional.so` zone in the operator's Cloudflare account;
-- `cloudflared tunnel login` and `cloudflared tunnel create reservoir-quote-desk`
-  (writes a credentials JSON on the VPS — keep it 0600, out of the repo);
-- `cloudflared tunnel route dns reservoir-quote-desk quotes.intentional.so`
-  to pin the hostname;
-- a tunnel config whose ingress points at `http://127.0.0.1:8791`
-  (everything else `http_status:404`), run as a systemd unit;
-- update the Vercel proxy's server-only `SIGNER_URL` to
-  `https://quotes.intentional.so`
-  once, after which restarts never change it.
-
-The factor key never goes to Vercel, the tunnel config, or this repo; it lives
-only in the signer host's environment file. Vercel receives the shared
+The factor key never goes to Vercel, Caddy, or this repo; it lives in the
+signer service's mode-0600 environment. Vercel receives the shared
 `SIGNER_SECRET` as a server-only value; the browser receives only the three
 reviewed public contract pins.
 

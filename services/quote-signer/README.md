@@ -1,17 +1,18 @@
 # Reservoir quote signer
 
-> **Status: stopped.** The v2 mainnet deployment this desk served is
-> permanently retired (the immutable factor key was exposed), the service and
-> tunnel units are stopped and disabled, and the key material was removed from
-> the host. The desk relaunches only against a fresh deployment with a fresh
-> key — see "Key handling" below.
+> **Status: pre-alpha release candidate, not yet active.** The previous
+> mainnet deployment is permanently retired because its immutable factor key
+> was exposed. The existing-unstETH quote path is implemented and
+> canonical-mainnet-fork proven; public issuance resumes only after the fresh
+> deployment and activation gates pass.
 
 The underwriting desk as a small HTTP service, so the app can request a
 seller-bound firm quote instead of a human pasting a signed envelope.
 
 ```text
 browser → Vercel /api/quote/lido (validation, secret header, no key)
-        → HTTPS tunnel → this service (127.0.0.1, factor key, ceiling, audit)
+        → quotes.intentional.so/Caddy
+        → this service (127.0.0.1, factor key, ceiling, audit)
 ```
 
 ## Endpoints
@@ -27,8 +28,8 @@ contracts and the executor script are unchanged.
 
 ## Safety properties
 
-1. **Binds `127.0.0.1` only.** The public edge is Vercel; the tunnel is the
-   only path in, and the tunnel hostname never reaches the client bundle.
+1. **Binds `127.0.0.1` only.** The public edge is Vercel; the dedicated Caddy
+   reverse proxy is the only network path into the service.
 2. **Hard ceiling.** `MAX_QUOTE_WEI` bounds every quote *independently of*
    measured reserve capacity, so a bug elsewhere in the service cannot issue
    an oversized quote. This bounds the **service**, not the key — see "Key
@@ -80,9 +81,9 @@ curl -s -X POST localhost:8791/quote \
 
 ## Deployment (shared VPS)
 
-Mirrors the co-hosted `outreach` pattern exactly: dedicated unprivileged user,
-user-local Node tarball (no system packages), systemd unit bound to localhost,
-cloudflared tunnel for the public hostname. **Hard rules on that box: never
-touch the docker stack, nginx, or any database that isn't ours.**
+Uses a dedicated unprivileged user, user-local Node tarball (no system
+packages), systemd bound to localhost, and one isolated
+`quotes.intentional.so` Caddy site. **Hard rules on that box: never touch the
+Docker stack, another Caddy site, nginx, or any database that isn't ours.**
 
 `scripts/deploy-quote-signer.sh` performs the install idempotently.
