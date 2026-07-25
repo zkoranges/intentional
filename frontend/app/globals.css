@@ -183,7 +183,10 @@ a {
 }
 
 .walletButton {
+  display: inline-flex;
   min-height: 40px;
+  align-items: center;
+  gap: 8px;
   padding: 0 15px;
   border: 1px solid rgba(139, 92, 246, 0.2);
   border-radius: 14px;
@@ -194,6 +197,115 @@ a {
   transition:
     background 150ms ease,
     transform 150ms ease;
+}
+
+.walletButton.connected {
+  padding-left: 10px;
+}
+
+.walletIdenticon {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 35%, #c4b5fd 0 14%, transparent 15%),
+    linear-gradient(145deg, #8b5cf6, #3d2d74);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08);
+}
+
+.walletChevron {
+  color: #806fa9;
+  font-size: 13px;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+.walletMenu {
+  position: relative;
+}
+
+.walletPopover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 230px;
+  overflow: hidden;
+  padding: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 17px;
+  background: rgba(17, 17, 18, 0.98);
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  backdrop-filter: blur(20px);
+  animation: walletMenuIn 140ms ease-out;
+}
+
+.walletPopoverAccount {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.walletPopoverAccount .tokenIcon {
+  flex: 0 0 auto;
+}
+
+.walletPopoverAccount small,
+.walletPopoverAccount strong {
+  display: block;
+}
+
+.walletPopoverAccount small {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 540;
+}
+
+.walletPopoverAccount strong {
+  color: #e7e7ea;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.walletPopover > a,
+.walletPopover > button {
+  display: flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 11px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 610;
+  text-decoration: none;
+  transition:
+    background 130ms ease,
+    color 130ms ease;
+}
+
+.walletPopover > a:hover,
+.walletPopover > button:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.walletPopover > button:last-child {
+  color: #d7a0ad;
+}
+
+.walletPopover > button:last-child:hover {
+  background: rgba(255, 107, 129, 0.09);
+  color: #ff8799;
 }
 
 .walletButton:hover:not(:disabled) {
@@ -1279,6 +1391,13 @@ footer p {
   from {
     opacity: 0;
     transform: translateY(12px) scale(0.98);
+  }
+}
+
+@keyframes walletMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
   }
 }
 

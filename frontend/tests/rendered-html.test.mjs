@@ -18,6 +18,7 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
 
   for (const expected of [
     "Connect wallet",
+    "Disconnect wallet",
     "impatience",
     "Onchain factoring",
     "Sell future payouts.",
@@ -53,12 +54,15 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
 });
 
 test("wallet writes are simulated, receipt-backed, and chain-bound", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
   const ethereum = await readFile(
     new URL("lib/ethereum.ts", projectRoot),
     "utf8",
   );
 
   assert.match(ethereum, /eth_requestAccounts/);
+  assert.match(page, /wallet_revokePermissions/);
+  assert.match(page, /WALLET_DISCONNECTED_KEY/);
   assert.match(ethereum, /wallet_switchEthereumChain/);
   assert.match(ethereum, /chainId: "0x1"/);
   assert.match(ethereum, /simulateContract/g);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   formatEther,
   getAddress,
@@ -48,6 +48,7 @@ type CompletedAction = {
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
 const DOCS_URL = `${GITHUB_URL}#readme`;
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
+const WALLET_DISCONNECTED_KEY = "impatience.wallet-disconnected";
 
 const MARKETS = [
   {
@@ -162,6 +163,8 @@ export default function Home() {
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [quoteRefreshKey, setQuoteRefreshKey] = useState(0);
+  const [walletMenuOpen, setWalletMenuOpen] = useState(false);
+  const walletMenuRef = useRef<HTMLDivElement>(null);
 
   const busy = action !== "idle";
   const amount = useMemo(() => {
@@ -222,9 +225,11 @@ export default function Home() {
       if (!values?.[0]) {
         setAccount(null);
         setSnapshot(null);
+        setWalletMenuOpen(false);
         setStatus("Wallet disconnected.");
         return;
       }
+      if (sessionStorage.getItem(WALLET_DISCONNECTED_KEY) === "1") return;
       const next = getAddress(values[0]);
       setAccount(next);
       void refresh(next);
@@ -236,6 +241,12 @@ export default function Home() {
 
     injected.on?.("accountsChanged", onAccounts);
     injected.on?.("chainChanged", onChain);
+    if (sessionStorage.getItem(WALLET_DISCONNECTED_KEY) === "1") {
+      return () => {
+        injected.removeListener?.("accountsChanged", onAccounts);
+        injected.removeListener?.("chainChanged", onChain);
+      };
+    }
     void injected
       .request({ method: "eth_accounts" })
       .then((values) => {
@@ -253,6 +264,28 @@ export default function Home() {
       injected.removeListener?.("chainChanged", onChain);
     };
   }, [account, refresh]);
+
+  useEffect(() => {
+    if (!walletMenuOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (
+        walletMenuRef.current &&
+        !walletMenuRef.current.contains(event.target as Node)
+      ) {
+        setWalletMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setWalletMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [walletMenuOpen]);
 
   useEffect(() => {
     if (mode !== "instant" || !amountWithinLidoLimits) {
@@ -327,6 +360,7 @@ export default function Home() {
     }
     setAction("connecting");
     try {
+      sessionStorage.removeItem(WALLET_DISCONNECTED_KEY);
       const next = await connectInjectedWallet(injected);
       setAccount(next);
       await refresh(next);
@@ -334,6 +368,29 @@ export default function Home() {
       setStatus(errorMessage(error));
     } finally {
       setAction("idle");
+    }
+  }
+
+  async function disconnect() {
+    const injected = getInjectedProvider();
+    sessionStorage.setItem(WALLET_DISCONNECTED_KEY, "1");
+    setWalletMenuOpen(false);
+    setAccount(null);
+    setSnapshot(null);
+    setQuoteCheck(null);
+    setActions([]);
+    setLastMintedRequest(null);
+    setStatus("Wallet disconnected. Your funds remain in your wallet.");
+
+    if (!injected) return;
+    try {
+      await injected.request({
+        method: "wallet_revokePermissions",
+        params: [{ eth_accounts: {} }],
+      });
+    } catch {
+      // Not every injected wallet implements permission revocation. The app
+      // session remains disconnected and an explicit Connect removes the flag.
     }
   }
 
@@ -550,9 +607,56 @@ export default function Home() {
             <i />
             Ethereum
           </span>
-          <button className="walletButton" onClick={connect} disabled={busy}>
-            {account ? short(account) : "Connect"}
-          </button>
+          {account ? (
+            <div className="walletMenu" ref={walletMenuRef}>
+              <button
+                className="walletButton connected"
+                onClick={() => setWalletMenuOpen((open) => !open)}
+                disabled={busy}
+                aria-haspopup="menu"
+                aria-expanded={walletMenuOpen}
+              >
+                <span className="walletIdenticon" aria-hidden="true" />
+                {short(account)}
+                <span className="walletChevron" aria-hidden="true">
+                  ⌄
+                </span>
+              </button>
+              {walletMenuOpen && (
+                <div className="walletPopover" role="menu">
+                  <div className="walletPopoverAccount">
+                    <span className="tokenIcon wethIcon">
+                      <img
+                        src="/icons/eth.svg"
+                        alt=""
+                        width={18}
+                        height={18}
+                      />
+                    </span>
+                    <div>
+                      <small>Connected on Ethereum</small>
+                      <strong>{short(account)}</strong>
+                    </div>
+                  </div>
+                  <a
+                    href={`https://etherscan.io/address/${account}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    role="menuitem"
+                  >
+                    View on Etherscan <span>↗</span>
+                  </a>
+                  <button type="button" onClick={disconnect} role="menuitem">
+                    Disconnect wallet
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button className="walletButton" onClick={connect} disabled={busy}>
+              Connect
+            </button>
+          )}
         </div>
       </header>
 
