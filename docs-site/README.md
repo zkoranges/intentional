@@ -2,46 +2,34 @@
 
 > **Factoring for onchain claims.** Sell a future payment, get paid today.
 
-## The everyday version
+## The problem
 
-A plumbing company finishes a job. The client owes them **£10,000 in 60 days**. But payroll is Friday.
+Many DeFi positions are claims on future payments:
 
-So they sell that invoice to a **factor** for **£9,700 today**. The factor waits 60 days, collects £10,000, and keeps £300.
+- a Lido withdrawal request — for example, 2.6 ETH finalizing in about 5 days
+- an ERC-7540 redemption request — assets owed after the vault's next epoch
 
-That business is centuries old. Reservoir does it onchain.
+While a claim waits in a queue it cannot be spent, and it cannot be sold on a normal exchange. Uniswap and CoW orders name an ERC-20 `sellToken`; a withdrawal claim is an NFT or an entry in vault storage, so the order cannot even be expressed.
 
-## The onchain version
+## What Reservoir does
 
-Lots of DeFi positions are promises of *future* money:
-
-- A Lido withdrawal ticket — "Lido owes you 2.6 ETH in about 5 days."
-- An ERC-7540 redemption request — "this vault owes you assets after the next epoch."
-
-The money is real. It just hasn't arrived yet. And while you wait, **you cannot spend it and you cannot sell it.**
-
-Reservoir lets you sell it.
+A factor — a buyer with capital — signs a priced offer for the claim. The seller accepts it, and in a single transaction the claim moves to the factor and payment moves to the seller. The factor waits out the queue and redeems the claim at full value; the discount is its return.
 
 ```
 You hold:     a claim on 2.6 ETH, arriving in ~5 days
-You get:      ~2.59 ETH, right now
-The factor:   waits, then collects the 2.6 ETH
+You get:      ~2.59 ETH now
+The factor:   waits, then redeems 2.6 ETH
 ```
 
-## Why this can't just be a swap
+The production demo factors Lido withdrawals. The settlement kernel is claim-agnostic: supporting a new claim type means writing an adapter, not changing the kernel. An ERC-7540/8161 adapter ships alongside the Lido one to demonstrate this.
 
-A normal exchange — Uniswap, CoW — trades **ERC-20 tokens**. Their orders literally have a `sellToken` field.
+## The invariant
 
-A withdrawal ticket is not an ERC-20. It is an NFT, or a balance sitting in vault storage. **There is no `sellToken` to name.** These orders cannot be expressed, let alone priced or routed.
+Every contract in the protocol enforces one rule:
 
-So the person waiting in a queue has no market at all. That is the gap Reservoir fills.
+> Payment happens if and only if the claim is secured, in the same transaction.
 
-## The one rule
-
-Everything in the protocol enforces a single invariant:
-
-> **Payment happens if and only if the claim is secured — in the same transaction.**
-
-The seller cannot be paid without the factor receiving the claim. The factor cannot take the claim without paying. If any part fails, the whole transaction reverts and nothing moved.
+The seller cannot be paid without the factor receiving the claim. The factor cannot take the claim without paying. If any step fails, the whole transaction reverts.
 
 ---
 

@@ -2,4 +2,4 @@
 - [How it works](how-it-works.md)
 - [The factor](factor.md)
 - [Architecture](architecture.md)
-- [Honest limits](limits.md)
+- [Limits](limits.md)

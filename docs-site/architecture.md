@@ -1,13 +1,13 @@
 # Architecture
 
-Four contracts. Each does one thing.
+Four contracts, one invariant.
 
 ```
               signed quote
                    │
                    ▼
         ┌──────────────────────┐
-        │ AsyncClaimSettlement │   the rule: payment iff acquisition
+        │ AsyncClaimSettlement │   payment iff acquisition
         └──────────┬───────────┘
                    │
         ┌──────────┴───────────┐
@@ -21,52 +21,40 @@ Four contracts. Each does one thing.
    (Aave WETH)              vaults
 ```
 
-## The kernel
+## AsyncClaimSettlement
 
-`AsyncClaimSettlement` holds the invariant and knows nothing about Lido, Aave, or any specific vault.
-
-It enforces:
+The settlement kernel. It holds the invariant and knows nothing about Lido, Aave, or any specific vault. It checks:
 
 - a valid factor signature, bound to this chain and this contract
-- the seller is the caller
-- the nonce is unused, the deadline is live, the quote is at most 15 minutes old
-- funding covers the payment **exactly** — no partial fills
-- the claim was measurably acquired **before** any payment moves
-- one settlement per quote, ever
+- the caller is the named seller
+- the nonce is unused, the deadline is live, and the quote is at most 15 minutes old
+- funding covers the payment exactly; there are no partial fills
+- the claim was measurably acquired before any payment moves
+- one settlement per quote
 
-Protocol-specific knowledge lives entirely in adapters. Adding a new claim type means writing an adapter, not touching the kernel.
+Protocol-specific logic lives in adapters. Supporting a new claim type means writing an adapter; the kernel does not change.
 
-## The funding account
+## ProductiveFundingAccount
 
-`ProductiveFundingAccount` keeps the factor's capital in an ERC-4626 vault and materializes the exact payment on demand.
+Keeps the factor's capital in an ERC-4626 vault and withdraws the exact payment on demand. It answers one question for the kernel: can this payment be delivered in full, right now? If anything is uncertain — the vault reverts, capacity is short, the account is paused — it reports zero and the fill never starts.
 
-It answers exactly one question for the kernel: *can this payment be delivered in full, right now?* If anything is uncertain — the vault reverts, capacity is short, the account is paused — it answers **zero**, and the fill never starts.
+## Adapters
 
-## The adapters
-
-| Adapter | Claim | What it does |
+| Adapter | Claim | Action |
 |---|---|---|
-| `LidoWithdrawalClaimAdapter` | Lido withdrawal ticket | Creates a new withdrawal request owned by the factor |
-| `ERC8161RedeemClaimAdapter` | ERC-7540 redemption request | Transfers the Pending portion and redeems the Claimable portion |
+| `LidoWithdrawalClaimAdapter` | Lido withdrawal request | Creates a new request owned by the factor |
+| `ERC8161RedeemClaimAdapter` | ERC-7540 redemption request | Transfers the Pending portion, redeems the Claimable portion |
 
-Adapters never trust return values. Every acquisition is confirmed by **measuring balances before and after**, because the standards permit transfer fees and return nothing useful.
+Adapters confirm every acquisition by measuring balances before and after rather than trusting return values, because the underlying standards permit transfer fees and return nothing useful.
 
-## Built on 1inch Aqua
+## 1inch Aqua
 
-The funding layer is a working Aqua / SwapVM application: a custom VM instruction (`0x92`) lets a maker keep inventory in yield vaults and withdraw the exact amount needed at settlement, rather than parking idle tokens.
-
-Reservoir reuses that engine as the factor's treasury. It is what makes "capital earns while it waits" true rather than aspirational.
+The funding layer is an Aqua / SwapVM application. A custom VM instruction (`0x92`) lets a maker keep inventory in yield vaults and withdraw the exact amount needed at settlement. Reservoir uses that engine as the factor's treasury.
 
 ## Testing
 
-```
-186 tests passing — unit, integration, invariant, and mainnet-fork
-```
-
-Including a property test that hammers the hard case: a claim shifting between Pending and Claimable *between quote and fill*. Across 4096 randomized sequences, payment never occurs without complete acquisition.
-
-The Lido path is exercised against **real mainnet contracts** on a pinned fork — real stETH, the real withdrawal queue, real Aave.
+187 deterministic tests (unit, integration, invariant) and 10 mainnet-fork suites pass. An invariant test moves a claim between Pending and Claimable between quote and fill; across 4096 randomized sequences, payment never occurs without complete acquisition. The Lido path runs against real mainnet contracts on a pinned fork: real stETH, the real withdrawal queue, real Aave.
 
 ---
 
-**Next:** [Honest limits →](limits.md)
+**Next:** [Limits →](limits.md)

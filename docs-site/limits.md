@@ -1,46 +1,29 @@
-# Honest limits
+# Limits
 
-Things that are easy to overclaim. We measured instead.
+## For liquid assets, use an exchange
 
-## Selling stETH? Use a normal exchange
+We sampled a year of settlement data: 308,160 CoW settlements, 568 comparable stETH→ETH executions, and 42,074 Lido withdrawal requests across 364 finalization batches. Factoring beat the open market on 4.6% of trades and 5.3% of volume.
 
-We sampled a year of real settlement data — 308,160 CoW settlements, 568 comparable stETH→ETH executions, 42,074 Lido requests across 364 finalization batches.
+The rest of the time, a direct stETH sale is the better route: stETH has deep pools, competing market makers, and purpose-built exit products. Factoring applies when there is no market — a claim that is not an ERC-20, a position too large to sell without slippage, or a stressed market where the queue still pays par and the order book does not.
 
-**Factoring beat the open market on 4.6% of trades, and 5.3% of volume.**
+## Not built
 
-The other ~95% of the time, a normal stETH sale is the better route.
+- **Competing factors.** One factor, one funding account, one payment asset. Multi-factor bidding is the intended next step.
+- **Secondary market.** The factor holds every claim to maturity.
+- **Production ERC-8161 vault.** The standard is Final but adoption is early. The ERC-7540/8161 path is proven against a conformant reference vault; the Lido path runs against mainnet contracts.
+- **`requestId == 0`.** ERC-7540 allows a vault to aggregate all of a user's requests under ID zero, which cannot identify a specific claim. The adapter rejects it, which excludes some vault designs.
 
-That is not a bug in the design. stETH is the most liquid staking asset that exists — deep pools, competing market makers, purpose-built exit products. Nobody should route around that.
+## Risk stays with the factor
 
-**Factoring earns its keep when there is no market:** a claim that is not an ERC-20, a position too large to sell without slippage, or a stressed market where the queue still pays par and the order book does not.
+The queue can take longer than modelled, the claim can settle below face value, the withdrawal queue can pause, and capital stays locked meanwhile. There is no oracle, insurance, or pooled backstop. Each claim is a separate position; one impaired claim cannot affect another.
 
-## What is not built
+## Pricing is explicit policy
 
-- **No competing factors yet.** One factor, one funding account, one payment asset. Multi-factor bidding is the natural next step, not a shipped feature.
-- **No secondary market.** A factor holds to maturity. There is no exit before the queue finalizes.
-- **No production ERC-8161 vault.** The standard is Final, but adoption is early. The ERC-7540/8161 path is proven against a **conformant reference vault**, not a live deployment. The Lido path is real.
-- **`requestId == 0` is rejected.** ERC-7540 lets a vault lump all of a user's requests under ID zero, which cannot identify a specific claim. We refuse it rather than guess — and that does exclude some vault designs.
-
-## Risks the factor accepts
-
-Buying a claim means buying its problems:
-
-- The queue takes longer than modelled.
-- The claim settles below face value.
-- The withdrawal queue pauses.
-- Capital is locked for an unpredictable period.
-
-No oracle, no insurance, no pooled backstop. **Each claim stands alone** — nothing is socialized between positions, so one bad claim cannot reach into another.
-
-## Pricing is not automated
-
-The factor's quote is a signed offer using explicit, disclosed policy inputs: funding rate, risk margin, gas. There is no predictive model and no fair-value oracle.
-
-If the price is wrong, it is wrong because the factor priced it wrong — not because a mechanism failed.
+Quotes are built from disclosed inputs: funding rate, risk margin, gas. There is no predictive model and no fair-value oracle. A wrong price is the factor's error, not a mechanism failure.
 
 ## Deployment status
 
-This is hackathon work. Contracts deploy **paused and unfunded**; funding and activation are separate, deliberate steps with read-only verification between each. Nothing has been audited.
+Unaudited hackathon software. Contracts deploy paused and unfunded; funding and activation are separate steps with read-only verification between them.
 
 ---
 

@@ -6,7 +6,7 @@ import "./docs.css";
 export const metadata: Metadata = {
   title: "Documentation — Impatience",
   description:
-    "How Impatience and Reservoir turn delayed onchain claims into liquidity today.",
+    "Reservoir protocol documentation: factoring for onchain claims.",
 };
 
 const SECTIONS = [
@@ -14,7 +14,7 @@ const SECTIONS = [
   ["how-it-works", "How it works"],
   ["factor", "The factor"],
   ["architecture", "Architecture"],
-  ["limits", "Honest limits"],
+  ["limits", "Limits"],
 ] as const;
 
 export default function DocsPage() {
@@ -73,28 +73,17 @@ export default function DocsPage() {
             <div className="docsCallout">
               <span>In one sentence</span>
               <p>
-                Impatience brings the centuries-old factoring model onchain:
-                a liquidity provider buys your delayed withdrawal claim, pays
-                you now, and waits to collect the protocol payout.
+                A factor buys your pending withdrawal claim, pays you now,
+                and redeems the claim at full value when it finalizes.
               </p>
             </div>
 
-            <h2>The everyday version</h2>
+            <h2>The problem</h2>
             <p>
-              A plumbing company finishes a job. The client owes them{" "}
-              <strong>£10,000 in 60 days</strong>, but payroll is Friday.
-              They sell that invoice to a factor for{" "}
-              <strong>£9,700 today</strong>. The factor waits 60 days,
-              collects £10,000, and keeps £300.
-            </p>
-            <p>That business is centuries old. Reservoir does it onchain.</p>
-
-            <h2>The onchain version</h2>
-            <p>
-              Many DeFi positions are promises of future money: a Lido
-              withdrawal ticket, or an ERC-7540 redemption request waiting
-              for the next epoch. The money is real, but it has not arrived
-              yet—and while you wait, you cannot spend it.
+              Many DeFi positions are claims on future payments: a Lido
+              withdrawal request, or an ERC-7540 redemption request waiting
+              for the next epoch. While a claim sits in the queue it cannot
+              be spent, and it cannot be sold on a normal exchange.
             </p>
 
             <div className="docsTerminal" aria-label="Factoring example">
@@ -114,11 +103,16 @@ export default function DocsPage() {
 
             <h2>Why this cannot just be a swap</h2>
             <p>
-              A normal exchange—Uniswap or CoW—trades ERC-20 tokens. A
-              withdrawal ticket may be an NFT or a balance sitting in vault
-              storage. There is no standard <code>sellToken</code> to name,
-              price, or route. The person waiting in the queue has no market.
-              That is the gap Reservoir fills.
+              Uniswap and CoW orders name an ERC-20 <code>sellToken</code>. A
+              withdrawal claim is an NFT or an entry in vault storage, so the
+              order cannot even be expressed. The person waiting in the queue
+              has no market; Reservoir provides one.
+            </p>
+            <p>
+              The production demo factors Lido withdrawals. The settlement
+              kernel is claim-agnostic: supporting a new claim type means
+              writing an adapter, not changing the kernel. An ERC-7540/8161
+              adapter ships alongside the Lido one to demonstrate this.
             </p>
 
             <blockquote>
@@ -130,7 +124,7 @@ export default function DocsPage() {
           <section id="how-it-works">
             <p className="docsEyebrow">Flow</p>
             <h2>How it works</h2>
-            <p className="docsSectionLead">Four steps. One transaction.</p>
+            <p className="docsSectionLead">Four steps, one onchain transaction.</p>
 
             <ol className="docsSteps">
               <li>
@@ -273,33 +267,26 @@ complete value    → measured`}</pre>
             </div>
             <p>
               The discount pays for duration, impairment, protocol risk,
-              opportunity cost, and operations. The seller buys certainty;
-              the factor sells it.
+              opportunity cost, and operations. All of these risks transfer
+              from the seller to the factor.
             </p>
 
             <h3>Why productive reserves matter</h3>
             <p>
-              In measured settlement data, opportunities appeared on 15 out
-              of 87 active days. The factor was idle roughly{" "}
-              <strong>83% of the time</strong>. Reservoir lets the same
-              capital earn lending yield while it waits and factoring spread
-              when a deal appears.
+              In sampled settlement data, opportunities appeared on 15 out
+              of 87 active days; the factor was idle roughly{" "}
+              <strong>83% of the time</strong>. Keeping the reserve in an
+              ERC-4626 vault means the same capital earns lending yield on
+              idle days and the factoring spread when a deal appears.
+              Without that yield, holding standby capital would rarely be
+              worth it.
             </p>
-
-            <div className="docsCallout compact">
-              <span>The economic insight</span>
-              <p>
-                Standing ready is only affordable if waiting pays. A
-                factoring desk whose capital earns nothing between deals is
-                not a business.
-              </p>
-            </div>
           </section>
 
           <section id="architecture">
             <p className="docsEyebrow">Contracts</p>
             <h2>Architecture</h2>
-            <p className="docsSectionLead">Four contracts. One invariant.</p>
+            <p className="docsSectionLead">Four contracts, one invariant.</p>
 
             <div className="docsArchitecture" aria-label="Protocol architecture">
               <div className="architectureKernel">
@@ -380,22 +367,22 @@ complete value    → measured`}</pre>
             </p>
 
             <div className="docsMetric">
-              <strong>186</strong>
+              <strong>187</strong>
               <span>
-                tests passing
-                <small>Unit · integration · invariant · mainnet fork</small>
+                deterministic tests passing
+                <small>Unit · integration · invariant — plus 10 mainnet-fork suites</small>
               </span>
             </div>
           </section>
 
           <section id="limits">
-            <p className="docsEyebrow">Transparency</p>
-            <h2>Honest limits</h2>
+            <p className="docsEyebrow">Scope</p>
+            <h2>Limits</h2>
             <p className="docsSectionLead">
-              Things that are easy to overclaim. We measured instead.
+              Measured performance, unbuilt features, and where risk sits.
             </p>
 
-            <h3>Selling stETH? Usually use a normal exchange.</h3>
+            <h3>For liquid assets, use an exchange</h3>
             <p>
               Across a year of settlement data—308,160 CoW settlements, 568
               comparable stETH→ETH executions, and 42,074 Lido requests—
@@ -403,8 +390,8 @@ complete value    → measured`}</pre>
               <strong>4.6% of trades and 5.3% of volume</strong>.
             </p>
             <p>
-              Factoring earns its keep when there is no liquid token market:
-              a non-transferable claim, a position too large to sell without
+              Factoring applies when there is no liquid token market: a
+              non-transferable claim, a position too large to sell without
               slippage, or a stressed market where the queue still pays par.
             </p>
 
@@ -423,7 +410,8 @@ complete value    → measured`}</pre>
               <li>
                 <strong>No production ERC-8161 vault.</strong>
                 <span>
-                  The reference path is conformant; the Lido path is live.
+                  The reference path is conformant; the Lido path runs
+                  against mainnet contracts.
                 </span>
               </li>
               <li>

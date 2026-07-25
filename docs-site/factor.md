@@ -1,66 +1,48 @@
 # The factor
 
-The factor is the **buyer**. The one with money now, willing to wait, charging for the wait.
-
-Everyone else in the system is a seller who wants out early.
+The factor is the buyer: it has capital now, waits out the queue, and charges for the wait.
 
 ## What the factor does
 
-1. **Holds capital** — WETH in a funding account.
-2. **Keeps it earning** — that WETH sits in an Aave ERC-4626 vault, not idle.
-3. **Quotes prices** — signs offers off-chain. There is no oracle for a withdrawal ticket; the factor decides what it is worth.
-4. **Never sends the transaction** — the seller does. The factor's signing key stays offline.
-5. **Waits, then collects** — redeems the claim at full value when the queue finalizes.
+1. Holds WETH in a funding account, deposited in an Aave ERC-4626 vault.
+2. Signs price quotes offchain. There is no oracle for a withdrawal claim; the factor sets the price.
+3. Never sends the settlement transaction. The seller does, so the factor's key stays offline.
+4. Redeems the claim at full value when the queue finalizes.
 
-## The pricing
+## Pricing
 
-A claim worth **2.6 ETH** finalizing in about 5 days:
+For a claim worth 2.6 ETH finalizing in about 5 days:
 
 ```
-funding cost      10% APR × 5 days       ≈ 0.0018 ETH
-risk margin       0.15%                  ≈ 0.0039 ETH
-gas to collect later                     ≈ 0.003  ETH
-                                          ────────────
-factor offers                            ~2.59 ETH now
-factor collects in ~5 days                2.60 ETH
-factor keeps                             ~0.01 ETH
+funding cost    10% APR × 5 days    ≈ 0.0018 ETH
+risk margin     0.15%               ≈ 0.0039 ETH
+collection gas                      ≈ 0.003  ETH
+                                     ────────────
+quote                               ~2.59 ETH
+redeemed in ~5 days                  2.60 ETH
+factor's return                     ~0.01 ETH
 ```
 
-These are real configuration values, not illustrations — funding rate, risk margin, and gas are set as explicit policy. **The seller is buying certainty. The factor is selling it.**
+Funding rate, risk margin, and gas are explicit configuration values, not illustrations.
 
-## What the factor is risking
+## What the discount pays for
 
-The discount is not free money. It is payment for:
+- Duration: the queue can take 13 days instead of 5, and capital is locked meanwhile.
+- Impairment: the claim can settle below face value.
+- Protocol risk: the withdrawal queue can pause.
+- Opportunity cost: the capital could be deployed elsewhere.
 
-- **Duration** — the queue might take 13 days, not 5. Capital is locked, unpredictably.
-- **Impairment** — the claim might settle slightly below face value.
-- **Protocol risk** — the withdrawal queue can pause.
-- **Opportunity cost** — that capital could be elsewhere.
+The seller transfers all of these risks to the factor.
 
-The seller offloads all of this. That is what they are paying for.
+## Why the funding account earns yield
 
-## Why the yield vault is essential, not a bonus
+In sampled settlement data, factoring opportunities appeared on 15 of 87 active days; the factor is idle about 83% of the time. Keeping the reserve in an ERC-4626 vault means the same capital earns lending yield on idle days and the factoring spread when a deal appears. Without that yield, holding standby capital would rarely be worth it.
 
-Measured from real settlement data: opportunities appeared on **15 out of 87 active days**.
+## One factor today
 
-The factor is idle roughly **83% of the time**.
+The current deployment has a single factor address: one funding account, one payment asset, and the administrative controls (pause, adapter allowlist, quote cancellation, withdrawals).
 
-| | Return |
-|---|---|
-| Idle wallet | thin spread on 17% of days, **nothing** on the rest |
-| Reservoir funding account | **lending yield always**, plus the spread when deals appear |
-
-That is the whole reason the ERC-4626 reserve exists. **Standing ready is only affordable if waiting pays.** A factoring desk whose capital earns nothing between deals is not a business.
-
-## Who the factor is
-
-**Today** — a single address. One funding account, one payment asset, and the administrative controls: pause, adapter allowlist, quote cancellation, withdrawals.
-
-**Later** — several factors competing on the same claim.
-
-That last part matters more than it sounds. A withdrawal ticket has **no reference price**. Its value depends on each factor's own cost of capital and their own read on how long the queue will take — so different factors genuinely arrive at different numbers.
-
-When buyers value an asset differently and no market price exists, **competitive quoting is the only way a price can form at all**. That is why this belongs in an intent system, and why it isn't just a swap with extra steps.
+The design targets multiple factors competing on the same claim. A withdrawal claim has no reference price; each factor prices from its own cost of capital and its own estimate of queue time, so competitive quoting is how a price forms. This is why settlement is built around signed quotes rather than pool pricing.
 
 ---
 
