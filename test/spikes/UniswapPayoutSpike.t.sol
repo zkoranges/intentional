@@ -107,9 +107,7 @@ contract UniswapPayoutSpikeTest is Test {
         this.harnessFillWithMinimum(type(uint256).max, recipientUsdcBefore);
 
         assertEq(IERC20(WETH).balanceOf(harness), amountIn, "WETH movement was not rolled back");
-        assertEq(
-            IERC20(USDC).balanceOf(recipient), recipientUsdcBefore, "USDC movement was not rolled back"
-        );
+        assertEq(IERC20(USDC).balanceOf(recipient), recipientUsdcBefore, "USDC movement was not rolled back");
     }
 
     /// @dev External so the whole approve+swap+check sequence shares one

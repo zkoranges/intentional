@@ -123,6 +123,35 @@ been executed on Ethereum mainnet (receipts above); the contracts are live and
 active, with reserve recovery and the unstETH #130880 claim tracked as the
 remaining operational steps. This remains unaudited hackathon software.
 
+## Uniswap payouts — be paid in the asset you choose
+
+The payout layer decouples the payout currency from the funding currency: the
+factor still underwrites and funds in WETH, and a live
+[Uniswap Trading API](https://developers.uniswap.org/docs/trading/swapping-api/integration-guide)
+route converts the exact advance and delivers the seller's chosen asset in the
+same atomic fill. The payout asset is a **signed quote field** behind a
+factor-controlled allowlist — any-asset by design, native ETH deliberately
+excluded.
+
+```text
+seller stETH -> canonical Lido claim minted to factor
+             -> exact WETH materialized from Aave StataWETH
+             -> Uniswap API route executes through an immutable proxy
+             -> seller receives at least the signed minimum USDC
+```
+
+Integration surfaces: [`src/payouts/`](src/payouts/) (settlement, executor,
+types), [`frontend/scripts/create-uniswap-payout-quote.mjs`](frontend/scripts/create-uniswap-payout-quote.mjs)
+(operator quote CLI with full route validation),
+[`frontend/scripts/fetch-uniswap-route.mjs`](frontend/scripts/fetch-uniswap-route.mjs)
+(fixture fetcher), [`test/spikes/UniswapPayoutSpike.t.sol`](test/spikes/UniswapPayoutSpike.t.sol)
+(Gate 0 proof, 7 assertions),
+[`test/fork/UniswapPayoutMainnet.t.sol`](test/fork/UniswapPayoutMainnet.t.sol)
+(canonical fork proof: live route, success + atomic forced failure). API
+findings are recorded in [`FEEDBACK.md`](FEEDBACK.md). In both live-route
+proofs the delivered output equaled the API quote to the unit. The payout
+stack is fork-proven and not yet deployed to a persistent network.
+
 ## What is working
 
 - Non-upgradeable EIP-712 settlement kernel with EOA and ERC-1271 signatures.

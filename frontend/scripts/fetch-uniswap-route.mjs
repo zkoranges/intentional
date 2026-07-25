@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { keccak256, stringToBytes, getAddress } from "viem";
+import { getAddress, getContractAddress, keccak256, stringToBytes } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 const WETH = getAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
@@ -35,8 +35,25 @@ const expectedProxy = getAddress(
 );
 const expectedSelector = (process.env.EXPECTED_SELECTOR?.trim() || "0x2894adf9").toLowerCase();
 
-const swapper = makeAddrCompatible("uniswapPayoutSpikeHarness");
-const recipient = makeAddrCompatible("uniswapPayoutSpikeRecipient");
+// Defaults are the S-1 spike harness. The fork-proof mode passes MODE=payout,
+// which derives the DETERMINISTIC executor address the fork test will deploy:
+// factor key = keccak256("reservoir.payout.fork.factor"); deployment order
+// funding(0), reserveAdapter(1), executor(2), settlement(3), lidoAdapter(4).
+let swapper;
+let recipient;
+let fixtureName;
+if (process.env.MODE === "payout") {
+  const forkFactor = privateKeyToAccount(
+    keccak256(stringToBytes("reservoir.payout.fork.factor")),
+  ).address;
+  swapper = getContractAddress({ from: forkFactor, nonce: 2n });
+  recipient = makeAddrCompatible("payoutForkSeller");
+  fixtureName = "uniswap-payout-route.json";
+} else {
+  swapper = makeAddrCompatible("uniswapPayoutSpikeHarness");
+  recipient = makeAddrCompatible("uniswapPayoutSpikeRecipient");
+  fixtureName = "uniswap-route.json";
+}
 
 const headers = {
   "content-type": "application/json",
@@ -134,12 +151,12 @@ const fixtureDir = join(
   "fixtures",
 );
 mkdirSync(fixtureDir, { recursive: true });
-const fixturePath = join(fixtureDir, "uniswap-route.json");
+const fixturePath = join(fixtureDir, fixtureName);
 writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + "\n");
 console.log(
   JSON.stringify(
     {
-      fixture: "test/spikes/fixtures/uniswap-route.json",
+      fixture: `test/spikes/fixtures/${fixtureName}`,
       fetchedAtBlock,
       swapper,
       recipient,
