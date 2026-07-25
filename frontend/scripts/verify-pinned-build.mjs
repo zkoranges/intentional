@@ -12,11 +12,12 @@ const pageAsset = assetNames.find((name) => name.startsWith("page-"));
 
 assert.ok(pageAsset, "pinned client page bundle is missing");
 const pageBundle = await readFile(join(assetsDirectory.pathname, pageAsset), "utf8");
-assert.match(pageBundle, /Pinned kernel/);
-assert.match(pageBundle, /Pinned Lido adapter/);
+assert.match(pageBundle, /Import firm quote/);
+assert.match(pageBundle, /Exit for/);
+assert.match(pageBundle, /Approve stETH/);
 assert.match(pageBundle, new RegExp(expectedKernel, "i"));
 assert.match(pageBundle, new RegExp(expectedAdapter, "i"));
 
 console.log(
-  "PINNED FRONTEND BUILD PASS | full kernel and Lido adapter addresses rendered",
+  "PINNED FRONTEND BUILD PASS | firm-quote flow and deployment bindings compiled",
 );

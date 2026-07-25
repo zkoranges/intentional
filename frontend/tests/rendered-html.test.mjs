@@ -13,31 +13,27 @@ import {
 const projectRoot = new URL("../", import.meta.url);
 const zeroAddress = "0x0000000000000000000000000000000000000000";
 
-test("the shipped page is a wallet-ready mainnet product", async () => {
+test("the shipped page is a wallet-ready withdrawal product", async () => {
   const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
 
   for (const expected of [
     "Connect wallet",
-    "Choose the honest route",
-    "Verify firm quote",
-    "Fill atomically",
-    "Canonical Lido",
-    "Awaiting reviewed deployment",
+    "Exit when you want.",
+    "Instant exit",
+    "Lido queue",
+    "Import firm quote",
+    "Instant exits coming soon",
     "Request withdrawal",
-    "Recent unstETH positions",
+    "Withdrawal positions",
     "Claim ETH",
-    "Production contracts. Disposable capital.",
-    "Run verified fork replay",
-    "The claim moves before the money does.",
-    "0.725747813572212141",
-    "0.897750 WETH",
-    "30159264327",
+    "Frequently asked questions",
+    "Read the docs",
     "https://github.com/zkoranges/reservoir-v2-eth-lisbon",
   ]) {
     assert.match(page, new RegExp(expected));
   }
 
-  assert.doesNotMatch(page, /Run on local Anvil|Read-only simulation/);
+  assert.doesNotMatch(page, /jury|ETHGlobal|fork replay|Run on local Anvil/i);
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
 });
 
@@ -120,28 +116,26 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(ethereum, /sellerWethAfter - sellerWethBefore/);
   assert.match(ethereum, /statuses\[0\]\.owner/);
   assert.match(page, /snapshot\.queueAllowance === amount/);
-  assert.match(page, /quoteCheck\.allowance === quoteCheck\.requestedStEth/);
-  assert.match(page, /Pinned kernel/);
-  assert.match(page, /Pinned Lido adapter/);
-  assert.match(page, /etherscan\.io\/address\/\$\{RESERVOIR_DEPLOYMENT\.kernel\}/);
-  assert.match(
-    page,
-    /etherscan\.io\/address\/\$\{RESERVOIR_DEPLOYMENT\.lidoAdapter\}/,
-  );
-  assert.doesNotMatch(page, /short\(RESERVOIR_DEPLOYMENT\.(kernel|lidoAdapter)\)/);
+  assert.match(page, /quoteCheck\.allowance !== quoteCheck\.requestedStEth/);
+  assert.match(page, /RESERVOIR_DEPLOYMENT/);
+  assert.match(page, /Paste signed quote JSON/);
+  assert.match(page, /Import firm quote/);
   assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
   assert.match(ethereum, /hasExactAllowance\(currentAllowance, amount\)/);
   assert.match(ethereum, /hasExactAllowance\(fillAllowance, check\.requestedStEth\)/);
   assert.match(page, /error instanceof MinedTransactionVerificationError/);
-  assert.match(page, /Reservoir transaction mined; verification warning/);
+  assert.match(page, /Reservoir exit confirmed with a verification warning/);
   assert.match(ethereum, /event WithdrawalClaimed/);
   assert.match(ethereum, /claim\.args\.amountOfETH/);
   assert.match(ethereum, /Canonical Lido state does not mark the request claimed/);
-  assert.match(page, /Lido claim #\$\{requestId\} mined; verification warning/);
+  assert.match(
+    page,
+    /Lido claim #\$\{requestId\} confirmed with a verification warning/,
+  );
   assert.doesNotMatch(ethereum, /type\\(uint256\\)\\.max|MaxUint256/);
 });
 
-test("the production build contains the dark responsive wallet interface", async () => {
+test("the production build contains the light responsive withdrawal interface", async () => {
   const assetsDir = new URL("dist/client/assets/", projectRoot);
   const assetNames = await readdir(assetsDir);
   const pageAsset = assetNames.find((name) => name.startsWith("page-"));
@@ -156,18 +150,15 @@ test("the production build contains the dark responsive wallet interface", async
   assert.match(pageBundle, /Connect wallet/);
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
-  assert.match(pageBundle, /Awaiting reviewed deployment/);
-  assert.match(pageBundle, /Run verified fork replay/);
-  assert.match(pageBundle, /0\.725747813572212141/);
-  assert.match(pageBundle, /0\.897750 WETH/);
-  assert.match(pageBundle, /30159264327/);
-  assert.match(stylesheet, /#080a0c/);
+  assert.match(pageBundle, /Instant exits coming soon/);
+  assert.match(pageBundle, /Frequently asked questions/);
+  assert.doesNotMatch(pageBundle, /jury|ETHGlobal|fork replay/i);
+  assert.match(stylesheet, /#f7f7f8/);
+  assert.match(stylesheet, /#fc72ff/);
   assert.match(stylesheet, /prefers-reduced-motion/);
   assert.match(stylesheet, /@media/);
 
-  const socialCard = await readFile(
-    new URL("public/og-live-v2.png", projectRoot),
-  );
+  const socialCard = await readFile(new URL("public/og.png", projectRoot));
   assert.ok(
     socialCard.length > 10_000,
     "social preview image is unexpectedly small",

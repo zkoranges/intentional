@@ -17,35 +17,35 @@ export async function generateMetadata(): Promise<Metadata> {
       ? "http"
       : "https");
   const origin = `${protocol}://${host}`;
-  const socialImage = new URL("/og-live-v2.png", origin).toString();
+  const socialImage = new URL("/og.png", origin).toString();
 
   return {
     metadataBase: new URL(origin),
-    title: "Reservoir — Instant liquidity for asynchronous claims",
+    title: "Reservoir — Exit when you want",
     description:
-      "Replay the verified Lido/Aave fork proof, inspect canonical Lido claims, or atomically exchange a signed claim for productive reserve-backed WETH.",
+      "Instant liquidity for delayed withdrawals, with a direct Lido queue route when you prefer to keep the claim.",
     icons: {
       icon: "/favicon.svg",
     },
     openGraph: {
-      title: "Reservoir — The claim moves before the money does.",
+      title: "Reservoir — Exit when you want.",
       description:
-        "A verified ETHGlobal jury proof and wallet-ready Lido interface for productive reserve-backed claim settlement.",
+        "Exchange a delayed withdrawal for immediate liquidity, or enter the Lido queue directly.",
       type: "website",
       images: [
         {
           url: socialImage,
           width: 1200,
           height: 630,
-          alt: "Reservoir acquires an asynchronous withdrawal claim before paying exact WETH.",
+          alt: "Reservoir instant exit interface showing stETH exchanged for WETH.",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Reservoir — Instant liquidity for asynchronous claims",
+      title: "Reservoir — Exit when you want.",
       description:
-        "Acquire the claim first. Materialize exact WETH second.",
+        "Liquidity for delayed withdrawals.",
       images: [socialImage],
     },
   };

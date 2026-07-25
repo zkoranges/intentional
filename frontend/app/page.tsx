@@ -26,6 +26,7 @@ import {
 } from "../lib/ethereum";
 
 type ActionState = "idle" | "connecting" | "reading" | "signing" | "mining";
+type ExitMode = "instant" | "queue";
 
 type CompletedAction = {
   label: string;
@@ -33,49 +34,30 @@ type CompletedAction = {
 };
 
 const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
-const PRODUCTION_PROOF_URL =
-  "https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30159264327";
+const DOCS_URL = `${GITHUB_URL}#readme`;
+const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
 
-const JURY_METRICS = [
+const FAQS = [
   {
-    label: "Aave NAV / fixed shares",
-    value: "5.000000 → 5.006285 WETH",
-    note: "30-day timestamp advance",
+    question: "What is Reservoir?",
+    answer:
+      "Reservoir is an instant-liquidity layer for delayed withdrawals. A factor acquires your future withdrawal claim and pays you from productive reserves in the same transaction.",
   },
   {
-    label: "Seller input",
-    value: "0.900000 stETH",
-    note: "exact approval",
+    question: "How does an instant exit work?",
+    answer:
+      "You accept a short-lived firm quote. Reservoir verifies the claim, reserve capacity and signed terms, acquires the withdrawal claim, then releases the exact payment. If any step fails, the whole transaction reverts.",
   },
   {
-    label: "Claim acquired",
-    value: "0.725747813572212141",
-    note: "Lido share units",
+    question: "What is the Lido queue option?",
+    answer:
+      "The standard route sends stETH directly to Lido and mints an unstETH withdrawal NFT to your wallet. You keep the claim and redeem it for ETH after Lido finalizes it.",
   },
   {
-    label: "Seller payment",
-    value: "0.897750 WETH",
-    note: "exact post-acquisition delta",
+    question: "What risks should I understand?",
+    answer:
+      "Queue timing, final redemption value and protocol conditions can change. Reservoir quotes include a discount for that uncertainty. Always review the amount, route, contract addresses and wallet simulation before signing.",
   },
-  {
-    label: "Productive NAV left",
-    value: "4.102250019398133931",
-    note: "WETH in StataWETH",
-  },
-  {
-    label: "Release result",
-    value: "PASS",
-    note: "canonical Lido + Aave",
-  },
-] as const;
-
-const JURY_STEPS = [
-  "Companion Aqua/SwapVM reserve swap passed in a separate fork proof.",
-  "Seller approved exactly 0.9 stETH.",
-  "Canonical unstETH #130835 minted directly to the factor.",
-  "0.725747813572212141 Lido share units were acquired.",
-  "Seller received exactly 0.89775 WETH after acquisition.",
-  "4.102250019398133931 WETH of productive reserve NAV remained.",
 ] as const;
 
 function short(value: string) {
@@ -105,8 +87,9 @@ export default function Home() {
   const [snapshot, setSnapshot] = useState<LiveWalletSnapshot | null>(null);
   const [action, setAction] = useState<ActionState>("idle");
   const [status, setStatus] = useState(
-    "Connect a wallet to read canonical Ethereum contracts.",
+    "Connect your wallet to start an exit.",
   );
+  const [mode, setMode] = useState<ExitMode>("instant");
   const [amountInput, setAmountInput] = useState("0.10");
   const [actions, setActions] = useState<CompletedAction[]>([]);
   const [lastMintedRequest, setLastMintedRequest] = useState<bigint | null>(
@@ -114,8 +97,7 @@ export default function Home() {
   );
   const [quoteInput, setQuoteInput] = useState("");
   const [quoteCheck, setQuoteCheck] = useState<ReservoirQuoteCheck | null>(null);
-  const [juryRun, setJuryRun] = useState(0);
-  const [juryStep, setJuryStep] = useState(-1);
+  const [quoteModalOpen, setQuoteModalOpen] = useState(false);
 
   const provider = getInjectedProvider();
   const busy = action !== "idle";
@@ -134,16 +116,6 @@ export default function Home() {
     snapshot && amount > 0n && snapshot.queueAllowance === amount,
   );
 
-  useEffect(() => {
-    if (juryRun === 0) return;
-
-    setJuryStep(0);
-    const timers = JURY_STEPS.slice(1).map((_, index) =>
-      window.setTimeout(() => setJuryStep(index + 1), (index + 1) * 520),
-    );
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [juryRun]);
-
   const refresh = useCallback(
     async (connectedAccount = account) => {
       const injected = getInjectedProvider();
@@ -154,8 +126,8 @@ export default function Home() {
         setSnapshot(next);
         setStatus(
           next.productionCodeVerified
-            ? "Canonical Aqua, SwapVM, Lido, WETH and Aave bindings verified."
-            : "A canonical mainnet contract failed code verification.",
+            ? "Ethereum contracts verified. Choose an exit route."
+            : "A required Ethereum contract could not be verified.",
         );
       } catch (error) {
         setSnapshot(null);
@@ -208,10 +180,25 @@ export default function Home() {
     };
   }, [account, refresh]);
 
+  useEffect(() => {
+    if (!quoteModalOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setQuoteModalOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [quoteModalOpen]);
+
   async function connect() {
     const injected = getInjectedProvider();
     if (!injected) {
-      setStatus("Install or open an injected Ethereum wallet to continue.");
+      setStatus("Open Reservoir in a browser with an Ethereum wallet.");
       return;
     }
     setAction("connecting");
@@ -221,6 +208,7 @@ export default function Home() {
       await refresh(next);
     } catch (error) {
       setStatus(errorMessage(error));
+    } finally {
       setAction("idle");
     }
   }
@@ -260,7 +248,7 @@ export default function Home() {
     if (!injected || !account || !amountValid) return;
     setAction("signing");
     setStatus(
-      `Approve exactly ${formatMainnetAmount(amount)} stETH for the canonical Lido queue.`,
+      `Approve exactly ${formatMainnetAmount(amount)} stETH for Lido.`,
     );
     try {
       const receipt = await approveExact(
@@ -271,14 +259,14 @@ export default function Home() {
       );
       setActions((current) => [
         ...current,
-        { label: "Exact queue approval", hash: receipt.transactionHash },
+        { label: "stETH approved for Lido", hash: receipt.transactionHash },
       ]);
-      setStatus("Approval mined. The withdrawal request is ready.");
+      setStatus("Approval confirmed. Your withdrawal is ready.");
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
         error,
-        "Queue approval mined; verification warning",
+        "Lido approval confirmed with a verification warning",
       );
     }
   }
@@ -287,25 +275,21 @@ export default function Home() {
     const injected = getInjectedProvider();
     if (!injected || !account || !amountValid || !queueApproved) return;
     setAction("signing");
-    setStatus(
-      "Your wallet will simulate and then submit one canonical Lido withdrawal request.",
-    );
+    setStatus("Confirm the Lido withdrawal request in your wallet.");
     try {
       const result = await requestLidoWithdrawal(injected, account, amount);
       setAction("mining");
       setLastMintedRequest(result.requestId);
       setActions((current) => [
         ...current,
-        { label: `unstETH #${result.requestId} minted`, hash: result.hash },
+        { label: `unstETH #${result.requestId} created`, hash: result.hash },
       ]);
-      setStatus(
-        `Withdrawal request #${result.requestId} is owned by your wallet.`,
-      );
+      setStatus(`Withdrawal #${result.requestId} is now in your wallet.`);
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
         error,
-        "Lido request mined; verification warning",
+        "Lido withdrawal confirmed with a verification warning",
       );
     }
   }
@@ -314,7 +298,7 @@ export default function Home() {
     const injected = getInjectedProvider();
     if (!injected || !account) return;
     setAction("signing");
-    setStatus(`Simulating claim for unstETH #${requestId}.`);
+    setStatus(`Confirm the claim for unstETH #${requestId}.`);
     try {
       const result = await claimLidoWithdrawal(injected, account, requestId);
       setActions((current) => [
@@ -322,13 +306,13 @@ export default function Home() {
         { label: `unstETH #${requestId} claimed`, hash: result.hash },
       ]);
       setStatus(
-        `Claim #${requestId} paid ${formatMainnetAmount(result.amountOfEth)} ETH to your wallet.`,
+        `${formatMainnetAmount(result.amountOfEth)} ETH was sent to your wallet.`,
       );
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
         error,
-        `Lido claim #${requestId} mined; verification warning`,
+        `Lido claim #${requestId} confirmed with a verification warning`,
       );
     }
   }
@@ -344,7 +328,7 @@ export default function Home() {
       return;
     setAction("reading");
     setQuoteCheck(null);
-    setStatus("Verifying the signed quote, deployment bindings and reserve.");
+    setStatus("Checking quote terms and available liquidity.");
     try {
       const checked = await verifyReservoirQuote(
         injected,
@@ -352,8 +336,9 @@ export default function Home() {
         quoteInput,
       );
       setQuoteCheck(checked);
+      setQuoteModalOpen(false);
       setStatus(
-        `Firm quote verified: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH available.`,
+        `Firm quote ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH.`,
       );
     } catch (error) {
       setStatus(errorMessage(error));
@@ -365,7 +350,7 @@ export default function Home() {
     const injected = getInjectedProvider();
     if (!injected || !account || !quoteCheck) return;
     setAction("signing");
-    setStatus("Approve only the signed stETH amount for this Lido adapter.");
+    setStatus("Confirm the exact stETH approval for this exit.");
     try {
       const receipt = await approveExact(
         injected,
@@ -375,14 +360,14 @@ export default function Home() {
       );
       setActions((current) => [
         ...current,
-        { label: "Exact Reservoir approval", hash: receipt.transactionHash },
+        { label: "stETH approved for Reservoir", hash: receipt.transactionHash },
       ]);
-      setStatus("Adapter approval mined. Re-verify before filling.");
+      setStatus("Approval confirmed. Re-check the quote before exiting.");
       setQuoteCheck(null);
     } catch (error) {
       await handleMinedActionError(
         error,
-        "Reservoir approval mined; verification warning",
+        "Reservoir approval confirmed with a verification warning",
         true,
       );
     } finally {
@@ -394,613 +379,502 @@ export default function Home() {
     const injected = getInjectedProvider();
     if (!injected || !account || !quoteCheck) return;
     setAction("signing");
-    setStatus(
-      "Simulating atomic claim acquisition and exact reserve-backed payment.",
-    );
+    setStatus("Confirm your instant exit.");
     try {
       const result = await fillReservoirQuote(injected, account, quoteCheck);
       setActions((current) => [
         ...current,
         {
-          label: `Reservoir paid ${formatMainnetAmount(result.paymentAmount)} WETH`,
+          label: `${formatMainnetAmount(result.paymentAmount)} WETH received`,
           hash: result.hash,
         },
       ]);
       setLastMintedRequest(result.requestId);
       setStatus(
-        `Settled. Claim #${result.requestId} was acquired before ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`,
+        `Exit complete. ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`,
       );
       setQuoteCheck(null);
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
         error,
-        "Reservoir transaction mined; verification warning",
+        "Reservoir exit confirmed with a verification warning",
         true,
       );
     }
   }
 
+  function selectMode(nextMode: ExitMode) {
+    setMode(nextMode);
+    setStatus(
+      nextMode === "instant"
+        ? RESERVOIR_DEPLOYMENT
+          ? "Import a firm quote to continue."
+          : "Instant exits are not active yet. The Lido queue remains available."
+        : "Use Lido directly and keep the withdrawal claim in your wallet.",
+    );
+  }
+
+  const instantPayment = quoteCheck
+    ? formatMainnetAmount(BigInt(quoteCheck.envelope.quote.paymentAmount))
+    : "—";
+
   return (
-    <main>
-      <nav>
+    <>
+      <header className="appHeader">
         <a className="brand" href="#top" aria-label="Reservoir home">
-          <span>R</span>
+          <span className="brandMark">R</span>
           <strong>Reservoir</strong>
-          <em>v2</em>
         </a>
-        <div className="navActions">
-          <a
-            className="repoLink"
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitHub
+        <nav className="navLinks" aria-label="Primary navigation">
+          <a className="active" href="#exit">
+            Exit
           </a>
-          <span className={`network ${snapshot?.productionCodeVerified ? "ok" : ""}`}>
+          <a href="#positions">Positions</a>
+          <a href="#faq">Learn</a>
+        </nav>
+        <div className="navActions">
+          <span
+            className={`networkPill ${snapshot?.productionCodeVerified ? "verified" : ""}`}
+          >
             <i />
             Ethereum
           </span>
           <button className="walletButton" onClick={connect} disabled={busy}>
-            {account ? short(account) : "Connect wallet"}
+            {account ? short(account) : "Connect"}
           </button>
         </div>
-      </nav>
+      </header>
 
-      <section className="hero" id="top">
-        <div>
-          <p className="eyebrow">Future cash flow → liquidity now</p>
-          <h1>
-            Exit the queue.
-            <span> Keep the claim intact.</span>
-          </h1>
-          <p className="lede">
-            Reservoir acquires a Lido withdrawal claim before productive Aave
-            reserves pay the seller. The canonical queue remains available as
-            the always-honest fallback.
-          </p>
-          <div className="heroActions">
-            <a className="primaryLink" href="#jury-proof">
-              Run the jury proof
-            </a>
-            <a href={PRODUCTION_PROOF_URL} target="_blank" rel="noreferrer">
-              Inspect green CI
-            </a>
-          </div>
-        </div>
-        <div className="heroProof" aria-label="Atomic settlement order">
-          <span>01</span>
-          <p>Acquire unstETH</p>
-          <b>→</b>
-          <span>02</span>
-          <p>Withdraw exact WETH</p>
-          <b>→</b>
-          <span>03</span>
-          <p>Pay seller</p>
-        </div>
-      </section>
-
-      <section className="juryDemo" id="jury-proof" aria-labelledby="jury-title">
-        <header>
-          <div>
-            <p className="eyebrow">ETHGlobal jury mode</p>
-            <h2 id="jury-title">The claim moves before the money does.</h2>
-          </div>
-          <div className="proofControls">
-            <span>Ethereum block 25,604,561</span>
-            <button
-              className="primary"
-              onClick={() => setJuryRun((current) => current + 1)}
-            >
-              {juryRun === 0 ? "Run verified fork replay" : "Replay proof"}
-            </button>
-          </div>
-        </header>
-        <p className="juryBoundary">
-          This replays the exact release output from production Lido and Aave
-          contracts on a disposable chain-1 fork. It is not a persistent
-          mainnet fill. The companion Aqua/SwapVM swap is a separate gated fork
-          proof, as required by the 1inch track.
-        </p>
-        <div className="juryMetrics" aria-label="Verified release measurements">
-          {JURY_METRICS.map((metric) => (
-            <article key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <small>{metric.note}</small>
-            </article>
-          ))}
-        </div>
-        <ol className="jurySteps" aria-live="polite">
-          {JURY_STEPS.map((step, index) => {
-            const revealed = juryStep >= index;
-            return (
-              <li
-                key={step}
-                className={revealed ? "revealed" : ""}
-                aria-current={juryStep === index ? "step" : undefined}
-              >
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <p>{step}</p>
-                <b>{revealed ? "PASS" : "—"}</b>
-              </li>
-            );
-          })}
-        </ol>
-        <div className="juryEvidence">
-          <p>
-            186 deterministic tests · 9 production-contract fork tests · 0
-            failures · 0 skips
-          </p>
-          <a href={PRODUCTION_PROOF_URL} target="_blank" rel="noreferrer">
-            Open reproducible GitHub Actions proof
-          </a>
-        </div>
-      </section>
-
-      <section className="terminal" aria-live="polite">
-        <div>
-          <span className="terminalDot" />
-          <p>{status}</p>
-        </div>
-        {account && (
-          <button className="textButton" onClick={() => refresh()} disabled={busy}>
-            Refresh
-          </button>
-        )}
-      </section>
-
-      {!provider && (
-        <section className="notice">
-          <strong>No injected wallet detected.</strong>
-          <p>
-            Open this page in a browser with MetaMask, Rabby, Frame, or another
-            EIP-1193 wallet. No key is stored by Reservoir.
-          </p>
+      <main id="top">
+        <section className="appIntro">
+          <p>Liquidity for delayed withdrawals</p>
+          <h1>Exit when you want.</h1>
         </section>
-      )}
 
-      <section className="walletGrid" aria-label="Connected account">
-        <article>
-          <span>Account</span>
-          <strong>{account ? short(account) : "Not connected"}</strong>
-          <small>{snapshot ? "chain 1 verified" : "wallet required"}</small>
-        </article>
-        <article>
-          <span>stETH available</span>
-          <strong>
-            {snapshot
-              ? `${formatMainnetAmount(snapshot.stEthBalance)} stETH`
-              : "—"}
-          </strong>
-          <small>canonical rebasing token</small>
-        </article>
-        <article>
-          <span>WETH balance</span>
-          <strong>
-            {snapshot
-              ? `${formatMainnetAmount(snapshot.wethBalance)} WETH`
-              : "—"}
-          </strong>
-          <small>instant-exit settlement asset</small>
-        </article>
-        <article>
-          <span>Lido queue</span>
-          <strong>
-            {snapshot
-              ? snapshot.queuePaused
-                ? "Paused"
-                : snapshot.bunkerMode
-                ? "Bunker mode"
-                : "Turbo mode"
-              : "—"}
-          </strong>
-          <small>
-            {snapshot
-              ? `${snapshot.lastFinalizedRequestId}/${snapshot.lastRequestId} finalized`
-              : "live state after connect"}
-          </small>
-        </article>
-      </section>
-
-      <section className="routes" id="exit">
-        <header className="sectionHeader">
-          <div>
-            <p className="eyebrow">Choose the honest route</p>
-            <h2>One interface, two outcomes.</h2>
+        <section className="exitCard" id="exit" aria-label="Withdrawal interface">
+          <div className="cardHeader">
+            <div className="modeTabs" role="tablist" aria-label="Exit route">
+              <button
+                role="tab"
+                aria-selected={mode === "instant"}
+                className={mode === "instant" ? "selected" : ""}
+                onClick={() => selectMode("instant")}
+              >
+                Instant exit
+              </button>
+              <button
+                role="tab"
+                aria-selected={mode === "queue"}
+                className={mode === "queue" ? "selected" : ""}
+                onClick={() => selectMode("queue")}
+              >
+                Lido queue
+              </button>
+            </div>
+            <a className="helpLink" href="#faq" aria-label="Learn about exit routes">
+              ?
+            </a>
           </div>
-          <label className="amountField">
-            <span>stETH amount</span>
-            <div>
+
+          <div className="tokenPanel">
+            <div className="tokenPanelLabel">
+              <span>You send</span>
+              <span>
+                Balance:{" "}
+                {snapshot
+                  ? formatMainnetAmount(snapshot.stEthBalance)
+                  : "—"}
+              </span>
+            </div>
+            <div className="tokenRow">
               <input
                 inputMode="decimal"
                 value={amountInput}
-                onChange={(event) => setAmountInput(event.target.value)}
+                onChange={(event) => {
+                  setAmountInput(event.target.value);
+                  setQuoteCheck(null);
+                }}
                 aria-label="stETH amount"
+                placeholder="0"
               />
-              <b>stETH</b>
+              <button className="tokenSelect" type="button" tabIndex={-1}>
+                <span className="tokenIcon stethIcon">S</span>
+                stETH
+              </button>
             </div>
-          </label>
-        </header>
-
-        <div className="routeGrid">
-          <article className="route reservoirRoute">
-            <div className="routeTop">
-              <span className="routeType">Instant / firm quote</span>
-              <i>Reservoir</i>
-            </div>
-            <h3>Acquire the claim. Pay exact WETH.</h3>
-            <p>
-              {RESERVOIR_DEPLOYMENT
-                ? "Paste a factor-signed quote. The app requires the build-pinned kernel and Lido adapter, then verifies its nonce, canonical bindings and full Aave-backed capacity before asking for approval."
-                : "The live Lido route is available now. Reservoir instant fills remain disabled until the reviewed kernel and Lido adapter are deployed and pinned into this build."}
-            </p>
-            {RESERVOIR_DEPLOYMENT && (
-              <dl className="deploymentPins" aria-label="Pinned deployment">
-                <div>
-                  <dt>Pinned kernel</dt>
-                  <dd>
-                    <a
-                      href={`https://etherscan.io/address/${RESERVOIR_DEPLOYMENT.kernel}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {RESERVOIR_DEPLOYMENT.kernel}
-                    </a>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Pinned Lido adapter</dt>
-                  <dd>
-                    <a
-                      href={`https://etherscan.io/address/${RESERVOIR_DEPLOYMENT.lidoAdapter}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {RESERVOIR_DEPLOYMENT.lidoAdapter}
-                    </a>
-                  </dd>
-                </div>
-              </dl>
+            {snapshot && (
+              <button
+                className="maxButton"
+                type="button"
+                onClick={() =>
+                  setAmountInput(formatMainnetAmount(snapshot.stEthBalance))
+                }
+              >
+                Max
+              </button>
             )}
+          </div>
+
+          <div className="routeArrow" aria-hidden="true">
+            ↓
+          </div>
+
+          <div className="tokenPanel outputPanel">
+            <div className="tokenPanelLabel">
+              <span>{mode === "instant" ? "You receive" : "You receive"}</span>
+              <span>{mode === "instant" ? "Firm quote" : "After request"}</span>
+            </div>
+            <div className="tokenRow">
+              <output>
+                {mode === "instant"
+                  ? instantPayment
+                  : amountValid
+                    ? "1"
+                    : "—"}
+              </output>
+              <div className="tokenSelect static">
+                <span
+                  className={`tokenIcon ${mode === "instant" ? "wethIcon" : "nftIcon"}`}
+                >
+                  {mode === "instant" ? "W" : "N"}
+                </span>
+                {mode === "instant" ? "WETH" : "unstETH"}
+              </div>
+            </div>
+          </div>
+
+          <div className="routeSummary">
+            <div>
+              <span>Route</span>
+              <strong>{mode === "instant" ? "Reservoir" : "Lido"}</strong>
+            </div>
+            <div>
+              <span>Timing</span>
+              <strong>{mode === "instant" ? "Immediate" : "Protocol queue"}</strong>
+            </div>
+            <div>
+              <span>Claim owner</span>
+              <strong>{mode === "instant" ? "Factor" : "You"}</strong>
+            </div>
+          </div>
+
+          {!provider && (
+            <div className="inlineNotice">
+              No browser wallet detected. Open Reservoir with MetaMask, Rabby,
+              Frame, or another Ethereum wallet.
+            </div>
+          )}
+
+          <div className="primaryAction">
+            {!account ? (
+              <button className="actionButton" onClick={connect} disabled={busy}>
+                Connect wallet
+              </button>
+            ) : !snapshot ? (
+              <button
+                className="actionButton"
+                onClick={switchToMainnet}
+                disabled={busy}
+              >
+                Switch to Ethereum
+              </button>
+            ) : mode === "instant" ? (
+              !RESERVOIR_DEPLOYMENT ? (
+                <button className="actionButton" disabled>
+                  Instant exits coming soon
+                </button>
+              ) : !quoteCheck ? (
+                <button
+                  className="actionButton"
+                  onClick={() => setQuoteModalOpen(true)}
+                  disabled={busy || !amountValid}
+                >
+                  Import firm quote
+                </button>
+              ) : quoteCheck.allowance !== quoteCheck.requestedStEth ? (
+                <button
+                  className="actionButton"
+                  onClick={approveReservoir}
+                  disabled={busy}
+                >
+                  Approve stETH
+                </button>
+              ) : (
+                <button
+                  className="actionButton"
+                  onClick={fillQuote}
+                  disabled={busy}
+                >
+                  Exit for {instantPayment} WETH
+                </button>
+              )
+            ) : !queueApproved ? (
+              <button
+                className="actionButton"
+                onClick={approveQueue}
+                disabled={!amountValid || snapshot.queuePaused || busy}
+              >
+                Approve stETH
+              </button>
+            ) : (
+              <button
+                className="actionButton"
+                onClick={requestWithdrawal}
+                disabled={!amountValid || snapshot.queuePaused || busy}
+              >
+                Request withdrawal
+              </button>
+            )}
+          </div>
+
+          <div className="statusBar" aria-live="polite">
+            <span className={busy ? "statusSpinner" : "statusDot"} />
+            <p>{status}</p>
+            {account && (
+              <button onClick={() => refresh()} disabled={busy}>
+                Refresh
+              </button>
+            )}
+          </div>
+
+          {mode === "instant" && !RESERVOIR_DEPLOYMENT && (
+            <button
+              className="fallbackLink"
+              onClick={() => selectMode("queue")}
+            >
+              Continue with the Lido queue instead →
+            </button>
+          )}
+        </section>
+
+        <section className="positionsSection" id="positions">
+          <div className="sectionHeading">
+            <div>
+              <p>Your wallet</p>
+              <h2>Withdrawal positions</h2>
+            </div>
+            {account && <span>{short(account)}</span>}
+          </div>
+
+          {snapshot?.requests.length ? (
+            <div className="positionList">
+              {snapshot.requests.map((request) => (
+                <article key={request.requestId.toString()}>
+                  <div className="positionIdentity">
+                    <span className="tokenIcon nftIcon">N</span>
+                    <div>
+                      <strong>unstETH #{request.requestId}</strong>
+                      <small>{unixDate(request.timestamp)}</small>
+                    </div>
+                  </div>
+                  <div>
+                    <span>Amount</span>
+                    <strong>
+                      {formatMainnetAmount(request.amountOfStETH)} stETH
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Status</span>
+                    <strong
+                      className={`positionStatus ${
+                        request.isClaimed
+                          ? "claimed"
+                          : request.isFinalized
+                            ? "claimable"
+                            : "pending"
+                      }`}
+                    >
+                      {request.isClaimed
+                        ? "Claimed"
+                        : request.isFinalized
+                          ? "Claimable"
+                          : "Pending"}
+                    </strong>
+                  </div>
+                  <div className="positionAction">
+                    {request.isFinalized && !request.isClaimed ? (
+                      <button
+                        onClick={() => claimRequest(request.requestId)}
+                        disabled={busy}
+                      >
+                        Claim ETH
+                      </button>
+                    ) : (
+                      <a
+                        href={etherscanToken(
+                          ADDRESSES.lidoQueue,
+                          request.requestId,
+                        )}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View ↗
+                      </a>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="emptyPositions">
+              <span className="emptyIcon">≈</span>
+              <strong>
+                {snapshot ? "No withdrawals yet" : "Connect to view positions"}
+              </strong>
+              <p>
+                {snapshot
+                  ? "New Lido withdrawal requests will appear here."
+                  : "Reservoir reads your Lido withdrawals directly from Ethereum."}
+              </p>
+            </div>
+          )}
+        </section>
+
+        {actions.length > 0 && (
+          <section className="activitySection" aria-label="Recent activity">
+            <div className="sectionHeading compact">
+              <div>
+                <p>Recent activity</p>
+                <h2>Transactions</h2>
+              </div>
+              {lastMintedRequest !== null && (
+                <a
+                  href={etherscanToken(
+                    ADDRESSES.lidoQueue,
+                    lastMintedRequest,
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View latest position ↗
+                </a>
+              )}
+            </div>
+            <ol>
+              {actions.map((item) => (
+                <li key={`${item.hash}-${item.label}`}>
+                  <span>{item.label}</span>
+                  <a
+                    href={etherscanTx(item.hash)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {short(item.hash)} ↗
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        <section className="faqSection" id="faq">
+          <div className="sectionHeading">
+            <div>
+              <p>Learn</p>
+              <h2>Frequently asked questions</h2>
+            </div>
+            <a href={DOCS_URL} target="_blank" rel="noreferrer">
+              Read the docs ↗
+            </a>
+          </div>
+          <div className="faqList">
+            {FAQS.map((item) => (
+              <details key={item.question}>
+                <summary>
+                  {item.question}
+                  <span>+</span>
+                </summary>
+                <p>{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="docsStrip" aria-label="Documentation links">
+          <div>
+            <span>Documentation</span>
+            <strong>Understand the protocol before using it.</strong>
+          </div>
+          <div className="docsLinks">
+            <a href={DOCS_URL} target="_blank" rel="noreferrer">
+              Docs ↗
+            </a>
+            <a href={CONTRACTS_URL} target="_blank" rel="noreferrer">
+              Contracts ↗
+            </a>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+              GitHub ↗
+            </a>
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <a className="brand" href="#top" aria-label="Reservoir home">
+          <span className="brandMark">R</span>
+          <strong>Reservoir</strong>
+        </a>
+        <p>Non-custodial beta · Review every wallet request before signing.</p>
+      </footer>
+
+      {quoteModalOpen && (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setQuoteModalOpen(false);
+          }}
+        >
+          <section
+            className="quoteModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="quote-modal-title"
+          >
+            <div className="modalHeader">
+              <div>
+                <span>Instant exit</span>
+                <h2 id="quote-modal-title">Import your firm quote</h2>
+              </div>
+              <button
+                className="closeButton"
+                onClick={() => setQuoteModalOpen(false)}
+                aria-label="Close quote dialog"
+              >
+                ×
+              </button>
+            </div>
+            <p>
+              Paste the signed quote supplied by your factor. Reservoir checks
+              the seller, amount, expiry, contracts and available liquidity
+              before requesting approval.
+            </p>
             <textarea
               value={quoteInput}
               onChange={(event) => {
                 setQuoteInput(event.target.value);
                 setQuoteCheck(null);
               }}
-              placeholder="Paste Reservoir signed quote JSON"
+              placeholder="Paste signed quote JSON"
               aria-label="Signed Reservoir quote"
               spellCheck={false}
-              disabled={!RESERVOIR_DEPLOYMENT}
+              autoFocus
             />
-            {quoteCheck && (
-              <dl className="quoteFacts">
-                <div>
-                  <dt>You deliver</dt>
-                  <dd>
-                    {formatMainnetAmount(quoteCheck.requestedStEth)} stETH
-                  </dd>
-                </div>
-                <div>
-                  <dt>You receive</dt>
-                  <dd>
-                    {formatMainnetAmount(
-                      BigInt(quoteCheck.envelope.quote.paymentAmount),
-                    )}{" "}
-                    WETH
-                  </dd>
-                </div>
-                <div>
-                  <dt>Reserve</dt>
-                  <dd>fully available</dd>
-                </div>
-                <div>
-                  <dt>Approval</dt>
-                  <dd>
-                    {quoteCheck.allowance === quoteCheck.requestedStEth
-                      ? "exact amount ready"
-                      : "required"}
-                  </dd>
-                </div>
-              </dl>
-            )}
-            <div className="routeActions">
-              {!quoteCheck ? (
-                <button
-                  className="primary"
-                  onClick={inspectQuote}
-                  disabled={
-                    !RESERVOIR_DEPLOYMENT ||
-                    !account ||
-                    busy ||
-                    !quoteInput.trim()
-                  }
-                >
-                  {RESERVOIR_DEPLOYMENT
-                    ? "Verify firm quote"
-                    : "Awaiting reviewed deployment"}
-                </button>
-              ) : (
-                quoteCheck.allowance !== quoteCheck.requestedStEth ? (
-                  <button
-                    className="secondary"
-                    onClick={approveReservoir}
-                    disabled={busy}
-                  >
-                    Approve exact stETH
-                  </button>
-                ) : (
-                  <button className="primary" onClick={fillQuote} disabled={busy}>
-                    Fill atomically
-                  </button>
-                )
-              )}
-            </div>
-            <small className="finePrint">
-              {RESERVOIR_DEPLOYMENT
-                ? "No quote service or key is embedded. The app accepts only the pinned deployment, simulates onchain, then independently checks canonical WETH payment and unstETH ownership."
-                : "No arbitrary pasted contract can request approval. Redeploy this frontend only after pinning the reviewed public kernel and adapter addresses."}
-            </small>
-          </article>
-
-          <article className="route canonicalRoute">
-            <div className="routeTop">
-              <span className="routeType">Delayed / protocol-native</span>
-              <i>Canonical Lido</i>
-            </div>
-            <h3>Enter the withdrawal queue directly.</h3>
-            <p>
-              This production route creates an unstETH NFT in your wallet. It
-              offers no instant payment and its eventual ETH amount and timing
-              follow Lido protocol state.
-            </p>
-            <dl className="routeFacts">
-              <div>
-                <dt>Recipient</dt>
-                <dd>{account ? short(account) : "connect wallet"}</dd>
-              </div>
-              <div>
-                <dt>Approval</dt>
-                <dd>{queueApproved ? "exact amount ready" : "required"}</dd>
-              </div>
-              <div>
-                <dt>Output</dt>
-                <dd>one transferable unstETH</dd>
-              </div>
-            </dl>
-            <div className="routeActions">
-              {!snapshot ? (
-                <button className="primary" onClick={connect} disabled={busy}>
-                  Connect to continue
-                </button>
-              ) : snapshot.chainId !== 1 ? (
-                <button
-                  className="primary"
-                  onClick={switchToMainnet}
-                  disabled={busy}
-                >
-                  Switch to Ethereum
-                </button>
-              ) : !queueApproved ? (
-                <button
-                  className="secondary"
-                  onClick={approveQueue}
-                  disabled={!amountValid || snapshot.queuePaused || busy}
-                >
-                  Approve exact stETH
-                </button>
-              ) : (
-                <button
-                  className="primary"
-                  onClick={requestWithdrawal}
-                  disabled={!amountValid || snapshot.queuePaused || busy}
-                >
-                  Request withdrawal
-                </button>
-              )}
-            </div>
-            <small className="finePrint">
-              The app simulates every write first. You remain the NFT owner and
-              can transfer or claim it through any compatible interface.
-              Bunker mode changes timing and underwriting risk; only a paused
-              queue disables this action.
-            </small>
-          </article>
-        </div>
-      </section>
-
-      {(lastMintedRequest !== null || actions.length > 0) && (
-        <section className="activity">
-          <header className="sectionHeader">
-            <div>
-              <p className="eyebrow">Receipt-backed activity</p>
-              <h2>What actually happened.</h2>
-            </div>
-            {lastMintedRequest !== null && (
-              <a
-                href={etherscanToken(
-                  ADDRESSES.lidoQueue,
-                  lastMintedRequest,
-                )}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View unstETH #{lastMintedRequest}
-              </a>
-            )}
-          </header>
-          <ol>
-            {actions.map((item) => (
-              <li key={`${item.hash}-${item.label}`}>
-                <span>{item.label}</span>
-                <a href={etherscanTx(item.hash)} target="_blank" rel="noreferrer">
-                  {short(item.hash)}
-                </a>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      <section className="requests" aria-label="Recent Lido requests">
-        <header className="sectionHeader">
-          <div>
-            <p className="eyebrow">Your canonical claims</p>
-            <h2>Recent unstETH positions.</h2>
-          </div>
-          <span>
-            {snapshot ? `${snapshot.requests.length} loaded` : "connect to load"}
-          </span>
-        </header>
-        {snapshot?.requests.length ? (
-          <div className="requestList">
-            {snapshot.requests.map((request) => (
-              <article key={request.requestId.toString()}>
-                <div>
-                  <span>unstETH #{request.requestId}</span>
-                  <strong>
-                    {formatMainnetAmount(request.amountOfStETH)} stETH
-                  </strong>
-                </div>
-                <div>
-                  <span>Created</span>
-                  <strong>{unixDate(request.timestamp)}</strong>
-                </div>
-                <div>
-                  <span>Status</span>
-                  <strong>
-                    {request.isClaimed
-                      ? "Claimed"
-                      : request.isFinalized
-                        ? "Claimable"
-                        : "Pending"}
-                  </strong>
-                </div>
-                <div className="requestAction">
-                  {request.isFinalized && !request.isClaimed ? (
-                    <button
-                      className="primary small"
-                      onClick={() => claimRequest(request.requestId)}
-                      disabled={busy}
-                    >
-                      Claim ETH
-                    </button>
-                  ) : (
-                    <a
-                      href={etherscanToken(
-                        ADDRESSES.lidoQueue,
-                        request.requestId,
-                      )}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Inspect
-                    </a>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="emptyState">
-            <p>
-              {snapshot
-                ? "No Lido withdrawal NFTs were found for this wallet."
-                : "Connect a wallet to read its canonical Lido positions."}
-            </p>
-          </div>
-        )}
-      </section>
-
-      <section className="proof">
-        <div className="proofCopy">
-          <p className="eyebrow">Jury-grade evidence</p>
-          <h2>Production contracts. Disposable capital.</h2>
-          <p>
-            The release gate executes Lido origination and Aave StataWETH
-            materialization against pinned historical Ethereum state. A
-            separate companion proof executes the modified SwapVM router
-            through official Aqua. No external protocol is replaced by a test
-            double in the fork suite.
-          </p>
-        </div>
-        <div className="proofGrid">
-          <article>
-            <span>01 / Rest</span>
-            <strong>5.000000 WETH NAV</strong>
-            <small>zero idle underlying</small>
-          </article>
-          <article>
-            <span>02 / Earn</span>
-            <strong>5.006285 WETH NAV</strong>
-            <small>same StataWETH shares</small>
-          </article>
-          <article>
-            <span>03 / Acquire</span>
-            <strong>0.725747813572 shares</strong>
-            <small>canonical unstETH</small>
-          </article>
-          <article>
-            <span>04 / Pay</span>
-            <strong>0.89775 WETH</strong>
-            <small>after claim acquisition</small>
-          </article>
-        </div>
-        <div className="bindings">
-          {[
-            ["Aqua", ADDRESSES.aqua],
-            ["SwapVM", ADDRESSES.swapVm],
-            ["Lido queue", ADDRESSES.lidoQueue],
-            ["StataWETH", ADDRESSES.stataWeth],
-          ].map(([name, address]) => (
-            <a
-              key={address}
-              href={etherscanToken(address as Address)}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              className="actionButton"
+              onClick={inspectQuote}
+              disabled={busy || !quoteInput.trim()}
             >
-              <span>{name}</span>
-              <strong>{short(address)}</strong>
-            </a>
-          ))}
+              Verify quote
+            </button>
+            <small>
+              Quotes are short-lived and bound to this wallet. Reservoir never
+              stores your wallet key.
+            </small>
+          </section>
         </div>
-      </section>
-
-      <section className="safety">
-        <p className="eyebrow">Transaction boundary</p>
-        <div>
-          <h2>The page is convenience. The contracts are authority.</h2>
-          <ul>
-            <li>Exact approvals only—never unlimited.</li>
-            <li>Ethereum mainnet and canonical endpoints are checked.</li>
-            <li>Every write is simulated before the wallet sends it.</li>
-            <li>A Reservoir payment follows measured claim acquisition.</li>
-            <li>Canonical queue timing and redemption value can change.</li>
-          </ul>
-        </div>
-      </section>
-
-      <footer>
-        <div className="brand">
-          <span>R</span>
-          <strong>Reservoir</strong>
-          <em>ETH Lisbon</em>
-        </div>
-        <div className="footerLinks">
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer">
-            Source
-          </a>
-          <a href={PRODUCTION_PROOF_URL} target="_blank" rel="noreferrer">
-            Fork proof
-          </a>
-          <p>
-            Mainnet wallet beta · Review contract addresses and wallet prompts
-            before signing.
-          </p>
-        </div>
-      </footer>
-    </main>
+      )}
+    </>
   );
 }
