@@ -16,6 +16,7 @@ import {
 const RETIRED_KERNEL = [...RETIRED_KERNELS][0];
 const FRESH_KERNEL = "0x1111111111111111111111111111111111111111";
 const ADAPTER = "0x2222222222222222222222222222222222222222";
+const UNSTETH_ADAPTER = "0x4444444444444444444444444444444444444444";
 
 test("loopback detection", () => {
   for (const host of ["127.0.0.1", "127.1.2.3", "localhost", "LOCALHOST", "::1", "[::1]", "::ffff:127.0.0.1"]) {
@@ -26,40 +27,23 @@ test("loopback detection", () => {
   }
 });
 
-test("non-loopback bind is refused without the explicit override", () => {
-  assert.deepEqual(assertBindSafe("127.0.0.1", undefined), []);
-  assert.throws(() => assertBindSafe("0.0.0.0", undefined), /ALLOW_NONLOCAL_BIND/);
+test("non-loopback bind is refused with no override", () => {
+  assert.deepEqual(assertBindSafe("127.0.0.1"), []);
+  assert.throws(() => assertBindSafe("0.0.0.0"), /no configuration override/);
   assert.throws(() => assertBindSafe("192.168.1.5", ""), /loopback/);
+  assert.throws(() => assertBindSafe("0.0.0.0", "1"), /no configuration override/);
 });
 
-test("non-loopback bind with ALLOW_NONLOCAL_BIND=1 starts, with a warning", () => {
-  const warnings = assertBindSafe("0.0.0.0", "1");
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /WARNING/);
-  assert.match(warnings[0], /0\.0\.0\.0/);
-});
-
-test("the retired kernel is refused over a non-loopback RPC", () => {
+test("the retired kernel is refused unconditionally", () => {
   const { refusals } = verifyDeploymentConfig({
     expectedChainId: 1,
     kernel: RETIRED_KERNEL,
     lidoAdapter: ADAPTER,
-    rpcUrl: "https://mainnet.example-rpc.com/v2/whatever",
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
     manifestPath: "",
   });
-  assert.equal(refusals.length, 1);
-  assert.match(refusals[0], /retired/);
-});
-
-test("the retired kernel is allowed against a loopback RPC (fork rehearsal)", () => {
-  const { refusals } = verifyDeploymentConfig({
-    expectedChainId: 1,
-    kernel: RETIRED_KERNEL,
-    lidoAdapter: ADAPTER,
-    rpcUrl: "http://127.0.0.1:8551",
-    manifestPath: "",
-  });
-  assert.deepEqual(refusals, []);
+  assert.match(refusals.join(" "), /retired/);
+  assert.match(refusals.join(" "), /DEPLOYMENT_MANIFEST/);
 });
 
 function withManifest(t, manifest) {
@@ -76,6 +60,7 @@ const ACTIVE_MANIFEST = {
   contracts: {
     kernel: { address: FRESH_KERNEL },
     lidoAdapter: { address: ADAPTER },
+    lidoUnstETHExitAdapter: { address: UNSTETH_ADAPTER },
   },
 };
 
@@ -84,7 +69,7 @@ test("an active, matching manifest passes", (t) => {
     expectedChainId: 1,
     kernel: FRESH_KERNEL,
     lidoAdapter: ADAPTER,
-    rpcUrl: "https://mainnet.example-rpc.com",
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
     manifestPath: withManifest(t, ACTIVE_MANIFEST),
   });
   assert.deepEqual(refusals, []);
@@ -95,7 +80,7 @@ test("a retired manifest is refused", (t) => {
     expectedChainId: 1,
     kernel: FRESH_KERNEL,
     lidoAdapter: ADAPTER,
-    rpcUrl: "https://mainnet.example-rpc.com",
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
     manifestPath: withManifest(t, { ...ACTIVE_MANIFEST, releaseState: "retired-paused" }),
   });
   assert.equal(refusals.length, 1);
@@ -107,7 +92,7 @@ test("a chain-id mismatch is refused", (t) => {
     expectedChainId: 1,
     kernel: FRESH_KERNEL,
     lidoAdapter: ADAPTER,
-    rpcUrl: "https://mainnet.example-rpc.com",
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
     manifestPath: withManifest(t, { ...ACTIVE_MANIFEST, chainId: 11155111 }),
   });
   assert.equal(refusals.length, 1);
@@ -119,7 +104,7 @@ test("an address mismatch is refused", (t) => {
     expectedChainId: 1,
     kernel: "0x3333333333333333333333333333333333333333",
     lidoAdapter: ADAPTER,
-    rpcUrl: "https://mainnet.example-rpc.com",
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
     manifestPath: withManifest(t, ACTIVE_MANIFEST),
   });
   assert.equal(refusals.length, 1);
@@ -131,11 +116,51 @@ test("an unreadable manifest is refused, not ignored", () => {
     expectedChainId: 1,
     kernel: FRESH_KERNEL,
     lidoAdapter: ADAPTER,
-    rpcUrl: "https://mainnet.example-rpc.com",
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
     manifestPath: "/nonexistent/manifest.json",
   });
   assert.equal(refusals.length, 1);
   assert.match(refusals[0], /unreadable/);
+});
+
+test("a missing manifest is refused", () => {
+  const { refusals } = verifyDeploymentConfig({
+    expectedChainId: 1,
+    kernel: FRESH_KERNEL,
+    lidoAdapter: ADAPTER,
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
+    manifestPath: "",
+  });
+  assert.match(refusals.join(" "), /DEPLOYMENT_MANIFEST/);
+});
+
+test("an existing-unstETH adapter mismatch is refused", (t) => {
+  const { refusals } = verifyDeploymentConfig({
+    expectedChainId: 1,
+    kernel: FRESH_KERNEL,
+    lidoAdapter: ADAPTER,
+    lidoUnstETHAdapter: "0x5555555555555555555555555555555555555555",
+    manifestPath: withManifest(t, ACTIVE_MANIFEST),
+  });
+  assert.match(refusals.join(" "), /LIDO_UNSTETH_ADAPTER_ADDRESS/);
+});
+
+test("malformed manifest addresses are refused instead of crashing startup", (t) => {
+  const malformed = {
+    ...ACTIVE_MANIFEST,
+    contracts: {
+      ...ACTIVE_MANIFEST.contracts,
+      lidoUnstETHExitAdapter: { address: "not-an-address" },
+    },
+  };
+  const { refusals } = verifyDeploymentConfig({
+    expectedChainId: 1,
+    kernel: FRESH_KERNEL,
+    lidoAdapter: ADAPTER,
+    lidoUnstETHAdapter: UNSTETH_ADAPTER,
+    manifestPath: withManifest(t, malformed),
+  });
+  assert.match(refusals.join(" "), /LIDO_UNSTETH_ADAPTER_ADDRESS/);
 });
 
 test("secret material is detected in any obvious encoding", () => {

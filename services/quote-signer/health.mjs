@@ -53,7 +53,12 @@ export function deriveReadiness({ refusals, snapshot, expectedChainId }) {
 
   const notReadyReasons = [];
   if (!snapshot.kernelSealed) notReadyReasons.push("the kernel is not sealed");
-  if (!snapshot.adapterAllowed) notReadyReasons.push("the configured adapter is not allowlisted");
+  if (!snapshot.originationAdapterAllowed) {
+    notReadyReasons.push("the Lido origination adapter is not allowlisted");
+  }
+  if (!snapshot.unstETHAdapterAllowed) {
+    notReadyReasons.push("the existing-unstETH adapter is not allowlisted");
+  }
   if (!snapshot.fundingSealed) notReadyReasons.push("the funding account is not sealed");
   if (!snapshot.paymentAssetOk) {
     notReadyReasons.push("the funding account's payment asset is not the reviewed WETH reserve");
@@ -95,6 +100,7 @@ export function buildHealthPayload({ config, refusals, snapshot, activeReservati
     contracts: {
       kernel: config.kernel,
       lidoAdapter: config.lidoAdapter,
+      lidoUnstETHAdapter: config.lidoUnstETHAdapter,
       fundingAccount: snapshot?.fundingAccount ?? null,
       weth: config.weth,
       stETH: config.stETH,
@@ -105,7 +111,8 @@ export function buildHealthPayload({ config, refusals, snapshot, activeReservati
     settlement: {
       kernelPaused: snapshot?.kernelPaused ?? null,
       kernelSealed: snapshot?.kernelSealed ?? null,
-      adapterAllowed: snapshot?.adapterAllowed ?? null,
+      originationAdapterAllowed: snapshot?.originationAdapterAllowed ?? null,
+      unstETHAdapterAllowed: snapshot?.unstETHAdapterAllowed ?? null,
       fundingSealed: snapshot?.fundingSealed ?? null,
       lidoQueuePaused: snapshot?.queuePaused ?? null,
       lidoBunkerMode: snapshot?.bunkerMode ?? null,

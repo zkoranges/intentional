@@ -27,8 +27,22 @@ const FAKE_RPC_KEY = `fakerpckey${randomBytes(12).toString("hex")}`;
 const DEAD_RPC = `http://127.0.0.1:9/${FAKE_RPC_KEY}`;
 const KERNEL = "0x1111111111111111111111111111111111111111";
 const ADAPTER = "0x2222222222222222222222222222222222222222";
+const UNSTETH_ADAPTER = "0x4444444444444444444444444444444444444444";
 
 function baseEnv(tempDir, privateKey) {
+  const manifestPath = join(tempDir, "active-manifest.json");
+  writeFileSync(
+    manifestPath,
+    JSON.stringify({
+      chainId: 1,
+      releaseState: "active",
+      contracts: {
+        kernel: { address: KERNEL },
+        lidoAdapter: { address: ADAPTER },
+        lidoUnstETHExitAdapter: { address: UNSTETH_ADAPTER },
+      },
+    }),
+  );
   return {
     ...process.env,
     HOST: "127.0.0.1",
@@ -37,12 +51,12 @@ function baseEnv(tempDir, privateKey) {
     FACTOR_PRIVATE_KEY: privateKey,
     KERNEL_ADDRESS: KERNEL,
     LIDO_ADAPTER_ADDRESS: ADAPTER,
+    LIDO_UNSTETH_ADAPTER_ADDRESS: UNSTETH_ADAPTER,
     SIGNER_SECRET,
     MAX_QUOTE_WEI: "6000000000000000",
     AUDIT_LOG: join(tempDir, "quote-audit.jsonl"),
     RESERVATIONS_DB: join(tempDir, "quote-reservations.sqlite"),
-    ALLOW_NONLOCAL_BIND: "",
-    DEPLOYMENT_MANIFEST: "",
+    DEPLOYMENT_MANIFEST: manifestPath,
   };
 }
 
@@ -102,19 +116,19 @@ test("a non-loopback HOST refuses to start", async (t) => {
 
   const code = await server.exited;
   assert.notEqual(code, 0, "process must exit non-zero");
-  assert.match(server.stderr, /ALLOW_NONLOCAL_BIND/);
+  assert.match(server.stderr, /no configuration override/);
   assert.doesNotMatch(server.stdout, /"event":"listening"/);
 });
 
-test("ALLOW_NONLOCAL_BIND=1 starts with a loud warning", async (t) => {
+test("ALLOW_NONLOCAL_BIND cannot override the loopback-only posture", async (t) => {
   const dir = tempDir(t);
   const env = { ...baseEnv(dir, throwawayPrivateKey()), HOST: "0.0.0.0", ALLOW_NONLOCAL_BIND: "1" };
   const server = startServer(env);
   t.after(() => server.stop());
 
-  await server.waitForListening();
-  assert.match(server.stderr, /WARNING/);
-  assert.match(server.stderr, /ALLOW_NONLOCAL_BIND/);
+  const code = await server.exited;
+  assert.notEqual(code, 0);
+  assert.match(server.stderr, /no configuration override/);
 });
 
 test("/health exposes readiness, chain id, and addresses — and no secret material", async (t) => {
@@ -136,6 +150,7 @@ test("/health exposes readiness, chain id, and addresses — and no secret mater
   assert.equal(payload.chain.expectedChainId, 1);
   assert.equal(payload.contracts.kernel, KERNEL);
   assert.equal(payload.contracts.lidoAdapter, ADAPTER);
+  assert.equal(payload.contracts.lidoUnstETHAdapter, UNSTETH_ADAPTER);
   assert.ok("kernelPaused" in payload.settlement);
   assert.ok("availableWei" in payload.capacity);
   assert.equal(payload.reservations.backend, "sqlite");
@@ -160,6 +175,7 @@ test("a retired manifest is a first-class refusal: /health says so and /quote is
       contracts: {
         kernel: { address: KERNEL },
         lidoAdapter: { address: ADAPTER },
+        lidoUnstETHExitAdapter: { address: UNSTETH_ADAPTER },
       },
     }),
   );
@@ -181,6 +197,7 @@ test("a retired manifest is a first-class refusal: /health says so and /quote is
     headers: { "content-type": "application/json", "x-signer-secret": SIGNER_SECRET },
     body: JSON.stringify({
       seller: "0x528C4E1d59fD4b187461BE9c61C668928C3cf9c3",
+      mode: "originate",
       requestedStEth: "5000000000000000",
     }),
   });

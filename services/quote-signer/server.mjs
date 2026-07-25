@@ -6,7 +6,7 @@
 //
 // Security posture (deliberate, documented):
 //   * binds 127.0.0.1 only; public exposure is a tunnel/proxy in front —
-//     a non-loopback HOST is refused at startup unless ALLOW_NONLOCAL_BIND=1
+//     a non-loopback HOST is always refused at startup
 //   * shared-secret header, constant-time compared
 //   * HARD ceiling (MAX_QUOTE_WEI) independent of measured reserve capacity —
 //     a signing key can never authorize more than this per quote
@@ -61,7 +61,7 @@ const PORT = Number(process.env.PORT?.trim() || "8791");
 
 // Bind safety comes before anything else: refusing a non-loopback bind must
 // not depend on the rest of the configuration being present.
-for (const warning of assertBindSafe(HOST, process.env.ALLOW_NONLOCAL_BIND?.trim())) {
+for (const warning of assertBindSafe(HOST)) {
   console.error(warning);
 }
 
@@ -69,6 +69,7 @@ const RPC_URL = required("ETH_RPC_URL");
 const FACTOR_PRIVATE_KEY = required("FACTOR_PRIVATE_KEY");
 const KERNEL = getAddress(required("KERNEL_ADDRESS"));
 const LIDO_ADAPTER = getAddress(required("LIDO_ADAPTER_ADDRESS"));
+const LIDO_UNSTETH_ADAPTER = getAddress(required("LIDO_UNSTETH_ADAPTER_ADDRESS"));
 const SIGNER_SECRET = required("SIGNER_SECRET");
 const MAX_QUOTE_WEI = BigInt(required("MAX_QUOTE_WEI"));
 const MIN_QUOTE_WEI = BigInt(process.env.MIN_QUOTE_WEI?.trim() || "1000000000000000"); // 0.001
@@ -87,10 +88,20 @@ const RESERVATIONS_DB =
   join(dirname(resolve(AUDIT_LOG)), "quote-reservations.sqlite");
 
 if (SIGNER_SECRET.length < 32) throw new Error("SIGNER_SECRET must be at least 32 characters");
-if (SPREAD_BPS > MAX_SPREAD_BPS) throw new Error("SPREAD_BPS exceeds MAX_SPREAD_BPS");
-if (QUOTE_TTL_SECONDS > 840n) throw new Error("QUOTE_TTL_SECONDS must stay inside the kernel's 15-minute bound");
+if (MAX_SPREAD_BPS > 10_000n || SPREAD_BPS === 0n || SPREAD_BPS > MAX_SPREAD_BPS) {
+  throw new Error("SPREAD_BPS must be positive, bounded, and no greater than 10,000");
+}
+if (MIN_QUOTE_WEI <= MAX_STETH_SHORTFALL || MAX_QUOTE_WEI < MIN_QUOTE_WEI) {
+  throw new Error("quote amount bounds are invalid");
+}
+if (QUOTE_TTL_SECONDS === 0n || QUOTE_TTL_SECONDS > 840n) {
+  throw new Error("QUOTE_TTL_SECONDS must be positive and stay inside the kernel's 15-minute bound");
+}
 if (!Number.isInteger(EXPECTED_CHAIN_ID) || EXPECTED_CHAIN_ID <= 0) {
   throw new Error("EXPECTED_CHAIN_ID must be a positive integer");
+}
+if (LIDO_ADAPTER === LIDO_UNSTETH_ADAPTER || KERNEL === LIDO_ADAPTER || KERNEL === LIDO_UNSTETH_ADAPTER) {
+  throw new Error("kernel and adapter addresses must be distinct");
 }
 
 const account = privateKeyToAccount(FACTOR_PRIVATE_KEY);
@@ -103,7 +114,7 @@ const { refusals: configRefusals } = verifyDeploymentConfig({
   expectedChainId: EXPECTED_CHAIN_ID,
   kernel: KERNEL,
   lidoAdapter: LIDO_ADAPTER,
-  rpcUrl: RPC_URL,
+  lidoUnstETHAdapter: LIDO_UNSTETH_ADAPTER,
   manifestPath: DEPLOYMENT_MANIFEST,
 });
 
@@ -133,6 +144,11 @@ const queueAbi = parseAbi([
   "function isBunkerModeActive() view returns (bool)",
   "function unfinalizedStETH() view returns (uint256)",
   "function unfinalizedRequestNumber() view returns (uint256)",
+  "function getLastRequestId() view returns (uint256)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
+  "function getApproved(uint256 tokenId) view returns (address)",
+  "function isApprovedForAll(address owner, address operator) view returns (bool)",
+  "function getWithdrawalStatus(uint256[] requestIds) view returns ((uint256 amountOfStETH, uint256 amountOfShares, address owner, uint256 timestamp, bool isFinalized, bool isClaimed)[] statuses)",
 ]);
 
 const MAX_PAYMENT_WEI = MAX_QUOTE_WEI - (MAX_QUOTE_WEI * SPREAD_BPS) / 10_000n;
@@ -141,6 +157,7 @@ const healthConfig = {
   expectedChainId: EXPECTED_CHAIN_ID,
   kernel: KERNEL,
   lidoAdapter: LIDO_ADAPTER,
+  lidoUnstETHAdapter: LIDO_UNSTETH_ADAPTER,
   weth: WETH,
   stETH: STETH,
   queue: QUEUE,
@@ -174,9 +191,19 @@ function refreshChainSnapshot() {
   snapshotRefresh = (async () => {
     const fetchedAtUnix = Math.floor(Date.now() / 1000);
     try {
-      const [observedChainId, factorSigner, fundingAccount, adapterAllowed, kernelSealed, kernelPaused] =
+      const [
+        observedChainId,
+        latestBlock,
+        factorSigner,
+        fundingAccount,
+        originationAdapterAllowed,
+        unstETHAdapterAllowed,
+        kernelSealed,
+        kernelPaused,
+      ] =
         await Promise.all([
           client.getChainId(),
+          client.getBlock({ blockTag: "latest" }),
           client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "factorSigner" }),
           client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "fundingAccount" }),
           client.readContract({
@@ -184,6 +211,12 @@ function refreshChainSnapshot() {
             abi: kernelAbi,
             functionName: "isAdapterAllowed",
             args: [LIDO_ADAPTER],
+          }),
+          client.readContract({
+            address: KERNEL,
+            abi: kernelAbi,
+            functionName: "isAdapterAllowed",
+            args: [LIDO_UNSTETH_ADAPTER],
           }),
           client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "isSealed" }),
           client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "isPaused" }),
@@ -206,9 +239,11 @@ function refreshChainSnapshot() {
         fetchedAtMs: Date.now(),
         error: false,
         observedChainId,
+        chainTimeUnix: Number(latestBlock.timestamp),
         factorSignerMatches: getAddress(factorSigner) === account.address,
         fundingAccount: funding,
-        adapterAllowed,
+        originationAdapterAllowed,
+        unstETHAdapterAllowed,
         kernelSealed,
         kernelPaused,
         paymentAssetOk: getAddress(paymentAsset) === WETH,
@@ -273,17 +308,38 @@ async function readJsonBody(request, limitBytes = 8192) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-async function buildQuote({ seller, requestedStEth }) {
-  const nowSeconds = Math.floor(Date.now() / 1000);
+function quoteError(message, status, code) {
+  const error = new Error(message);
+  error.status = status;
+  error.code = code;
+  return error;
+}
 
+function requireAmountBounds(amount) {
+  if (amount < MIN_QUOTE_WEI || amount > MAX_QUOTE_WEI) {
+    throw quoteError(
+      `claim amount must be between ${MIN_QUOTE_WEI} and ${MAX_QUOTE_WEI} wei stETH`,
+      400,
+      "AMOUNT_OUT_OF_BOUNDS",
+    );
+  }
+}
+
+async function buildQuote({ seller, mode, requestedStEth, requestId }) {
   // First-class refusal: a retired or mismatched deployment never gets as far
   // as pricing, reads, or signing.
   if (configRefusals.length > 0) {
-    const error = new Error("this deployment is refused; see /health readiness for the reasons");
-    error.status = 503;
-    error.code = "REFUSED_DEPLOYMENT";
-    throw error;
+    throw quoteError(
+      "this deployment is refused; see /health readiness for the reasons",
+      503,
+      "REFUSED_DEPLOYMENT",
+    );
   }
+  // Quote validity is defined by block.timestamp, so reservation expiry must
+  // use the same clock. This also keeps fork rehearsals honest when the forked
+  // block is older than the host's wall clock.
+  const latestBlock = await client.getBlock({ blockTag: "latest" });
+  const nowSeconds = Number(latestBlock.timestamp);
 
   // Sweep the reservation store before deciding single-flight: expired
   // reservations fall away, and a reservation whose nonce the kernel reports
@@ -301,35 +357,17 @@ async function buildQuote({ seller, requestedStEth }) {
     });
   }
   if (swept.active.length > 0) {
-    const error = new Error("another quote is currently outstanding; retry shortly");
-    error.status = 409;
-    error.code = "SINGLE_FLIGHT";
-    throw error;
+    throw quoteError("another quote is currently outstanding; retry shortly", 409, "SINGLE_FLIGHT");
   }
 
-  // Hard, config-level ceiling — independent of anything measured on chain.
-  if (requestedStEth < MIN_QUOTE_WEI || requestedStEth > MAX_QUOTE_WEI) {
-    const error = new Error(
-      `amount must be between ${MIN_QUOTE_WEI} and ${MAX_QUOTE_WEI} wei stETH`,
-    );
-    error.status = 400;
-    error.code = "AMOUNT_OUT_OF_BOUNDS";
-    throw error;
-  }
   if (seller === account.address) {
-    const error = new Error("seller must differ from the factor");
-    error.status = 400;
-    error.code = "SELLER_IS_FACTOR";
-    throw error;
+    throw quoteError("seller must differ from the factor", 400, "SELLER_IS_FACTOR");
   }
 
-  const paymentAmount = requestedStEth - (requestedStEth * SPREAD_BPS) / 10_000n;
-  if (paymentAmount === 0n || paymentAmount >= requestedStEth) {
-    const error = new Error("computed payment is out of range");
-    error.status = 500;
-    error.code = "PRICING";
-    throw error;
+  if (mode !== "originate" && mode !== "existing-unsteth") {
+    throw quoteError("mode must be originate or existing-unsteth", 400, "INVALID_MODE");
   }
+  const adapter = mode === "originate" ? LIDO_ADAPTER : LIDO_UNSTETH_ADAPTER;
 
   const [observedChainId, factorSigner, fundingAccount, adapterAllowed, kernelSealed, kernelPaused, nonceFloor] =
     await Promise.all([
@@ -340,7 +378,7 @@ async function buildQuote({ seller, requestedStEth }) {
         address: KERNEL,
         abi: kernelAbi,
         functionName: "isAdapterAllowed",
-        args: [LIDO_ADAPTER],
+        args: [adapter],
       }),
       client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "isSealed" }),
       client.readContract({ address: KERNEL, abi: kernelAbi, functionName: "isPaused" }),
@@ -348,30 +386,210 @@ async function buildQuote({ seller, requestedStEth }) {
     ]);
 
   if (Number(observedChainId) !== EXPECTED_CHAIN_ID) {
-    const error = new Error(
+    throw quoteError(
       `RPC chain id ${observedChainId} does not match the configured chain id ${EXPECTED_CHAIN_ID}`,
+      503,
+      "CHAIN_MISMATCH",
     );
-    error.status = 503;
-    error.code = "CHAIN_MISMATCH";
-    throw error;
   }
   if (getAddress(factorSigner) !== account.address) {
-    const error = new Error("configured key is not the kernel's factor signer");
-    error.status = 500;
-    error.code = "SIGNER_MISMATCH";
-    throw error;
+    throw quoteError("configured key is not the kernel's factor signer", 500, "SIGNER_MISMATCH");
   }
   if (!adapterAllowed || !kernelSealed) {
-    const error = new Error("kernel is not configured for this adapter");
-    error.status = 503;
-    error.code = "KERNEL_NOT_READY";
-    throw error;
+    throw quoteError("kernel is not configured for this adapter", 503, "KERNEL_NOT_READY");
   }
   if (kernelPaused) {
-    const error = new Error("settlement is paused");
-    error.status = 503;
-    error.code = "SETTLEMENT_PAUSED";
-    throw error;
+    throw quoteError("settlement is paused", 503, "SETTLEMENT_PAUSED");
+  }
+
+  let claimAmount;
+  let claimData;
+  let boundsData;
+  let approval;
+  let claimMetadata;
+
+  if (mode === "originate") {
+    if (typeof requestedStEth !== "bigint") {
+      throw quoteError("requestedStEth is required for originate mode", 400, "INVALID_AMOUNT");
+    }
+    requireAmountBounds(requestedStEth);
+    claimAmount = requestedStEth;
+
+    const sellerStEth = await client.readContract({
+      address: STETH,
+      abi: stEthAbi,
+      functionName: "balanceOf",
+      args: [seller],
+    });
+    if (sellerStEth + MAX_STETH_SHORTFALL < requestedStEth) {
+      throw quoteError(
+        "seller stETH balance is below the requested amount",
+        400,
+        "SELLER_BALANCE",
+      );
+    }
+
+    const minAmountOfShares = await client.readContract({
+      address: STETH,
+      abi: stEthAbi,
+      functionName: "getSharesByPooledEth",
+      args: [requestedStEth - MAX_STETH_SHORTFALL],
+    });
+
+    claimData = encodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "queue", type: "address" },
+            { name: "stETH", type: "address" },
+            { name: "requestedStETH", type: "uint256" },
+          ],
+        },
+      ],
+      [{ queue: QUEUE, stETH: STETH, requestedStETH: requestedStEth }],
+    );
+    boundsData = encodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "maxStETHShortfall", type: "uint256" },
+            { name: "minAmountOfShares", type: "uint256" },
+          ],
+        },
+      ],
+      [{ maxStETHShortfall: MAX_STETH_SHORTFALL, minAmountOfShares }],
+    );
+    approval = {
+      kind: "erc20",
+      token: STETH,
+      spender: adapter,
+      amountWei: requestedStEth.toString(),
+    };
+    claimMetadata = {
+      requestedStEthWei: requestedStEth.toString(),
+      minAmountOfShares: minAmountOfShares.toString(),
+    };
+  } else {
+    if (typeof requestId !== "bigint" || requestId <= 0n) {
+      throw quoteError(
+        "requestId must be a non-zero unsigned integer for existing-unsteth mode",
+        400,
+        "INVALID_REQUEST_ID",
+      );
+    }
+    const lastRequestId = await client.readContract({
+      address: QUEUE,
+      abi: queueAbi,
+      functionName: "getLastRequestId",
+    });
+    if (requestId > lastRequestId) {
+      throw quoteError("the Lido request does not exist", 400, "INVALID_REQUEST_ID");
+    }
+
+    const statuses = await client.readContract({
+      address: QUEUE,
+      abi: queueAbi,
+      functionName: "getWithdrawalStatus",
+      args: [[requestId]],
+    });
+    if (statuses.length !== 1) {
+      throw quoteError("Lido returned an invalid request status", 503, "INVALID_LIDO_STATUS");
+    }
+    const status = statuses[0];
+    if (status.isClaimed) {
+      throw quoteError("the Lido request has already been claimed", 400, "CLAIM_ALREADY_CLAIMED");
+    }
+    if (status.amountOfShares === 0n) {
+      throw quoteError("the Lido request has no claim shares", 400, "EMPTY_CLAIM");
+    }
+    if (getAddress(status.owner) !== seller) {
+      throw quoteError("the connected seller does not own this Lido request", 400, "CLAIM_NOT_OWNED");
+    }
+    const erc721Owner = getAddress(
+      await client.readContract({
+        address: QUEUE,
+        abi: queueAbi,
+        functionName: "ownerOf",
+        args: [requestId],
+      }),
+    );
+    if (erc721Owner !== seller) {
+      throw quoteError("the connected seller does not own this unstETH NFT", 400, "CLAIM_NOT_OWNED");
+    }
+
+    requireAmountBounds(status.amountOfStETH);
+    claimAmount = status.amountOfStETH;
+    const [approved, approvedForAll] = await Promise.all([
+      client.readContract({
+        address: QUEUE,
+        abi: queueAbi,
+        functionName: "getApproved",
+        args: [requestId],
+      }),
+      client.readContract({
+        address: QUEUE,
+        abi: queueAbi,
+        functionName: "isApprovedForAll",
+        args: [seller, adapter],
+      }),
+    ]);
+
+    claimData = encodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "queue", type: "address" },
+            { name: "stETH", type: "address" },
+            { name: "requestId", type: "uint256" },
+          ],
+        },
+      ],
+      [{ queue: QUEUE, stETH: STETH, requestId }],
+    );
+    boundsData = encodeAbiParameters(
+      [
+        {
+          type: "tuple",
+          components: [
+            { name: "minAmountOfStETH", type: "uint256" },
+            { name: "maxAmountOfStETH", type: "uint256" },
+            { name: "minAmountOfShares", type: "uint256" },
+            { name: "maxAmountOfShares", type: "uint256" },
+          ],
+        },
+      ],
+      [
+        {
+          minAmountOfStETH: status.amountOfStETH,
+          maxAmountOfStETH: status.amountOfStETH,
+          minAmountOfShares: status.amountOfShares,
+          maxAmountOfShares: status.amountOfShares,
+        },
+      ],
+    );
+    approval = {
+      kind: "erc721",
+      token: QUEUE,
+      spender: adapter,
+      tokenId: requestId.toString(),
+      alreadyApproved: getAddress(approved) === adapter || approvedForAll,
+    };
+    claimMetadata = {
+      requestId: requestId.toString(),
+      amountOfStEthWei: status.amountOfStETH.toString(),
+      amountOfShares: status.amountOfShares.toString(),
+      isFinalizedAtSigning: status.isFinalized,
+      stateBinding:
+        "finalization state is informational and not signed; the exact amount/share bounds survive pending-to-finalized maturation",
+    };
+  }
+
+  const paymentAmount = claimAmount - (claimAmount * SPREAD_BPS) / 10_000n;
+  if (paymentAmount === 0n || paymentAmount >= claimAmount) {
+    throw quoteError("computed payment is out of range", 500, "PRICING");
   }
 
   const funding = getAddress(fundingAccount);
@@ -392,79 +610,30 @@ async function buildQuote({ seller, requestedStEth }) {
     ]);
 
   if (getAddress(paymentAsset) !== WETH || !fundingSealed) {
-    const error = new Error("funding account is not the reviewed WETH reserve");
-    error.status = 500;
-    error.code = "FUNDING_MISCONFIGURED";
-    throw error;
+    throw quoteError(
+      "funding account is not the reviewed WETH reserve",
+      500,
+      "FUNDING_MISCONFIGURED",
+    );
   }
   if (capacity !== paymentAmount) {
-    const error = new Error("the productive reserve cannot currently cover this payment");
-    error.status = 503;
-    error.code = "INSUFFICIENT_CAPACITY";
-    throw error;
+    throw quoteError(
+      "the productive reserve cannot currently cover this payment",
+      503,
+      "INSUFFICIENT_CAPACITY",
+    );
   }
   if (queuePaused) {
-    const error = new Error("canonical Lido withdrawals are currently paused");
-    error.status = 503;
-    error.code = "LIDO_PAUSED";
-    throw error;
+    throw quoteError("canonical Lido withdrawals are currently paused", 503, "LIDO_PAUSED");
   }
   if (bunkerMode) {
-    const error = new Error("firm quotes are disabled while Lido bunker mode is active");
-    error.status = 503;
-    error.code = "LIDO_BUNKER";
-    throw error;
+    throw quoteError(
+      "firm quotes are disabled while Lido bunker mode is active",
+      503,
+      "LIDO_BUNKER",
+    );
   }
 
-  // Seller-side preflight, so the app never presents a quote the seller
-  // provably cannot fill.
-  const sellerStEth = await client.readContract({
-    address: STETH,
-    abi: stEthAbi,
-    functionName: "balanceOf",
-    args: [seller],
-  });
-  if (sellerStEth + MAX_STETH_SHORTFALL < requestedStEth) {
-    const error = new Error("seller stETH balance is below the requested amount");
-    error.status = 400;
-    error.code = "SELLER_BALANCE";
-    throw error;
-  }
-
-  const minAmountOfShares = await client.readContract({
-    address: STETH,
-    abi: stEthAbi,
-    functionName: "getSharesByPooledEth",
-    args: [requestedStEth - MAX_STETH_SHORTFALL],
-  });
-
-  const claimData = encodeAbiParameters(
-    [
-      {
-        type: "tuple",
-        components: [
-          { name: "queue", type: "address" },
-          { name: "stETH", type: "address" },
-          { name: "requestedStETH", type: "uint256" },
-        ],
-      },
-    ],
-    [{ queue: QUEUE, stETH: STETH, requestedStETH: requestedStEth }],
-  );
-  const boundsData = encodeAbiParameters(
-    [
-      {
-        type: "tuple",
-        components: [
-          { name: "maxStETHShortfall", type: "uint256" },
-          { name: "minAmountOfShares", type: "uint256" },
-        ],
-      },
-    ],
-    [{ maxStETHShortfall: MAX_STETH_SHORTFALL, minAmountOfShares }],
-  );
-
-  const latestBlock = await client.getBlock({ blockTag: "latest" });
   const deadline = latestBlock.timestamp + QUOTE_TTL_SECONDS;
   let nonce = BigInt(`0x${randomBytes(16).toString("hex")}`);
   if (nonce < nonceFloor) nonce += nonceFloor;
@@ -475,16 +644,13 @@ async function buildQuote({ seller, requestedStEth }) {
     args: [nonce],
   });
   if (nonceConsumed) {
-    const error = new Error("nonce collision; retry");
-    error.status = 503;
-    error.code = "NONCE_COLLISION";
-    throw error;
+    throw quoteError("nonce collision; retry", 503, "NONCE_COLLISION");
   }
 
   const quote = {
     factor: account.address,
     seller,
-    adapter: LIDO_ADAPTER,
+    adapter,
     claimController: account.address,
     claimReceiver: account.address,
     paymentAsset: WETH,
@@ -526,7 +692,9 @@ async function buildQuote({ seller, requestedStEth }) {
   reservations.reserve({
     nonce,
     seller,
-    requestedStEthWei: requestedStEth,
+    mode,
+    requestId: requestId ?? null,
+    claimAmountWei: claimAmount,
     paymentWei: paymentAmount,
     deadlineUnix: deadline,
     nowUnix: nowSeconds,
@@ -534,8 +702,10 @@ async function buildQuote({ seller, requestedStEth }) {
 
   await audit({
     event: "quote_signed",
+    mode,
     seller,
-    requestedStEth: requestedStEth.toString(),
+    requestId: requestId?.toString() ?? null,
+    claimAmountWei: claimAmount.toString(),
     paymentAmount: paymentAmount.toString(),
     spreadBps: SPREAD_BPS.toString(),
     nonce: nonce.toString(),
@@ -546,12 +716,15 @@ async function buildQuote({ seller, requestedStEth }) {
 
   return {
     version: "reservoir-v2-lido-1",
+    mode,
     chainId: EXPECTED_CHAIN_ID,
     kernel: KERNEL,
     quote,
     claimData,
     boundsData,
     factorSignature,
+    approval,
+    claim: claimMetadata,
     pricing: {
       mode: "operator-priced-firm-quote",
       basis: "fixed operator spread; not a market or oracle price",
@@ -570,7 +743,7 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
 
   if (request.method === "GET" && url.pathname === "/health") {
-    const nowSeconds = Math.floor(Date.now() / 1000);
+    const nowSeconds = chainSnapshot?.chainTimeUnix ?? Math.floor(Date.now() / 1000);
     if (snapshotStale()) void refreshChainSnapshot();
     const payload = buildHealthPayload({
       config: healthConfig,
@@ -612,14 +785,28 @@ const server = createServer(async (request, response) => {
   if (typeof body.seller !== "string" || !isAddress(body.seller)) {
     return json(response, 400, { error: "seller must be a valid address" });
   }
-  if (typeof body.requestedStEth !== "string" || !/^\d+$/.test(body.requestedStEth)) {
+  if (body.mode !== "originate" && body.mode !== "existing-unsteth") {
+    return json(response, 400, { error: "mode must be originate or existing-unsteth" });
+  }
+  if (
+    body.mode === "originate"
+    && (typeof body.requestedStEth !== "string" || !/^\d+$/.test(body.requestedStEth))
+  ) {
     return json(response, 400, { error: "requestedStEth must be an unsigned integer string" });
+  }
+  if (
+    body.mode === "existing-unsteth"
+    && (typeof body.requestId !== "string" || !/^[1-9]\d*$/.test(body.requestId))
+  ) {
+    return json(response, 400, { error: "requestId must be a non-zero unsigned integer string" });
   }
 
   try {
     const envelope = await buildQuote({
       seller: getAddress(body.seller),
-      requestedStEth: BigInt(body.requestedStEth),
+      mode: body.mode,
+      requestedStEth: body.mode === "originate" ? BigInt(body.requestedStEth) : undefined,
+      requestId: body.mode === "existing-unsteth" ? BigInt(body.requestId) : undefined,
     });
     return json(response, 200, envelope);
   } catch (error) {
@@ -628,8 +815,10 @@ const server = createServer(async (request, response) => {
       event: "quote_rejected",
       code: error.code ?? "INTERNAL",
       status,
+      mode: body.mode,
       seller: body.seller,
-      requestedStEth: body.requestedStEth,
+      requestedStEth: body.requestedStEth ?? null,
+      requestId: body.requestId ?? null,
       reason: redactRpc(error.message),
     });
     // Internal errors never leak their message to the caller.

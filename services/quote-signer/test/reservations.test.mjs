@@ -16,7 +16,9 @@ const NOW = 1_800_000_000n;
 const RESERVATION = {
   nonce: 123456789012345678901234567890n,
   seller: "0x528C4E1d59fD4b187461BE9c61C668928C3cf9c3",
-  requestedStEthWei: 5000000000000000n,
+  mode: "existing-unsteth",
+  requestId: 130880n,
+  claimAmountWei: 5000000000000000n,
   paymentWei: 4987500000000000n,
   deadlineUnix: NOW + 120n,
   nowUnix: NOW,
@@ -36,6 +38,9 @@ test("a reservation survives a restart (reopen the same database file)", (t) => 
   assert.equal(active.length, 1);
   assert.equal(active[0].nonce, RESERVATION.nonce);
   assert.equal(active[0].seller, RESERVATION.seller);
+  assert.equal(active[0].mode, RESERVATION.mode);
+  assert.equal(active[0].requestId, RESERVATION.requestId);
+  assert.equal(active[0].claimAmountWei, RESERVATION.claimAmountWei);
   assert.equal(active[0].paymentWei, RESERVATION.paymentWei);
   second.close();
 });

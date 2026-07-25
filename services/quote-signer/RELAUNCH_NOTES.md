@@ -25,16 +25,19 @@ what lane B4b still does afterward.
   on-chain capacity. The payload is asserted free of secret material (shared
   secret, factor key, RPC URL) before every response.
 - **Deployment refusal.** At startup the service verifies its configuration
-  against an optional `DEPLOYMENT_MANIFEST` (chain id, kernel and adapter
+  against a required `DEPLOYMENT_MANIFEST` (chain id, kernel and both adapter
   addresses, `releaseState`); anything but an `active` manifest is refused.
   The retired v2 kernel (`0x50b619295e00990feB28E79fA939B5f42aF6AF53`) is
-  additionally refused whenever the RPC endpoint is non-loopback — only a
-  local fork rehearsal may target it. Refusal is a readiness state, not a
+  additionally refused unconditionally. A local rehearsal must deploy a fresh
+  disposable kernel rather than reusing a compromised identity. Refusal is a readiness state, not a
   crash: the process serves `/health` explaining itself and answers `/quote`
   with `503 REFUSED_DEPLOYMENT`; it never signs.
-- **Bind safety.** A non-loopback `HOST` refuses to start unless
-  `ALLOW_NONLOCAL_BIND=1` is set explicitly, and then it starts with a loud
-  warning. The reviewed posture is loopback-only behind a tunnel.
+- **Bind safety.** A non-loopback `HOST` always refuses to start. There is no
+  override. The reviewed posture is loopback-only behind an authenticated tunnel.
+- **Both Lido modes.** The desk signs either a measured stETH origination or
+  the purchase of one existing unstETH NFT. Existing-claim quotes bind the
+  exact stETH/share economics but deliberately do not bind finalization state,
+  so a pending claim that finalizes before fill remains executable.
 - **Pricing wording.** The envelope and `/health` state the basis outright:
   a fixed operator spread, never presented as a market or oracle price.
 
@@ -43,9 +46,9 @@ what lane B4b still does afterward.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `EXPECTED_CHAIN_ID` | `1` | Enforced against the manifest at startup and against the RPC (`eth_chainId`) on every quote. |
-| `DEPLOYMENT_MANIFEST` | unset | Path to the deployment manifest to verify against. **Set this in production**; B4b points it at `deployments/mainnet-v3.json`. |
+| `DEPLOYMENT_MANIFEST` | none | Required path to the active deployment manifest. Missing, retired, or mismatched manifests are refused. |
 | `RESERVATIONS_DB` | `<dir of AUDIT_LOG>/quote-reservations.sqlite` | Reservation store location. Defaults next to the audit log so both durable records share the operator-owned directory. |
-| `ALLOW_NONLOCAL_BIND` | unset | `1` permits a non-loopback `HOST`, with a warning. Leave unset. |
+| `LIDO_UNSTETH_ADAPTER_ADDRESS` | none | Fresh existing-unstETH adapter; must match `contracts.lidoUnstETHExitAdapter.address` in the manifest. |
 
 Runtime state files (`quote-reservations.sqlite` + WAL/SHM, the `*.jsonl`
 audit log) are gitignored; nothing under the operator directory is ever
@@ -59,7 +62,7 @@ backed by SQLite), and the exact 0.0049875 WETH fill. The rehearsal's fork
 targets a loopback RPC, which is exactly the carve-out the retired-kernel
 guard allows. `node --test` (or `npm test` in this directory) covers the new
 guarantees: reservation survival across restart, consumed-nonce release,
-the 409 condition, bind refusal, deployment refusal, and the `/health`
+the 409 condition, unconditional bind refusal, deployment refusal, and the `/health`
 shape with a no-secret-material assertion.
 
 ## Ops prerequisite for go-live: a NAMED tunnel on a zone the operator controls
@@ -104,7 +107,5 @@ lives only in the signer host's environment file.
   the desk to the fresh deployment. Until then the guards added here make the
   stale configuration fail closed: a retired manifest (or the retired kernel
   over a live RPC) comes up `refused` and never signs.
-- **Both modes.** Origination and existing-unstETH quoting, with readiness
-  checks verifying `isAdapterAllowed` for both adapters, land in B4b.
 - **Go-live rehearsal.** Frontend → VPS quote → approval → fill on a
   current-head fork with the exact v3 addresses before pointing at mainnet.

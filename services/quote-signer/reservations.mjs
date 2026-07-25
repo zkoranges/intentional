@@ -25,6 +25,8 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS reservations (
   nonce               TEXT PRIMARY KEY,
   seller              TEXT NOT NULL,
+  mode                TEXT NOT NULL DEFAULT 'originate',
+  request_id          TEXT,
   requested_steth_wei TEXT NOT NULL,
   payment_wei         TEXT NOT NULL,
   deadline_unix       INTEGER NOT NULL,
@@ -40,7 +42,9 @@ function toRow(record) {
   return {
     nonce: BigInt(record.nonce),
     seller: record.seller,
-    requestedStEthWei: BigInt(record.requested_steth_wei),
+    mode: record.mode,
+    requestId: record.request_id === null ? null : BigInt(record.request_id),
+    claimAmountWei: BigInt(record.requested_steth_wei),
     paymentWei: BigInt(record.payment_wei),
     deadlineUnix: BigInt(record.deadline_unix),
     createdUnix: BigInt(record.created_unix),
@@ -57,6 +61,15 @@ export class ReservationStore {
     this.#db.exec("PRAGMA journal_mode = WAL;");
     this.#db.exec("PRAGMA synchronous = FULL;");
     this.#db.exec(SCHEMA);
+    const columns = new Set(
+      this.#db.prepare("PRAGMA table_info(reservations)").all().map((column) => column.name),
+    );
+    if (!columns.has("mode")) {
+      this.#db.exec("ALTER TABLE reservations ADD COLUMN mode TEXT NOT NULL DEFAULT 'originate';");
+    }
+    if (!columns.has("request_id")) {
+      this.#db.exec("ALTER TABLE reservations ADD COLUMN request_id TEXT;");
+    }
   }
 
   /** Open, unexpired reservations — the ones that block a new quote. */
@@ -70,17 +83,19 @@ export class ReservationStore {
   }
 
   /** Record a freshly signed quote. Throws on nonce collision (primary key). */
-  reserve({ nonce, seller, requestedStEthWei, paymentWei, deadlineUnix, nowUnix }) {
+  reserve({ nonce, seller, mode, requestId, claimAmountWei, paymentWei, deadlineUnix, nowUnix }) {
     this.#db
       .prepare(
         `INSERT INTO reservations
-           (nonce, seller, requested_steth_wei, payment_wei, deadline_unix, created_unix)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+           (nonce, seller, mode, request_id, requested_steth_wei, payment_wei, deadline_unix, created_unix)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         nonce.toString(),
         seller,
-        requestedStEthWei.toString(),
+        mode,
+        requestId === null ? null : requestId.toString(),
+        claimAmountWei.toString(),
         paymentWei.toString(),
         Number(deadlineUnix),
         Number(nowUnix),

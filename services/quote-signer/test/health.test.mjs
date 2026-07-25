@@ -8,6 +8,7 @@ const CONFIG = {
   expectedChainId: 1,
   kernel: "0x1111111111111111111111111111111111111111",
   lidoAdapter: "0x2222222222222222222222222222222222222222",
+  lidoUnstETHAdapter: "0x4444444444444444444444444444444444444444",
   weth: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
   stETH: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
   queue: "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1",
@@ -27,7 +28,8 @@ const READY_SNAPSHOT = {
   observedChainId: 1,
   factorSignerMatches: true,
   fundingAccount: "0xB87F5CE2b24439B6A74B1DfEf9311dd527087a37",
-  adapterAllowed: true,
+  originationAdapterAllowed: true,
+  unstETHAdapterAllowed: true,
   kernelSealed: true,
   kernelPaused: false,
   paymentAssetOk: true,
@@ -87,7 +89,8 @@ test("readiness: chain-id or signer mismatch refuses at runtime too", () => {
 test("readiness: live preconditions gate as not-ready", () => {
   for (const patch of [
     { kernelSealed: false },
-    { adapterAllowed: false },
+    { originationAdapterAllowed: false },
+    { unstETHAdapterAllowed: false },
     { fundingSealed: false },
     { paymentAssetOk: false },
     { queuePaused: true },
@@ -124,6 +127,7 @@ test("/health payload shape: chain id, addresses, pause state, capacity, readine
   assert.equal(payload.chain.observedChainId, 1);
   assert.equal(payload.contracts.kernel, CONFIG.kernel);
   assert.equal(payload.contracts.lidoAdapter, CONFIG.lidoAdapter);
+  assert.equal(payload.contracts.lidoUnstETHAdapter, CONFIG.lidoUnstETHAdapter);
   assert.equal(payload.contracts.fundingAccount, READY_SNAPSHOT.fundingAccount);
   assert.equal(payload.settlement.kernelPaused, false);
   assert.equal(payload.settlement.lidoQueuePaused, false);
