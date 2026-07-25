@@ -39,7 +39,7 @@ contract UniswapPayoutMainnetForkTest is Test {
     address private constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address private constant STATA_WETH = 0x0bfc9d54Fc184518A81162F8fB99c2eACa081202;
     address private constant QUEUE = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
-    string private constant FIXTURE_PATH = "test/spikes/fixtures/uniswap-payout-route.json";
+    string private constant FIXTURE_PATH = "test/fork/fixtures/uniswap-payout-route.json";
 
     uint256 private factorKey;
     address private factor;

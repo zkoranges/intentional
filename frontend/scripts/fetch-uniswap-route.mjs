@@ -2,7 +2,7 @@
 // S-1 route fetcher (uniswap_payouts_idea.md §2.1, §8): fetches a live
 // WETH -> USDC route from the Uniswap Trading API with the spike harness as
 // swapper and a distinct recipient, validates every §8 field, and writes a
-// replayable fixture (route + block number) for test/spikes/UniswapPayoutSpike.
+// replayable fixture (route + block number) for the fork-only payout tests.
 // The API key stays server-side; nothing here is committed except the fixture.
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -147,7 +147,7 @@ const fixtureDir = join(
   "..",
   "..",
   "test",
-  "spikes",
+  "fork",
   "fixtures",
 );
 mkdirSync(fixtureDir, { recursive: true });
@@ -156,7 +156,7 @@ writeFileSync(fixturePath, JSON.stringify(fixture, null, 2) + "\n");
 console.log(
   JSON.stringify(
     {
-      fixture: `test/spikes/fixtures/${fixtureName}`,
+      fixture: `test/fork/fixtures/${fixtureName}`,
       fetchedAtBlock,
       swapper,
       recipient,
