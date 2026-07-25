@@ -2,7 +2,7 @@
 
 > **Future protocol cash flow → immediate WETH, atomically.**
 
-[Live demo](https://reservoir-v2-eth-lisbon.vercel.app) ·
+[Web app](https://reservoir-v2-eth-lisbon.vercel.app) ·
 [Source](https://github.com/zkoranges/reservoir-v2-eth-lisbon) ·
 [Production fork proof](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30159264327) ·
 [ETHGlobal provenance and track record](docs/ETHGLOBAL_SUBMISSION.md)
@@ -38,8 +38,12 @@ and SwapVM enforces the exact input call, explicit output recipient, minimum
 output, and deadline. See
 [`docs/AQUA_INTENT_DEMO.md`](docs/AQUA_INTENT_DEMO.md).
 
-The first live product is Lido. One transaction, claim acquired before any
-money moves:
+Reservoir contains two production proofs built around productive reserves.
+The Aqua proof executes through SwapVM. The async-claim settlement is a
+separate v2 kernel and does not execute through Aqua.
+
+The first product proof is Lido factoring. One transaction, claim acquired
+before any money moves:
 
 ```mermaid
 flowchart TB
@@ -55,7 +59,7 @@ flowchart TB
     QUEUE ==>|"3 · unstETH minted directly to the factor"| FACTOR
     AAVE ==>|"4 · exact shortfall only"| FUND
     FUND ==>|"5 · exact WETH payment"| SELLER
-    QUEUE ==>|"6 · ETH at par, days later"| FACTOR
+    QUEUE ==>|"6 · eventual ETH after Lido finalization,<br/>subject to impairment risk"| FACTOR
 ```
 
 Every token movement, gate, and measurement is traced against the deployed
@@ -79,8 +83,11 @@ This is an unaudited hackathon beta. Mainnet funding is deliberately separate
 from deployment and occurs only after the exact chain-1 rehearsal, full test
 matrix, frontend checks, and AI-assisted release review.
 
-**Current deployment status: LIVE ON ETHEREUM MAINNET (2026-07-25).** The
-mainnet end-to-end proof is complete — see
+**Current deployment status (2026-07-25):** Mainnet settlement proof
+completed. Demo contracts safely retired after reserve recovery, and cannot
+be reactivated — the immutable signer key was exposed. Existing-unstETH
+acquisition and public firm quotes are under development. The proof record is
+in
 [`docs/MAINNET_MICRO_DEMO.md`](docs/MAINNET_MICRO_DEMO.md) and the manifests
 in [`deployments/`](deployments/):
 
@@ -97,10 +104,12 @@ in [`deployments/`](deployments/):
   `0x15a82271F280D4D1485CCE1980AC3C3799b483D9`, maker
   `0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6`.
 
-The public quote endpoint remains deliberately fail-closed: firm quotes are
-signed by the operator CLI and pasted into the UI (operator-assisted beta).
-The demo used controlled team wallets and operator pricing — it proves
-machinery, atomicity, and real protocol integration, not market demand.
+During the proof, firm quotes were served by an operator-run quote service
+([`docs/QUOTE_DESK_OPS.md`](docs/QUOTE_DESK_OPS.md)); that desk is now
+stopped, and firm quotes stay unavailable until a fresh deployment with a
+fresh key. The demo used controlled team wallets and operator pricing — it
+proves machinery, atomicity, and real protocol integration, not market
+demand.
 
 **Bytecode attestation for the two explorer-unverified contracts** (Etherscan
 source verification remains pending despite byte-exact local creation and
@@ -120,14 +129,16 @@ verification, one-operation activation, and read-only binding-verification
 procedure is frozen in
 [`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). That procedure has now
 been executed on Ethereum mainnet (receipts above), **and the demo instance has
-since been recovered and paused**: settlement and funding are paused, the
+since been retired**: settlement and funding are paused, the
 StataWETH reserve was withdrawn to the factor
 ([`0xffcce6…4747`](https://etherscan.io/tx/0xffcce68f46bee5857a3b68219210a4c88a0f72e56a5c1954fdec9de7cdfb4747),
 [`0x434023…45cd`](https://etherscan.io/tx/0x43402367b7416ae16d042f68e9a3472f62e3bf6d199e6bb53ad9d68ad4f545cd))
 returning 0.005012537 WETH — the arithmetic remainder **plus Aave yield earned
-while the reserve stood ready. The only open item is claiming unstETH #130880
-after Lido finalization. Re-arming the demo (unpause + refund) is two factor
-transactions. This remains unaudited hackathon software.
+while the reserve stood ready**. The only open item is claiming unstETH #130880
+after Lido finalization. The retired instance cannot be reactivated — the
+immutable factor signer key was exposed, so it stays paused and unfunded
+permanently, and any future demo uses a fresh deployment with a fresh key.
+This remains unaudited hackathon software.
 
 ## Uniswap payouts — be paid in the asset you choose
 
@@ -150,13 +161,15 @@ Integration surfaces: [`src/payouts/`](src/payouts/) (settlement, executor,
 types), [`frontend/scripts/create-uniswap-payout-quote.mjs`](frontend/scripts/create-uniswap-payout-quote.mjs)
 (operator quote CLI with full route validation),
 [`frontend/scripts/fetch-uniswap-route.mjs`](frontend/scripts/fetch-uniswap-route.mjs)
-(fixture fetcher), [`test/spikes/UniswapPayoutSpike.t.sol`](test/spikes/UniswapPayoutSpike.t.sol)
-(Gate 0 proof, 7 assertions),
+(fixture fetcher), [`test/fork/UniswapPayoutSpike.t.sol`](test/fork/UniswapPayoutSpike.t.sol)
+(Gate 0 proof, 10 assertions),
 [`test/fork/UniswapPayoutMainnet.t.sol`](test/fork/UniswapPayoutMainnet.t.sol)
 (canonical fork proof: live route, success + atomic forced failure). API
 findings are recorded in [`FEEDBACK.md`](FEEDBACK.md). In both live-route
-proofs the delivered output equaled the API quote to the unit. The payout
-stack is fork-proven and not yet deployed to a persistent network.
+proofs the printed delivered output matched the API quote to the unit — an
+observation from the logs, not an assertion; the asserted bounds are
+delivered > 0 in the spike and at least 99% of the quote in the fork proof.
+The payout stack is fork-proven and not yet deployed to a persistent network.
 
 ## What is working
 
@@ -175,7 +188,7 @@ stack is fork-proven and not yet deployed to a persistent network.
   imports no protocol mock.
 - Public dark frontend with injected-wallet connection and canonical Lido
   originate/claim flows. Signed Reservoir quote execution is implemented but
-  fail-closed until the reviewed kernel/adapter addresses are build-pinned.
+  fail-closed while the pinned deployment is retired.
 - Offline factor quote CLI; no factor key is present in the browser or repo.
 
 No production ERC-8161 endpoint is claimed. That adapter remains a
@@ -254,8 +267,8 @@ Release record on 2026-07-25:
 
 | Surface | Result |
 |---|---:|
-| Deterministic Foundry suites | 187 passed, 0 failed, 0 skipped |
-| Production-contract fork suites | 10 passed, 0 failed, 0 skipped |
+| Deterministic Foundry suites | 215 passed, 0 failed, 0 skipped |
+| Production-contract fork suites | fail loudly if misconfigured; run via `make test-fork` |
 | Exact deploy/sign/approve/fill rehearsal | passed |
 | Frontend rendered tests | 5 passed |
 | `npm test` Vinext build and rendered assertions | passed |
@@ -305,7 +318,7 @@ flowchart TB
     SELLER(["seller sends the only transaction"])
     KERNEL["AsyncClaimSettlement<br/>acquire first, pay second<br/>holds no tokens"]
     ADAPTERS["allowlisted IClaimAdapter"]
-    LIDO["LidoWithdrawalClaimAdapter<br/>live"]
+    LIDO["LidoWithdrawalClaimAdapter<br/>mainnet-proven"]
     E8161["ERC8161RedeemClaimAdapter<br/>reference"]
     FUND["ProductiveFundingAccount<br/>holds WETH and vault shares"]
     RESERVE["ERC4626ReserveAdapter<br/>reused from v1"]
