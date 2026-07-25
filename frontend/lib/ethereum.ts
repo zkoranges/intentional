@@ -21,6 +21,8 @@ import {
 import { mainnet } from "viem/chains";
 
 export const MAINNET_CHAIN_ID = 1;
+export const MIN_LIDO_REQUEST = 100n;
+export const MAX_LIDO_REQUEST = 1_000n * 10n ** 18n;
 
 export const ADDRESSES = {
   aqua: getAddress("0x499943e74fb0ce105688beee8ef2abec5d936d31"),
@@ -101,6 +103,9 @@ export const claimSettledEvent = parseAbiItem(
 const transferEvent = parseAbiItem(
   "event Transfer(address indexed from,address indexed to,uint256 indexed tokenId)",
 );
+const withdrawalClaimedEvent = parseAbiItem(
+  "event WithdrawalClaimed(uint256 indexed requestId,address indexed owner,address indexed receiver,uint256 amountOfETH)",
+);
 
 export type InjectedEthereum = EIP1193Provider & {
   on?: (event: string, listener: (...args: unknown[]) => void) => void;
@@ -175,6 +180,20 @@ export type ReservoirQuoteCheck = {
   fundingAccount: Address;
   quoteHash: Hex;
 };
+
+export class MinedTransactionVerificationError extends Error {
+  readonly transactionHash: Hash;
+
+  constructor(message: string, transactionHash: Hash) {
+    super(message);
+    this.name = "MinedTransactionVerificationError";
+    this.transactionHash = transactionHash;
+  }
+}
+
+export function hasExactAllowance(allowance: bigint, requested: bigint) {
+  return requested > 0n && allowance === requested;
+}
 
 export function getInjectedProvider(): InjectedEthereum | null {
   return typeof window === "undefined" ? null : (window.ethereum ?? null);
@@ -338,7 +357,14 @@ export async function approveExact(
     args: [spender, amount],
   });
   const hash = await walletClient.writeContract(request);
-  return publicClient.waitForTransactionReceipt({ hash });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new MinedTransactionVerificationError(
+      "The approval transaction mined but reverted",
+      hash,
+    );
+  }
+  return receipt;
 }
 
 export async function requestLidoWithdrawal(
@@ -348,6 +374,17 @@ export async function requestLidoWithdrawal(
 ) {
   const { publicClient, walletClient } = clients(provider, account);
   if (!walletClient) throw new Error("Wallet client unavailable");
+  const currentAllowance = await publicClient.readContract({
+    address: ADDRESSES.stEth,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [account, ADDRESSES.lidoQueue],
+  });
+  if (!hasExactAllowance(currentAllowance, amount)) {
+    throw new Error(
+      "The queue allowance changed; approve the exact stETH amount again",
+    );
+  }
   const { request } = await publicClient.simulateContract({
     account,
     address: ADDRESSES.lidoQueue,
@@ -357,6 +394,12 @@ export async function requestLidoWithdrawal(
   });
   const hash = await walletClient.writeContract(request);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new MinedTransactionVerificationError(
+      "The Lido request transaction mined but reverted",
+      hash,
+    );
+  }
   const mint = receipt.logs
     .filter(
       (log) => log.address.toLowerCase() === ADDRESSES.lidoQueue.toLowerCase(),
@@ -379,7 +422,10 @@ export async function requestLidoWithdrawal(
         decoded.args.to.toLowerCase() === account.toLowerCase(),
     );
   if (!mint || mint.eventName !== "Transfer") {
-    throw new Error("The Lido receipt did not contain the expected unstETH mint");
+    throw new MinedTransactionVerificationError(
+      "The Lido receipt did not contain the expected unstETH mint",
+      hash,
+    );
   }
   return { hash, requestId: mint.args.tokenId, receipt };
 }
@@ -399,8 +445,55 @@ export async function claimLidoWithdrawal(
     args: [requestId],
   });
   const hash = await walletClient.writeContract(request);
-  await publicClient.waitForTransactionReceipt({ hash });
-  return hash;
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new MinedTransactionVerificationError(
+      "The Lido claim transaction mined but reverted",
+      hash,
+    );
+  }
+  const claim = receipt.logs
+    .filter(
+      (log) => log.address.toLowerCase() === ADDRESSES.lidoQueue.toLowerCase(),
+    )
+    .map((log) => {
+      try {
+        return decodeEventLog({
+          abi: [withdrawalClaimedEvent],
+          data: log.data,
+          topics: log.topics,
+        });
+      } catch {
+        return null;
+      }
+    })
+    .find(
+      (decoded) =>
+        decoded?.eventName === "WithdrawalClaimed" &&
+        decoded.args.requestId === requestId &&
+        decoded.args.owner.toLowerCase() === account.toLowerCase() &&
+        decoded.args.receiver.toLowerCase() === account.toLowerCase() &&
+        decoded.args.amountOfETH > 0n,
+    );
+  if (!claim || claim.eventName !== "WithdrawalClaimed") {
+    throw new MinedTransactionVerificationError(
+      "The Lido receipt did not prove the expected ETH claim",
+      hash,
+    );
+  }
+  const [status] = await publicClient.readContract({
+    address: ADDRESSES.lidoQueue,
+    abi: lidoQueueAbi,
+    functionName: "getWithdrawalStatus",
+    args: [[requestId]],
+  });
+  if (!status?.isClaimed) {
+    throw new MinedTransactionVerificationError(
+      "Canonical Lido state does not mark the request claimed",
+      hash,
+    );
+  }
+  return { hash, amountOfEth: claim.args.amountOfETH };
 }
 
 function parseAddress(value: unknown, name: string): Address {
@@ -703,6 +796,12 @@ export async function verifyReservoirQuote(
   if (claim.queue !== ADDRESSES.lidoQueue || claim.stETH !== ADDRESSES.stEth) {
     throw new Error("Quote claim data is not bound to canonical Lido");
   }
+  if (
+    claim.requestedStETH < MIN_LIDO_REQUEST ||
+    claim.requestedStETH > MAX_LIDO_REQUEST
+  ) {
+    throw new Error("The signed stETH amount is outside canonical Lido bounds");
+  }
   const [sellerBalance, allowance] = await Promise.all([
     publicClient.readContract({
       address: ADDRESSES.stEth,
@@ -749,12 +848,25 @@ export async function fillReservoirQuote(
   const { envelope } = check;
   const { publicClient, walletClient } = clients(provider, account);
   if (!walletClient) throw new Error("Wallet client unavailable");
-  const sellerWethBefore = await publicClient.readContract({
-    address: ADDRESSES.weth,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: [account],
-  });
+  const [sellerWethBefore, fillAllowance] = await Promise.all([
+    publicClient.readContract({
+      address: ADDRESSES.weth,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [account],
+    }),
+    publicClient.readContract({
+      address: ADDRESSES.stEth,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [account, envelope.quote.adapter],
+    }),
+  ]);
+  if (!hasExactAllowance(fillAllowance, check.requestedStEth)) {
+    throw new Error(
+      "The adapter allowance changed; approve the exact signed stETH amount again",
+    );
+  }
   const quote = {
     ...envelope.quote,
     paymentAmount: BigInt(envelope.quote.paymentAmount),
@@ -775,6 +887,12 @@ export async function fillReservoirQuote(
   });
   const hash = await walletClient.writeContract(request);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new MinedTransactionVerificationError(
+      "The Reservoir transaction mined but reverted",
+      hash,
+    );
+  }
   const settled = receipt.logs
     .filter(
       (log) => log.address.toLowerCase() === envelope.kernel.toLowerCase(),
@@ -792,7 +910,10 @@ export async function fillReservoirQuote(
     })
     .find((log) => log?.eventName === "ClaimSettled");
   if (!settled || settled.eventName !== "ClaimSettled") {
-    throw new Error("Settlement receipt is missing ClaimSettled");
+    throw new MinedTransactionVerificationError(
+      "Settlement receipt is missing ClaimSettled",
+      hash,
+    );
   }
   if (
     settled.args.quoteHash !== check.quoteHash ||
@@ -804,7 +925,10 @@ export async function fillReservoirQuote(
     settled.args.paymentAsset !== ADDRESSES.weth ||
     settled.args.paymentAmount !== BigInt(envelope.quote.paymentAmount)
   ) {
-    throw new Error("ClaimSettled does not match the pinned signed quote");
+    throw new MinedTransactionVerificationError(
+      "ClaimSettled does not match the pinned signed quote",
+      hash,
+    );
   }
   const [sellerWethAfter, statuses, remainingAllowance] = await Promise.all([
     publicClient.readContract({
@@ -834,7 +958,10 @@ export async function fillReservoirQuote(
     statuses[0].isClaimed ||
     remainingAllowance !== 0n
   ) {
-    throw new Error("Settlement receipt failed canonical payment or claim checks");
+    throw new MinedTransactionVerificationError(
+      "Settlement receipt failed canonical payment or claim checks",
+      hash,
+    );
   }
   return {
     hash,

@@ -5,6 +5,9 @@ import { getAddress, parseEther, type Address, type Hash } from "viem";
 
 import {
   ADDRESSES,
+  MAX_LIDO_REQUEST,
+  MIN_LIDO_REQUEST,
+  MinedTransactionVerificationError,
   RESERVOIR_DEPLOYMENT,
   approveExact,
   claimLidoWithdrawal,
@@ -28,9 +31,6 @@ type CompletedAction = {
   label: string;
   hash: Hash;
 };
-
-const MAX_LIDO_REQUEST = 1_000n * 10n ** 18n;
-const MIN_LIDO_REQUEST = 100n;
 
 function short(value: string) {
   return `${value.slice(0, 6)}…${value.slice(-4)}`;
@@ -83,7 +83,7 @@ export default function Home() {
     amount <= MAX_LIDO_REQUEST &&
     Boolean(snapshot && amount <= snapshot.stEthBalance);
   const queueApproved = Boolean(
-    snapshot && amount > 0n && snapshot.queueAllowance >= amount,
+    snapshot && amount > 0n && snapshot.queueAllowance === amount,
   );
 
   const refresh = useCallback(
@@ -180,6 +180,23 @@ export default function Home() {
     }
   }
 
+  async function handleMinedActionError(
+    error: unknown,
+    label: string,
+    clearQuote = false,
+  ) {
+    if (error instanceof MinedTransactionVerificationError) {
+      setActions((current) => [
+        ...current,
+        { label, hash: error.transactionHash },
+      ]);
+      if (clearQuote) setQuoteCheck(null);
+      if (account) await refresh(account);
+    }
+    setStatus(errorMessage(error));
+    setAction("idle");
+  }
+
   async function approveQueue() {
     const injected = getInjectedProvider();
     if (!injected || !account || !amountValid) return;
@@ -201,8 +218,10 @@ export default function Home() {
       setStatus("Approval mined. The withdrawal request is ready.");
       await refresh(account);
     } catch (error) {
-      setStatus(errorMessage(error));
-      setAction("idle");
+      await handleMinedActionError(
+        error,
+        "Queue approval mined; verification warning",
+      );
     }
   }
 
@@ -226,8 +245,10 @@ export default function Home() {
       );
       await refresh(account);
     } catch (error) {
-      setStatus(errorMessage(error));
-      setAction("idle");
+      await handleMinedActionError(
+        error,
+        "Lido request mined; verification warning",
+      );
     }
   }
 
@@ -237,16 +258,20 @@ export default function Home() {
     setAction("signing");
     setStatus(`Simulating claim for unstETH #${requestId}.`);
     try {
-      const hash = await claimLidoWithdrawal(injected, account, requestId);
+      const result = await claimLidoWithdrawal(injected, account, requestId);
       setActions((current) => [
         ...current,
-        { label: `unstETH #${requestId} claimed`, hash },
+        { label: `unstETH #${requestId} claimed`, hash: result.hash },
       ]);
-      setStatus(`Claim #${requestId} paid ETH to your wallet.`);
+      setStatus(
+        `Claim #${requestId} paid ${formatMainnetAmount(result.amountOfEth)} ETH to your wallet.`,
+      );
       await refresh(account);
     } catch (error) {
-      setStatus(errorMessage(error));
-      setAction("idle");
+      await handleMinedActionError(
+        error,
+        `Lido claim #${requestId} mined; verification warning`,
+      );
     }
   }
 
@@ -297,7 +322,11 @@ export default function Home() {
       setStatus("Adapter approval mined. Re-verify before filling.");
       setQuoteCheck(null);
     } catch (error) {
-      setStatus(errorMessage(error));
+      await handleMinedActionError(
+        error,
+        "Reservoir approval mined; verification warning",
+        true,
+      );
     } finally {
       setAction("idle");
     }
@@ -326,8 +355,11 @@ export default function Home() {
       setQuoteCheck(null);
       await refresh(account);
     } catch (error) {
-      setStatus(errorMessage(error));
-      setAction("idle");
+      await handleMinedActionError(
+        error,
+        "Reservoir transaction mined; verification warning",
+        true,
+      );
     }
   }
 
@@ -507,7 +539,7 @@ export default function Home() {
                 <div>
                   <dt>Approval</dt>
                   <dd>
-                    {quoteCheck.allowance >= quoteCheck.requestedStEth
+                    {quoteCheck.allowance === quoteCheck.requestedStEth
                       ? "exact amount ready"
                       : "required"}
                   </dd>
@@ -531,7 +563,7 @@ export default function Home() {
                     : "Awaiting reviewed deployment"}
                 </button>
               ) : (
-                quoteCheck.allowance < quoteCheck.requestedStEth ? (
+                quoteCheck.allowance !== quoteCheck.requestedStEth ? (
                   <button
                     className="secondary"
                     onClick={approveReservoir}

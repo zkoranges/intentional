@@ -165,3 +165,34 @@ artifact checks with source-level assertions rather than a full injected-wallet
 automation harness. The release compensates with the exact receipt-backed
 chain-1 rehearsal; a wallet automation harness is appropriate if the quote path
 grows.
+
+## Post-release wallet authorization addendum — 2026-07-25
+
+An exact Claude Opus 5 delta review
+(`claude/claude-opus-5`, agent
+`30aa483c-3fda-4663-b90c-27ee52f69535`) examined the production wallet paths
+after a residual-allowance audit.
+
+Confirmed fixes:
+
+- canonical Lido and Reservoir actions display an approval as ready only when
+  the allowance equals the exact requested stETH amount;
+- both request submission and Reservoir fill re-read that equality immediately
+  before simulation;
+- signed Reservoir amounts outside Lido's canonical 100-wei to 1,000-ETH
+  bounds are rejected before approval;
+- every mined wallet write checks receipt status;
+- Lido request success requires the canonical unstETH mint;
+- Lido claim success requires the canonical `WithdrawalClaimed` event, matching
+  request/owner/receiver, a nonzero emitted ETH amount, and a claimed-state
+  re-read; and
+- any mined transaction that cannot satisfy its postconditions retains its
+  hash in the interface, refreshes state, and is shown as a verification
+  warning rather than optimistic success.
+
+The reviewer independently reran the focused tests, TypeScript checking, and
+linting, then returned:
+
+> **APPROVE**
+
+No persistent Reservoir deployment or funding was introduced by this addendum.

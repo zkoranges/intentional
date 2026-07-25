@@ -89,6 +89,7 @@ test("canonical production addresses and selectors are exact", async () => {
 });
 
 test("firm Reservoir quotes fail closed before wallet execution", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
   const ethereum = await readFile(
     new URL("lib/ethereum.ts", projectRoot),
     "utf8",
@@ -112,6 +113,17 @@ test("firm Reservoir quotes fail closed before wallet execution", async () => {
   assert.match(ethereum, /NEXT_PUBLIC_RESERVOIR_KERNEL/);
   assert.match(ethereum, /sellerWethAfter - sellerWethBefore/);
   assert.match(ethereum, /statuses\[0\]\.owner/);
+  assert.match(page, /snapshot\.queueAllowance === amount/);
+  assert.match(page, /quoteCheck\.allowance === quoteCheck\.requestedStEth/);
+  assert.match(ethereum, /claim\.requestedStETH < MIN_LIDO_REQUEST/);
+  assert.match(ethereum, /hasExactAllowance\(currentAllowance, amount\)/);
+  assert.match(ethereum, /hasExactAllowance\(fillAllowance, check\.requestedStEth\)/);
+  assert.match(page, /error instanceof MinedTransactionVerificationError/);
+  assert.match(page, /Reservoir transaction mined; verification warning/);
+  assert.match(ethereum, /event WithdrawalClaimed/);
+  assert.match(ethereum, /claim\.args\.amountOfETH/);
+  assert.match(ethereum, /Canonical Lido state does not mark the request claimed/);
+  assert.match(page, /Lido claim #\$\{requestId\} mined; verification warning/);
   assert.doesNotMatch(ethereum, /type\\(uint256\\)\\.max|MaxUint256/);
 });
 
