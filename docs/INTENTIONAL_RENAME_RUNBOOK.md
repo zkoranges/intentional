@@ -1,7 +1,8 @@
 # Intentional public rename runbook
 
-Status: provisional only. Do not execute until the active implementation plan
-has merged to `main`, its worktree is clean, and CI is green.
+Status: completed on 2026-07-25. The repository and Vercel project are
+`intentional`, `intentional.so` is the canonical public URL, the previous
+Vercel alias remains available, and the commit graph was preserved.
 
 ## Decision
 
@@ -34,10 +35,10 @@ protocol data.
 These values are implementation compatibility, not public branding. Changing
 them would require a new deployment and a coordinated signer migration.
 
-## Collision policy
+## Executed collision policy
 
-The rename must be performed from a dedicated worktree after the active plan
-finishes. One integrator owns the rename branch.
+The rename was performed after the implementation lanes merged and the release
+gates passed. The constraints below remain the audit record for the cutover.
 
 Do not combine the rename with feature changes. In particular, do not modify:
 
@@ -122,8 +123,8 @@ git rev-parse HEAD
 git rev-list --max-parents=0 HEAD
 ```
 
-At the time this runbook was prepared, `zkoranges/intentional` did not resolve
-to an existing repository. Check again immediately before the rename.
+The repository now resolves at `zkoranges/intentional`; the commands below are
+retained as the executed migration procedure, not instructions to rerun it.
 
 After the rename branch has merged:
 
