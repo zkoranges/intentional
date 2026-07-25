@@ -23,11 +23,12 @@ With an injected wallet on Ethereum mainnet, the page:
    after the receipt.
 
 The same-origin `/api/quote/lido` endpoint returns immediate indicative pricing
-without requiring a wallet. It upgrades to a seller-bound, signed firm quote
-only when a reviewed kernel, funded reserve, RPC, and dedicated capped quote
-signer are all configured. The current public build remains indicative because
-no Reservoir contract is persistently deployed or funded. Canonical Lido queue
-operations remain live, and no signing key enters the browser.
+without requiring a wallet. The reviewed mainnet kernel and Lido adapter are
+live, active, and build-pinned into this frontend
+(`frontend/.env.production`). Automated public firm-quote issuance is
+deliberately disabled: operator-signed quotes are generated offline and pasted
+into the app for execution (operator-assisted beta). Canonical Lido queue
+operations remain live, and no signing key enters the browser or Vercel.
 
 ## Quote validation
 

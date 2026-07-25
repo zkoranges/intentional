@@ -28,13 +28,25 @@ balance="$(cast balance "${FACTOR_ADDRESS}" --rpc-url "${RPC_URL}")"
 # ~1 gwei suggested tip, so rehearsals pass the live upstream price instead.
 # Mainnet runs must NOT set it.
 gas_price="${GAS_PRICE_WEI_OVERRIDE:-$(cast gas-price --rpc-url "${RPC_URL}")}"
-required="$((REMAINING_ALLOC_WEI + REMAINING_GAS * gas_price * HEADROOM_MULTIPLIER))"
+if ! [[ "${gas_price}" =~ ^[0-9]+$ ]] || [[ "${gas_price}" == "0" ]]; then
+  echo "GAS BUDGET ABORT | invalid gas price '${gas_price}'." >&2
+  exit 2
+fi
+
+# Arbitrary-precision arithmetic: bash $((...)) is int64 and silently wraps
+# negative above ~175 gwei at these gas figures, which would INVERT the gate
+# exactly during a spike (independent judge finding, empirically confirmed).
+read -r required verdict < <(python3 -c "
+balance = int('${balance}')
+required = int('${REMAINING_ALLOC_WEI}') + int('${REMAINING_GAS}') * int('${gas_price}') * int('${HEADROOM_MULTIPLIER}')
+print(required, 'PASS' if balance >= required else 'ABORT')
+")
 
 echo "GAS BUDGET | phase=${PHASE} balance=${balance} wei"
 echo "GAS BUDGET | live gas price=${gas_price} wei; remaining gas=${REMAINING_GAS}; remaining allocations=${REMAINING_ALLOC_WEI} wei"
 echo "GAS BUDGET | required (alloc + gas x price x ${HEADROOM_MULTIPLIER}) = ${required} wei"
 
-if [[ "${balance}" -lt "${required}" ]]; then
+if [[ "${verdict}" != "PASS" ]]; then
   echo "GAS BUDGET ABORT | balance below threshold for phase ${PHASE}; top up or wait for cheaper gas." >&2
   exit 1
 fi

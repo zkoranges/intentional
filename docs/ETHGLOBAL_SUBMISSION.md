@@ -23,9 +23,15 @@ modified-SwapVM consideration:
 - `ReservoirSwapVMRouter` redeploys the reviewed router extension and handles
   custom opcode `0x92`;
 - production-contract fork tests execute token transfers through official Aqua
-  and the modified Reservoir router; and
-- the final Lido/Aave settlement uses a separate production-contract chain-1
-  fork. The two proofs are required but are not represented as one transaction.
+  and the modified Reservoir router;
+- **both proofs were additionally executed for real on Ethereum mainnet on
+  2026-07-25**: an exact-input intent filled through canonical Aqua
+  (`0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37`) and
+  an atomic Lido factoring settlement
+  (`0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611`,
+  unstETH #130880); manifests live in `deployments/`; and
+- the two proofs are technically independent and are not represented as one
+  transaction.
 
 Reservoir is entered in the standard **Build an Aqua App** track. Both the v1
 Aqua reserve engine and the v2 asynchronous-claim extension were designed and
@@ -98,10 +104,16 @@ The public Vercel page provides:
 - links to the public source and reproducible CI run;
 - live canonical Lido originate/claim operations for connected mainnet
   wallets; and
-- a fail-closed Reservoir card until a reviewed persistent deployment is
-  build-pinned.
+- the reviewed mainnet kernel and Lido adapter build-pinned into the frontend
+  (`frontend/.env.production`), with automated public firm-quote issuance
+  deliberately disabled: operator-signed quotes are pasted into the app and
+  executed (operator-assisted beta).
 
-For final judging, `make live-product-e2e` performs the actual onchain token
-transfers on a disposable chain-1 fork using canonical Aqua, Lido, Aave, stETH,
-WETH, and StataWETH contracts. This is within the explicit local-fork allowance.
-No persistent mainnet deployment is claimed.
+For final judging, the primary evidence is the pair of real Ethereum mainnet
+receipts above, executed with controlled team wallets and operator pricing —
+proving machinery, atomicity, and real protocol integration, not market
+demand. `make live-product-e2e` additionally reproduces the complete flow on a
+disposable chain-1 fork (within the explicit local-fork allowance) as the
+interactive stage demo. Mainnet demo contracts are live and active; automated
+public firm-quote issuance is disabled; recovery and the unstETH #130880 claim
+are tracked in `docs/MAINNET_MICRO_DEMO.md` G-M.

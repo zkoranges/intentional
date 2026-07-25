@@ -152,7 +152,11 @@ bps, the verified proof hash and router, the signing timestamp, and the live
 queue facts at signing (`unfinalizedStETH`, `unfinalizedRequestNumber`). The
 offer is real because it is signed, nonce-bound, expiring, and reserve-backed
 — it is **not** claimed to be market-derived. `ALLOW_TEST_PAYMENT_OVERRIDE`
-and `AQUA_PROOF_ALLOW_UNVERIFIED` remain fork-rehearsal-only.
+and `AQUA_PROOF_ALLOW_UNVERIFIED` remain fork-rehearsal-only (the latter also
+re-labels the evidence mode `…-rehearsal-unverified`). The provenance
+evidence lives in the CLI envelope, not under the EIP-712 signature: **a
+production v3 should include a signed `evidenceHash` binding the economic
+quote to its independently verifiable provenance bundle.**
 
 ## 6. Budget honesty (review finding, accepted)
 

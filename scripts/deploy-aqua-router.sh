@@ -17,6 +17,10 @@ cd "${REPO_ROOT}"
 
 RPC_URL="${RPC_URL:?RPC_URL is required}"
 FACTOR_ADDRESS="${FACTOR_ADDRESS:?FACTOR_ADDRESS is required}"
+if [[ "${RESERVOIR_MAINNET_ACK:-}" != "DEPLOY_AQUA_ROUTER_RESERVOIR_V1" ]]; then
+  echo "router deployment acknowledgement mismatch" >&2
+  exit 1
+fi
 CANONICAL_AQUA="0x499943E74FB0cE105688beeE8Ef2ABec5D936d31"
 WETH_ADDRESS="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
 ROUTER_NAME="Reservoir Aqua Intent"

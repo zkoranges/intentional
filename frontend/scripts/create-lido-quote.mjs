@@ -96,6 +96,18 @@ const requestedForSpread = requestedStEth;
 if (paymentAmountWei >= requestedForSpread) {
   throw new Error("PAYMENT_WETH must be below REQUESTED_STETH (positive gross spread)");
 }
+// Fat-finger guard (independent judge finding): a mistyped PAYMENT_WETH must
+// not produce a signable deep-discount quote.
+const maxGrossSpreadBps = BigInt(
+  unsigned(process.env.MAX_GROSS_SPREAD_BPS ?? "100", "MAX_GROSS_SPREAD_BPS"),
+);
+const grossSpreadBps =
+  ((requestedForSpread - paymentAmountWei) * 10_000n) / requestedForSpread;
+if (grossSpreadBps > maxGrossSpreadBps) {
+  throw new Error(
+    `Gross spread ${grossSpreadBps} bps exceeds MAX_GROSS_SPREAD_BPS ${maxGrossSpreadBps}`,
+  );
+}
 let pricing;
 if (operatorFirmQuote) {
   const aquaIntentProofTx = required("AQUA_INTENT_PROOF_TX");
@@ -145,6 +157,7 @@ if ((await client.getChainId()) !== 1) {
 if (operatorFirmQuote) {
   if (process.env.AQUA_PROOF_ALLOW_UNVERIFIED === "1") {
     pricing.evidence.aquaProofVerification = "skipped-rehearsal-only";
+    pricing.evidence.mode = "operator-priced-firm-quote-rehearsal-unverified";
   } else {
     const aquaRouter = address("AQUA_ROUTER_ADDRESS");
     const expectedStrategyHash = required("AQUA_STRATEGY_HASH").toLowerCase();

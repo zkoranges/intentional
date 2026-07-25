@@ -202,10 +202,10 @@ test("the public quote route fails closed, keyless, and secret-safe", async () =
     "utf8",
   );
 
-  assert.match(route, /Firm Lido pricing is deliberately paused/);
+  assert.match(route, /Automated public firm-quote issuance is deliberately disabled/);
   assert.match(
     route,
-    /Firm Lido quotes are paused while the Aqua mainnet intent demo is finalized/,
+    /Automated firm-quote issuance is disabled; paste an operator-signed quote to execute/,
   );
   assert.match(route, /force-dynamic/);
   assert.match(route, /no-store, max-age=0/);

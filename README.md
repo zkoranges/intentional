@@ -88,8 +88,9 @@ signed by the operator CLI and pasted into the UI (operator-assisted beta).
 The demo used controlled team wallets and operator pricing — it proves
 machinery, atomicity, and real protocol integration, not market demand.
 
-**Bytecode attestation for the two explorer-unverified contracts** (Etherscan's
-via-IR pipeline rejects a byte-exact match; verify locally in seconds):
+**Bytecode attestation for the two explorer-unverified contracts** (Etherscan
+source verification remains pending despite byte-exact local creation and
+runtime attestations; verify locally in seconds):
 
 ```sh
 # Router — expect 0xd8ac4a51d5994d12b862a303c471237bd28a497b6360c382cab3752977bf0519
@@ -103,8 +104,10 @@ cast keccak "$(cast code 0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6 --rpc-url "$
 The paused deployment, separately capped funding, Etherscan source
 verification, one-operation activation, and read-only binding-verification
 procedure is frozen in
-[`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). The tooling is prepared
-but has not broadcast a persistent transaction.
+[`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). That procedure has now
+been executed on Ethereum mainnet (receipts above); the contracts are live and
+active, with reserve recovery and the unstETH #130880 claim tracked as the
+remaining operational steps. This remains unaudited hackathon software.
 
 ## What is working
 

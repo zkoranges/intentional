@@ -17,9 +17,10 @@ function json(error: string, status: number) {
   );
 }
 
-/// @notice Firm Lido pricing is deliberately paused while the Aqua/SwapVM
-///         intent is being promoted from a canonical fork proof to a
-///         recoverable mainnet demo.
+/// @notice Automated public firm-quote issuance is deliberately disabled:
+///         operator-signed quotes are generated offline and pasted into the
+///         app for execution (operator-assisted beta). The mainnet Aqua
+///         intent proof and factoring settlement are complete.
 /// @dev This endpoint performs no market-routing or signing integration.
 export async function POST(request: Request) {
   try {
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   return json(
-    "Firm Lido quotes are paused while the Aqua mainnet intent demo is finalized",
+    "Automated firm-quote issuance is disabled; paste an operator-signed quote to execute",
     503,
   );
 }

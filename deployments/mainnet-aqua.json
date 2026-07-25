@@ -18,13 +18,14 @@
       "name": "Reservoir Aqua Intent",
       "version": "1"
     },
-    "sourceVerificationUrl": "https://etherscan.io/address/0x15a82271F280D4D1485CCE1980AC3C3799b483D9#code"
+    "sourceVerification": "explorer verification pending; byte-exact creation and runtime bytecode attestation published in README.md (runtime codehash above)"
   },
   "maker": {
     "address": "0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6",
     "deploymentTxHash": "0x7f856cfa4a8edc046759806688e12c653331745d72406faed93e2ff56e691439",
     "disposable": true,
-    "note": "no owner withdrawal by design; seeded inventory moves only through fills"
+    "note": "no owner withdrawal by design; seeded inventory moves only through fills",
+    "sourceVerification": "explorer verification pending; runtime codehash attestation in README.md: 0x553ff057aaa9b0172b6720e7889fddaf575c3213febfe0472065a231be646937"
   },
   "wstETHAdapter": {
     "address": "0x83433270E36144765939e331024873730429caD9",
