@@ -627,7 +627,7 @@ export default function Home() {
                   <div className="walletPopoverAccount">
                     <span className="tokenIcon wethIcon">
                       <img
-                        src="/icons/eth.png"
+                        src="/icons/eth.svg"
                         alt=""
                         width={18}
                         height={18}
@@ -849,7 +849,7 @@ export default function Home() {
                   className={`tokenIcon ${mode === "instant" ? "wethIcon" : "nftIcon"}`}
                 >
                   <img
-                    src={mode === "instant" ? "/icons/weth.png" : "/icons/unsteth.png"}
+                    src={mode === "instant" ? "/icons/weth.svg" : "/icons/unsteth.svg"}
                     alt={mode === "instant" ? "WETH" : "unstETH"}
                     width={18}
                     height={18}
@@ -1021,7 +1021,7 @@ export default function Home() {
                 <article key={request.requestId.toString()}>
                   <div className="positionIdentity">
                     <span className="tokenIcon nftIcon">
-                      <img src="/icons/unsteth.png" alt="unstETH" width={18} height={18} />
+                      <img src="/icons/unsteth.svg" alt="unstETH" width={18} height={18} />
                     </span>
                     <div>
                       <strong>unstETH #{request.requestId}</strong>
