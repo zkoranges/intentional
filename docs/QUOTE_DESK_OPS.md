@@ -47,7 +47,7 @@ public HTTP/TLS entry point; the quote signer owns only loopback port 8791.
 ## Day-to-day
 
 ```sh
-make remote
+make remote   # opens /root/.intentional/pre-alpha-001 on the VPS
 ssh $DEPLOY_HOST systemctl status impatience-signer
 ssh $DEPLOY_HOST journalctl -u impatience-signer -n 50 --no-pager
 ssh $DEPLOY_HOST curl -sf http://127.0.0.1:8791/health

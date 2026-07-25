@@ -113,16 +113,24 @@ remote:
 	set +a; \
 	host="$${DEPLOY_HOST:-root@62.171.182.177}"; \
 	key="$${DEPLOY_SSH_KEY:-$${HOME}/.ssh/philidor_deploy}"; \
+	remote_dir="$${REMOTE_DIR:-/root/.intentional/pre-alpha-001}"; \
+	if [[ ! "$$remote_dir" =~ ^/[A-Za-z0-9._/-]+$$ ]]; then \
+		echo "REMOTE_DIR must be an absolute path containing only safe path characters." >&2; \
+		exit 1; \
+	fi; \
+	remote_shell="cd '$$remote_dir' && exec /bin/bash -l"; \
 	if [[ -r "$$key" ]]; then \
-		exec ssh -i "$$key" -o IdentitiesOnly=yes -o ConnectTimeout=20 "$$host"; \
+		exec ssh -t -i "$$key" -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+			"$$host" "$$remote_shell"; \
 	fi; \
 	if [[ -n "$${SSHPASS:-}" ]]; then \
 		command -v sshpass >/dev/null 2>&1 || { \
 			echo "sshpass is required for SSHPASS fallback" >&2; \
 			exit 1; \
 		}; \
-		exec sshpass -e ssh -o PreferredAuthentications=password \
-			-o PubkeyAuthentication=no -o ConnectTimeout=20 "$$host"; \
+		exec sshpass -e ssh -t -o PreferredAuthentications=password \
+			-o PubkeyAuthentication=no -o ConnectTimeout=20 \
+			"$$host" "$$remote_shell"; \
 	fi; \
 	echo "No readable SSH key at $$key and SSHPASS is unset." >&2; \
 	echo "Set DEPLOY_SSH_KEY (preferred) or SSHPASS only in ignored .env." >&2; \
