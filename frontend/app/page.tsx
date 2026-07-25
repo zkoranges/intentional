@@ -5,7 +5,6 @@ import {
   formatEther,
   getAddress,
   parseEther,
-  zeroAddress,
   type Address,
   type Hash,
 } from "viem";
@@ -386,11 +385,7 @@ export default function Home() {
       setQuoteError(null);
       setLidoQuote(null);
       setQuoteCheck(null);
-      void requestLidoQuote(
-        account ?? zeroAddress,
-        amountInput,
-        controller.signal,
-      )
+      void requestLidoQuote(amountInput, controller.signal)
         .then(async (nextQuote) => {
           if (controller.signal.aborted) return;
           if (nextQuote.kind === "firm") {
@@ -932,12 +927,10 @@ export default function Home() {
                   ? quoteCheck
                     ? "Firm quote"
                     : quoteLoading
-                    ? "Finding quote"
-                    : lidoQuote
-                      ? lidoQuote.recommendedRoute === "reservoir"
-                        ? "Reservoir modeled"
-                        : "CoW live benchmark"
-                        : "Live quote"
+                      ? "Finding quote"
+                      : lidoQuote
+                        ? "Indicative quote"
+                        : "Live estimate"
                   : "Claim notional"}
               </span>
             </div>
@@ -996,27 +989,19 @@ export default function Home() {
                   className={
                     quoteCheck
                       ? "quoteStatus firm"
-                      : lidoQuote?.recommendedRoute === "reservoir"
-                        ? "quoteStatus firm"
-                        : "quoteStatus indicative"
+                      : "quoteStatus indicative"
                   }
                 >
                   {quoteCheck
                     ? "Firm · fillable"
-                    : lidoQuote?.recommendedRoute === "reservoir"
-                      ? "Reservoir wins · modeled"
-                      : "CoW wins · executable quote"}
+                    : account
+                      ? "Indicative · preview"
+                      : "Indicative · no wallet needed"}
                 </strong>
               </div>
             )}
             {mode === "instant" && lidoQuote && (
               <>
-                <div>
-                  <span>CoW market now</span>
-                  <strong>
-                    {formatQuoteAmount(lidoQuote.cowPaymentAmount)} WETH
-                  </strong>
-                </div>
                 <div>
                   <span>Lido estimated wait</span>
                   <strong>{formatWait(lidoQuote.estimatedWaitMs)}</strong>
@@ -1026,20 +1011,8 @@ export default function Home() {
           </div>
 
           <div className="primaryAction">
-            {!account ? (
-              <button className="actionButton" onClick={connect} disabled={busy}>
-                Connect wallet
-              </button>
-            ) : !snapshot ? (
-              <button
-                className="actionButton"
-                onClick={switchToMainnet}
-                disabled={busy}
-              >
-                Switch to Ethereum
-              </button>
-            ) : mode === "instant" ? (
-              !amountValid ? (
+            {mode === "instant" ? (
+              !amountWithinMarketLimits ? (
                 <button className="actionButton" disabled>
                   {amountIssue}
                 </button>
@@ -1053,17 +1026,28 @@ export default function Home() {
                   onClick={() => setQuoteRefreshKey((value) => value + 1)}
                   disabled={busy}
                 >
-                  {quoteError ? "Try quote again" : "Get quote"}
+                  Try quote again
                 </button>
-              ) : !quoteCheck && lidoQuote.recommendedRoute === "cow" ? (
-                <a
+              ) : !account ? (
+                <button
                   className="actionButton"
-                  href={COW_SWAP_URL}
-                  target="_blank"
-                  rel="noreferrer"
+                  onClick={connect}
+                  disabled={busy}
                 >
-                  Use CoW market
-                </a>
+                  Connect wallet to continue
+                </button>
+              ) : !snapshot ? (
+                <button
+                  className="actionButton"
+                  onClick={switchToMainnet}
+                  disabled={busy}
+                >
+                  Switch to Ethereum
+                </button>
+              ) : !amountValid ? (
+                <button className="actionButton" disabled>
+                  {amountIssue}
+                </button>
               ) : !quoteCheck ? (
                 <button
                   className="actionButton indicativeAction"
@@ -1089,6 +1073,18 @@ export default function Home() {
                   Get {instantPayment} WETH now
                 </button>
               )
+            ) : !account ? (
+              <button className="actionButton" onClick={connect} disabled={busy}>
+                Connect wallet
+              </button>
+            ) : !snapshot ? (
+              <button
+                className="actionButton"
+                onClick={switchToMainnet}
+                disabled={busy}
+              >
+                Switch to Ethereum
+              </button>
             ) : !queueApproved ? (
               <button
                 className="actionButton"
@@ -1124,9 +1120,9 @@ export default function Home() {
               {mode === "instant" && quoteError
                 ? quoteError
                 : mode === "instant" && lidoQuote
-                  ? lidoQuote.recommendedRoute === "reservoir"
-                    ? "Live CoW and Lido data show a factor route can improve this exit. Import the short-lived firm quote to settle."
-                    : "The live CoW executable quote is better than Reservoir's current underwriting cap."
+                  ? account
+                    ? "Indicative preview. Import a short-lived firm quote to settle."
+                    : "Indicative preview. Connect your wallet only when you are ready to continue."
                   : status}
             </p>
             {account && (

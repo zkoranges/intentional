@@ -1,8 +1,12 @@
-import { formatEther, isAddress, parseEther } from "viem";
+import { formatEther, parseEther } from "viem";
 
 export const MIN_LIVE_LIDO_QUOTE = parseEther("0.001");
 
 export type LidoQuoteKind = "market" | "firm";
+export type LidoQuoteSource =
+  | "cow-live+lido-live"
+  | "reservoir-indicative+lido-live"
+  | "reservoir-indicative+lido-fallback";
 
 export type LidoQuoteResponse = {
   kind: LidoQuoteKind;
@@ -20,7 +24,7 @@ export type LidoQuoteResponse = {
   riskCost: string;
   claimGasCost: string;
   userImprovement: string;
-  source: "cow-live+lido-live";
+  source: LidoQuoteSource;
   sourceTimestamp: string;
   expiresAt: number | null;
   envelope: Record<string, unknown> | null;
@@ -40,12 +44,9 @@ export function formatQuoteAmount(value: string) {
 }
 
 export async function requestLidoQuote(
-  seller: string,
   amount: string,
   signal?: AbortSignal,
 ): Promise<LidoQuoteResponse> {
-  if (!isAddress(seller)) throw new Error("Connect a valid Ethereum wallet");
-
   let requestedStEth: bigint;
   try {
     requestedStEth = parseEther(amount || "0");
@@ -53,11 +54,10 @@ export async function requestLidoQuote(
     throw new Error("Enter a valid stETH amount");
   }
 
-  const response = await fetch("/api/quote/lido", {
+  const response = await fetch("/api/quote/lido/indicative", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      seller,
       requestedStEth: requestedStEth.toString(),
     }),
     cache: "no-store",
@@ -75,7 +75,10 @@ export async function requestLidoQuote(
     !/^\d+$/.test(result.paymentAmount) ||
     !/^\d+$/.test(result.cowPaymentAmount) ||
     !["cow", "reservoir"].includes(result.recommendedRoute) ||
-    result.source !== "cow-live+lido-live"
+    ![
+      "reservoir-indicative+lido-live",
+      "reservoir-indicative+lido-fallback",
+    ].includes(result.source)
   ) {
     throw new Error("The quote service returned an invalid Lido quote");
   }
