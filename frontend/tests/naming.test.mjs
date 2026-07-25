@@ -11,28 +11,33 @@ const repoRoot = new URL("../../", import.meta.url);
 const read = (path, base = projectRoot) => readFile(new URL(path, base), "utf8");
 
 test("the EIP-712 domain name is frozen and matches the deployed kernel", async () => {
-  const [ethereum, quoteCli, kernel] = await Promise.all([
+  const [ethereum, quoteCli, quoteDesk, kernel] = await Promise.all([
     read("lib/ethereum.ts"),
     read("scripts/create-lido-quote.mjs"),
+    read("services/quote-signer/server.mjs", repoRoot),
     read("src/claims/AsyncClaimSettlement.sol", repoRoot),
   ]);
 
   // Renaming this is not cosmetic: the domain separator is hashed into every
   // quote digest, so a mismatch makes each fill revert InvalidFactorSignature.
+  // Every signer and every verifier has to agree with the deployed kernel.
   assert.match(kernel, /EIP712\("Reservoir v2", "1"\)/);
   assert.match(ethereum, /name: "Reservoir v2"/);
   assert.match(quoteCli, /name: "Reservoir v2"/);
+  assert.match(quoteDesk, /name: "Reservoir v2"/);
 });
 
 test("the quote envelope version is frozen across signer and verifier", async () => {
-  const [ethereum, quoteCli, archived] = await Promise.all([
+  const [ethereum, quoteCli, quoteDesk, archived] = await Promise.all([
     read("lib/ethereum.ts"),
     read("scripts/create-lido-quote.mjs"),
+    read("services/quote-signer/server.mjs", repoRoot),
     read("deployments/quote-envelope-unsteth-130880.json", repoRoot),
   ]);
 
   assert.match(ethereum, /"reservoir-v2-lido-1"/);
   assert.match(quoteCli, /"reservoir-v2-lido-1"/);
+  assert.match(quoteDesk, /"reservoir-v2-lido-1"/);
   assert.equal(JSON.parse(archived).version, "reservoir-v2-lido-1");
 });
 
