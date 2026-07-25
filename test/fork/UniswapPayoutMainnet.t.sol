@@ -217,6 +217,35 @@ contract UniswapPayoutMainnetForkTest is Test {
         assertFalse(settlement.nonceUsed(quote.nonce), "nonce survived the rollback");
     }
 
+    /// @notice Real-chain regression for the original public griefing defect:
+    ///         arbitrary WETH/USDC dust at the immutable executor must neither
+    ///         block the canonical route nor leak into the seller's measured
+    ///         payout. `deal` changes only fork fixture balances; every
+    ///         protocol interaction still executes against production Lido,
+    ///         Aave StataWETH, WETH, USDC, and the archived Uniswap route.
+    function test_DonationsCannotBrickCanonicalMainnetRoute() public requiresFixture {
+        uint256 donatedWeth = 1;
+        uint256 donatedUsdc = 1;
+        deal(WETH, address(executor), donatedWeth);
+        deal(USDC, address(executor), donatedUsdc);
+
+        uint256 minimumOut = (apiQuotedOut * 99) / 100;
+        PayoutTypes.Quote memory quote = _quote(3, minimumOut);
+        bytes memory signature = _sign(quote);
+        uint256 sellerUsdcBefore = IERC20(USDC).balanceOf(seller);
+
+        vm.prank(seller);
+        settlement.fill(quote, claimData, boundsData, payoutData, signature);
+
+        uint256 delivered = IERC20(USDC).balanceOf(seller) - sellerUsdcBefore;
+        assertGe(delivered, minimumOut, "seller received less than the signed minimum USDC");
+        assertEq(IERC20(WETH).balanceOf(address(executor)), donatedWeth, "donated WETH was spent or trapped");
+        assertEq(IERC20(USDC).balanceOf(address(executor)), donatedUsdc, "donated USDC leaked into the payout");
+        assertEq(IERC20(WETH).allowance(address(executor), swapTo), 0, "route allowance survived");
+        assertTrue(settlement.nonceUsed(quote.nonce), "nonce not consumed");
+        assertEq(_ownedIds().length, 1, "canonical Lido claim was not originated");
+    }
+
     function _ownedIds() private view returns (uint256[] memory ids) {
         return IWithdrawalQueueIds(QUEUE).getWithdrawalRequests(factor);
     }
