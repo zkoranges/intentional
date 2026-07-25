@@ -87,34 +87,14 @@ a {
 .fintechTexture {
   position: fixed;
   z-index: 0;
-  right: -120px;
-  bottom: -150px;
-  width: min(650px, 62vw);
-  aspect-ratio: 1;
+  right: -68px;
+  bottom: -34px;
+  width: min(760px, 68vw);
+  aspect-ratio: 760 / 520;
   pointer-events: none;
-  background:
-    repeating-radial-gradient(
-      circle at 100% 100%,
-      transparent 0 27px,
-      rgba(214, 214, 220, 0.12) 28px 29px,
-      transparent 30px 52px
-    ),
-    radial-gradient(
-      circle,
-      rgba(224, 224, 230, 0.32) 0 1px,
-      transparent 1.35px
-    );
-  background-size:
-    auto,
-    18px 18px;
-  mask-image: radial-gradient(
-    ellipse at 100% 100%,
-    #000 0,
-    rgba(0, 0, 0, 0.9) 34%,
-    rgba(0, 0, 0, 0.36) 58%,
-    transparent 76%
-  );
-  opacity: 0.58;
+  background: url("/textures/impatience-flow.svg") right bottom / contain
+    no-repeat;
+  opacity: 0.78;
 }
 
 .appHeader {
@@ -1461,9 +1441,9 @@ footer p {
 @media (max-width: 760px) {
   .fintechTexture {
     right: -145px;
-    bottom: -125px;
-    width: 500px;
-    opacity: 0.42;
+    bottom: -28px;
+    width: 570px;
+    opacity: 0.52;
   }
 
   .appHeader {
