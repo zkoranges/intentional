@@ -40,8 +40,12 @@ breaking change.
 
 | String | Where | What breaks if changed |
 |---|---|---|
-| `"Reservoir v2"` | EIP-712 domain name, in [`lib/ethereum.ts`](../frontend/lib/ethereum.ts), [`scripts/create-lido-quote.mjs`](../frontend/scripts/create-lido-quote.mjs), and `EIP712("Reservoir v2", "1")` in [`AsyncClaimSettlement`](../src/claims/AsyncClaimSettlement.sol) | **Every factor signature.** The domain separator is hashed into the quote digest. A rename makes the frontend compute a different digest than the deployed kernel verifies, and every fill reverts with `InvalidFactorSignature` |
-| `"reservoir-v2-lido-1"` | Quote envelope `version` | The operator CLI, the browser parser, and the archived envelope in [`deployments/`](../deployments/) stop agreeing |
+| `"Reservoir v2"` | EIP-712 domain name, in [`lib/ethereum.ts`](../frontend/lib/ethereum.ts), [`scripts/create-lido-quote.mjs`](../frontend/scripts/create-lido-quote.mjs), [`services/quote-signer/server.mjs`](../services/quote-signer/server.mjs), and `EIP712("Reservoir v2", "1")` in [`AsyncClaimSettlement`](../src/claims/AsyncClaimSettlement.sol) | **Every factor signature.** The domain separator is hashed into the quote digest. A rename makes a signer compute a different digest than the deployed kernel verifies, and every fill reverts with `InvalidFactorSignature` |
+| `"reservoir-v2-lido-1"` | Quote envelope `version`, in the same three places | The operator CLI, the quote desk, the browser parser, and the archived envelope in [`deployments/`](../deployments/) stop agreeing |
+
+There are now **three signers** — the browser-side verifier, the operator CLI,
+and the quote-desk service — and one on-chain verifier. Every one of them has to
+spell the domain identically. Add a fourth and it goes in the test below too.
 | `NEXT_PUBLIC_RESERVOIR_KERNEL`, `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` | Build-pinned env vars | Vercel and CI configuration, and the pinned-build check |
 | `"reservoir"`, `"reservoir-indicative+lido-live"`, `"reservoir-indicative+lido-fallback"` | Quote API `recommendedRoute` and `source` enums | The public quote route's response contract |
 | `zkoranges/reservoir-v2-eth-lisbon` | Repository and links | Every published URL, including the ETHGlobal submission |
