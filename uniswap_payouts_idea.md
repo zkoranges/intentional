@@ -1,10 +1,13 @@
 # Reservoir Uniswap payouts — buildable specification
 
-> Version: 0.3.0-buildable (0.2.0-minimal and the complete 0.1.0 specification
-> are in git history)
+> Version: 0.4.0-implementation-ready (0.3.0-buildable, 0.2.0-minimal, and the
+> complete 0.1.0 specification are in git history)
 >
-> Status: Gate 0 API-side passed 2026-07-25; fork-side spike remaining; contract
-> surface frozen below and bound to verified source lines
+> Status: Gate 0 API-side passed 2026-07-25. The fork-side spike (S-1) is the
+> only remaining unknown. Contract surface, quote format, file layout, fixture
+> schema, minimum-pricing policy, and acceptance gates are frozen below and
+> bound to verified source lines. An implementer should need no further design
+> decisions — only S-1's measurements.
 >
 > Target bounty: ETHGlobal Lisbon 2026 — Best Uniswap API Integration ($7,000
 > pool: $4,000 / $2,000 / $1,000)
@@ -87,18 +90,44 @@ Assertions, each of which answers an open question:
 | 3 | USDC arrives at the separate `recipient`, not at the harness | is `recipient` honored end-to-end |
 | 4 | An excessive minimum enforced by the harness reverts the whole call | is the failure path clean |
 | 5 | Post-success harness allowance to the proxy is zero after an explicit clear, and USDC and native balances are zero | can the executor be dustless |
-| 6 | The deadline encoded in `swap.data` is at least `MAX_QUOTE_LIFETIME` ahead of `block.timestamp` at fetch time | can the API deadline sit inside Reservoir's 15-minute lifetime |
-| 7 | The minimum encoded in `swap.data` is recorded and compared against the API-quoted minimum | does the calldata's own minimum match the quoted one |
+| 6 | `vm.warp` forward in 60-second steps, re-running from a fresh fork state each time, until the call reverts; record the largest offset that still succeeds | how much deadline headroom the route actually has |
+| 7 | Re-run at the fetch block after first executing a large adverse swap against the same pools, escalating size until the call reverts; record the output level at which it does | where the route's own internal minimum sits relative to the API-quoted output |
 
-Assertions 6 and 7 are recorded as findings, not hard gates: the executor
-enforces the signed minimum regardless of what the calldata encodes, and a
-short signing deadline (§11.1) is the mitigation if the API deadline is tight.
+**Assertions 6 and 7 are measured empirically, never by decoding.** `swap.data`
+is opaque under selector `0x2894adf9` and its parameter layout is not
+documented. Do not hand-decode it, do not pattern-match amounts inside it, and
+never rewrite it. Both are recorded as findings rather than pass/fail gates:
+the executor enforces the signed minimum regardless of what the calldata
+encodes, and a short signing deadline (§11.1) is the mitigation if headroom is
+tight. Both measurements feed the minimum-pricing policy in §8.1, so S-1 must
+report them numerically.
 
-If assertion 2 fails — the proxy pulls less than the funded amount — the
-executor gains one refund step (return the unspent WETH to the funding account
-before the dust assertion) and the exact-spend rule in §6 is relaxed to
-exact-or-refunded. This is the only anticipated design change and it is
-contained to the executor.
+**RPC requirement.** The spike and the fork proof pin to the block observed at
+route-fetch time. Most non-archive RPCs retain only ~128 blocks of state, so
+either run within minutes of fetching or use the archive-capable endpoint the
+repository already requires for `make test-fork`. A retained fixture older than
+the provider's retention window needs archive access to replay.
+
+### 2.2 Abort criteria
+
+S-1 is also the decision point for whether this leg ships at all. Abandon it,
+and keep the existing WETH-direct product, if either holds:
+
+- **Assertion 1 fails** — the no-Permit2 proxy rejects a contract swapper.
+  There is no workaround that preserves the atomic-settlement property; a
+  Permit2 signature cannot be produced by a contract mid-fill.
+- **Assertion 3 fails** — output cannot be directed to an address other than
+  the swapper. Routing through the executor and re-transferring is possible but
+  breaks the dustless-executor invariant and adds a transfer the seller does not
+  control; it is not worth the added surface at hackathon scale.
+
+Assertion 2 failing is **not** an abort. The proxy pulling less than the funded
+amount adds one refund step to the executor (return the unspent funding asset
+to the funding account before the dust assertion) and relaxes the exact-spend
+rule in §6 to exact-or-refunded. This is the only anticipated design change and
+it is contained to the executor.
+
+Assertions 4–7 failing are findings that adjust §8.1 and §11.1, not blockers.
 
 ## 3. Scope and deployment topology
 
@@ -130,14 +159,35 @@ required.
 src/payouts/UniswapPayoutSettlement.sol
 src/payouts/UniswapPayoutExecutor.sol
 src/payouts/interfaces/IPayoutExecutor.sol
+src/payouts/types/PayoutTypes.sol
 script/DeployUniswapPayoutMainnet.s.sol
-frontend/scripts/create-uniswap-payout-quote.mjs
-frontend/scripts/fetch-uniswap-route.mjs
+script/UniswapPayoutDemo.s.sol            # local/fork demo, mirrors V2Demo.s.sol
+frontend/scripts/fetch-uniswap-route.mjs        # API fetch + §8 validation + fixture write
+frontend/scripts/create-uniswap-payout-quote.mjs  # signs the PayoutQuote
+frontend/scripts/execute-uniswap-payout-quote.mjs # seller-side fill (see note)
+test/mocks/payouts/MockUniswapProxy.sol   # fixed-rate, configurable to underdeliver/lie/revert
+test/fixtures/uniswap-route.json          # retained route, committed (§10.4)
 test/spikes/UniswapPayoutSpike.t.sol
 test/unit/payouts/UniswapPayoutExecutor.t.sol
 test/unit/payouts/UniswapPayoutSettlement.t.sol
 test/integration/UniswapPayoutLido.t.sol
 test/fork/UniswapPayoutMainnet.t.sol
+```
+
+`execute-uniswap-payout-quote.mjs` is a required deliverable, not an optional
+one: `frontend/scripts/execute-lido-quote.mjs:30` hardcodes the v2 `fill(...)`
+ABI string, and the payout kernel's `fill` takes two extra quote fields plus a
+`payoutData` argument. The existing script cannot call the new kernel. Copy it
+and replace the ABI string, the envelope parsing, and the settled-event decode;
+keep its approval flow, simulation-before-send, and the 50 % gas cushion at
+`:167` unchanged.
+
+New `Makefile` targets, mirroring the existing `demo-aqua-intent` pattern:
+
+```make
+fetch-uniswap-route:   # requires UNISWAP_API_KEY; writes test/fixtures/uniswap-route.json
+demo-uniswap-payout:   # disposable fork at the fixture block, full four-act demo
+test-payout-fork:      # forge test --match-path test/fork/UniswapPayoutMainnet.t.sol
 ```
 
 ### 3.3 Kernel bindings
@@ -391,6 +441,24 @@ already asserted it.
 Any failure reverts everything, including the acquired claim and the consumed
 nonce.
 
+**Implementation notes.**
+
+- `payoutBefore` must be recorded **after** claim acquisition and **before**
+  `materializeAndPay`. Recording it earlier is also correct but wastes an SLOAD
+  on the revert paths; recording it after the executor call is a bug.
+- `fill()` gains three locals and one calldata argument on top of an already
+  wide frame. `foundry.toml` sets `via_ir = true`, which resolves ordinary
+  stack pressure — but if the IR pipeline still complains, extract quote
+  validation into a private function rather than reordering the payment branch.
+- The `ClaimSettled` event signature **changes**, so its topic0 changes. Every
+  consumer that decodes it by ABI — `execute-lido-quote.mjs:175-180`, the
+  frontend receipt verification, and the fork-proof assertions — needs the new
+  ABI. Do not assume the v2 decode path works against the payout kernel.
+- Gas: the fill now contains a full Uniswap route. Record the measured fill gas
+  in the fork proof and, if §11.2 is taken, feed it into
+  `scripts/check-gas-budget.sh` before any mainnet broadcast. The v2 fill's
+  budget figure does not cover this path.
+
 Invariants, unchanged in spirit from v2:
 
 - payout if and only if complete claim acquisition, same transaction;
@@ -470,6 +538,50 @@ nonzero.
 
 The exact `/quote` response body is retained byte-for-byte as a string; its
 `keccak256` is `apiQuoteHash`. Both request IDs are retained in the envelope.
+
+### 8.1 Setting `minimumPayoutAmount`
+
+There are two minimums in play and getting their order wrong is the most
+likely cause of a demo failing in a way nobody can explain on stage:
+
+1. the route's **internal** minimum, encoded inside `swap.data` and derived
+   from the `slippageTolerance` sent to the API; and
+2. our **signed** `minimumPayoutAmount`, enforced by the executor and re-checked
+   by the kernel against a measured balance delta.
+
+Policy: **the route's internal minimum binds first in normal operation; ours is
+a backstop.** Set
+
+```text
+minimumPayoutAmount = apiQuotedOut × (10_000 − SIGNED_SLIPPAGE_BPS) / 10_000
+SIGNED_SLIPPAGE_BPS = slippageTolerance in bps + 25   (default: 50 + 25 = 75)
+```
+
+so the signed minimum sits slightly *looser* than the calldata's own. The
+consequences are deliberate:
+
+- **Normal fill** — the route delivers at or above its internal minimum, which
+  is above ours, so our check passes and price improvement flows to the seller.
+- **Degraded route** — Uniswap's own check reverts first, attributing the
+  failure to the route rather than surfacing an ambiguous Reservoir error.
+- **Router misbehavior or an unexpected transfer fee** — the route reports
+  success but the seller's *measured* delta comes in low, and our check catches
+  what Uniswap's cannot. This is the case the backstop exists for.
+
+Set `SIGNED_SLIPPAGE_BPS` from S-1 assertion 7 once the route's real internal
+minimum is measured; the +25 bps is a placeholder cushion until then.
+
+The forced-failure demo (§13 act 4) deliberately inverts this: sign a minimum
+*above* `apiQuotedOut` so the route succeeds, delivers, and **our**
+`InsufficientPayout` is the revert the audience sees. That is the only case
+where the signed minimum should exceed the quoted output.
+
+**Decimals.** USDC has 6 decimals. Every other amount in this repository is
+18-decimal wei, including `paymentAmount` on the same struct.
+`minimumPayoutAmount` is in the payout asset's own units — the CLI must not
+route it through `parseEther`, and the fork proof should assert an
+order-of-magnitude sanity bound so a decimals error fails loudly rather than
+signing a minimum a trillion times too small.
 
 ## 9. Threat model delta
 

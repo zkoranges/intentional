@@ -9,6 +9,7 @@ evm_version = "cancun"
 optimizer = true
 optimizer_runs = 700
 via_ir = true
+fs_permissions = [{ access = "read", path = "./test/spikes/fixtures" }]
 
 [profile.ci]
 solc_version = "0.8.30"
