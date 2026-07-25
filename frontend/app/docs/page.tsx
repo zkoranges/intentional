@@ -17,6 +17,375 @@ const SECTIONS = [
   ["limits", "Limits"],
 ] as const;
 
+const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
+const SANS =
+  "ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif";
+
+const PARTY_FILL = "rgba(139, 92, 246, 0.07)";
+const PARTY_STROKE = "rgba(139, 92, 246, 0.24)";
+const BOX_FILL = "#0e0e0f";
+const BOX_STROKE = "rgba(255, 255, 255, 0.1)";
+const FLOW = "#8b5cf6";
+const TITLE_INK = "#e2e2e5";
+const MICRO_INK = "#6e6e75";
+const LABEL_INK = "#8e8e95";
+
+type NodeProps = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  title: string;
+  sub: string;
+  party?: boolean;
+  dashed?: boolean;
+};
+
+function FlowNode({ x, y, w, h, title, sub, party, dashed }: NodeProps) {
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={w}
+        height={h}
+        rx={11}
+        fill={party ? PARTY_FILL : BOX_FILL}
+        stroke={party ? PARTY_STROKE : BOX_STROKE}
+        strokeDasharray={dashed ? "4 4" : undefined}
+      />
+      <text
+        x={cx}
+        y={cy - 3}
+        textAnchor="middle"
+        fontFamily={MONO}
+        fontSize={11}
+        fontWeight={600}
+        fill={TITLE_INK}
+      >
+        {title}
+      </text>
+      <text
+        x={cx}
+        y={cy + 12}
+        textAnchor="middle"
+        fontFamily={SANS}
+        fontSize={9}
+        fontWeight={700}
+        letterSpacing="0.09em"
+        fill={MICRO_INK}
+      >
+        {sub.toUpperCase()}
+      </text>
+    </g>
+  );
+}
+
+function FlowLabel({
+  x,
+  y,
+  step,
+  text,
+  note,
+}: {
+  x: number;
+  y: number;
+  step: string;
+  text: string;
+  note: string;
+}) {
+  return (
+    <g>
+      <text x={x} y={y} textAnchor="middle" fontFamily={SANS} fontSize={10}>
+        <tspan fill={FLOW} fontWeight={700}>
+          {step}
+        </tspan>
+        <tspan fill={LABEL_INK}> {text}</tspan>
+      </text>
+      <text
+        x={x}
+        y={y + 26}
+        textAnchor="middle"
+        fontFamily={SANS}
+        fontSize={9}
+        fill={MICRO_INK}
+      >
+        {note}
+      </text>
+    </g>
+  );
+}
+
+/**
+ * The claim travels right, the money travels left, and the border is the
+ * transaction: everything inside it commits together. Exactly one leg leaves
+ * that border, because the factor's return is the part that has to wait.
+ */
+function FundsFlowDiagram() {
+  return (
+    <figure className="docsFigure">
+      <svg
+        viewBox="0 0 880 344"
+        role="img"
+        aria-labelledby="fundsFlowTitle fundsFlowDesc"
+        className="docsDiagram"
+      >
+        <title id="fundsFlowTitle">Funds flow of one Lido factoring settlement</title>
+        <desc id="fundsFlowDesc">
+          Inside a single transaction: the seller sends stETH to the Lido
+          adapter, the adapter sends the measured amount to the Lido withdrawal
+          queue, and the queue mints the withdrawal claim directly to the
+          factor. In the opposite direction, the Aave StataWETH vault releases
+          only the exact shortfall to the funding account, which pays the exact
+          WETH amount to the seller. Days later, outside the transaction, the
+          queue pays the factor ETH at par.
+        </desc>
+
+        <defs>
+          <marker
+            id="flowArrow"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 1 L 9 5 L 0 9 z" fill={FLOW} />
+          </marker>
+          <marker
+            id="waitArrow"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 1 L 9 5 L 0 9 z" fill="rgba(139, 92, 246, 0.5)" />
+          </marker>
+        </defs>
+
+        <text
+          x={20}
+          y={44}
+          fontFamily={SANS}
+          fontSize={9}
+          fontWeight={750}
+          letterSpacing="0.12em"
+          fill="#ac91f7"
+        >
+          ONE TRANSACTION · ALL OF IT OR NONE OF IT
+        </text>
+        <rect
+          x={12}
+          y={58}
+          width={856}
+          height={196}
+          rx={18}
+          fill="rgba(139, 92, 246, 0.03)"
+          stroke="rgba(139, 92, 246, 0.3)"
+        />
+
+        <FlowNode x={24} y={84} w={112} h={144} title="Seller" sub="holds stETH" party />
+        <FlowNode x={224} y={84} w={152} h={52} title="Lido adapter" sub="measures" />
+        <FlowNode x={464} y={84} w={152} h={52} title="Lido queue" sub="canonical" />
+        <FlowNode x={704} y={84} w={112} h={144} title="Factor" sub="holds claim" party />
+        <FlowNode x={224} y={176} w={152} h={52} title="Funding account" sub="pays" />
+        <FlowNode x={464} y={176} w={124} h={52} title="Aave StataWETH" sub="canonical" />
+
+        <g stroke={FLOW} strokeWidth={1.25} markerEnd="url(#flowArrow)" fill="none">
+          <path d="M 136 110 H 220" />
+          <path d="M 376 110 H 460" />
+          <path d="M 616 110 H 700" />
+          <path d="M 464 202 H 380" />
+          <path d="M 224 202 H 140" />
+        </g>
+
+        <FlowLabel x={178} y={101} step="1" text="stETH" note="measured delta" />
+        <FlowLabel x={420} y={101} step="2" text="stETH" note="exact measured" />
+        <FlowLabel x={660} y={101} step="3" text="unstETH" note="minted to factor" />
+        <FlowLabel x={422} y={193} step="4" text="WETH" note="exact shortfall" />
+        <FlowLabel x={182} y={193} step="5" text="WETH" note="exact payment" />
+
+        <path
+          d="M 602 136 V 300 H 696"
+          stroke="rgba(139, 92, 246, 0.5)"
+          strokeWidth={1.25}
+          strokeDasharray="5 5"
+          fill="none"
+          markerEnd="url(#waitArrow)"
+        />
+        <text
+          x={584}
+          y={272}
+          textAnchor="end"
+          fontFamily={SANS}
+          fontSize={9}
+          fill={MICRO_INK}
+        >
+          <tspan fill={FLOW} fontWeight={700}>
+            6
+          </tspan>
+          <tspan> days later, when the queue finalizes</tspan>
+        </text>
+        <FlowNode
+          x={700}
+          y={278}
+          w={160}
+          h={44}
+          title="ETH at par"
+          sub="factor collects"
+          dashed
+        />
+      </svg>
+      <figcaption>
+        The claim moves right, the money moves left, and the outline is the
+        transaction. Only the sixth leg happens outside it — that wait is what
+        the discount pays for.
+      </figcaption>
+    </figure>
+  );
+}
+
+/**
+ * The economic argument in one picture: standby capital is the cost of being
+ * ready, so the reserve stays deposited and only the exact payment is cut out
+ * of it.
+ */
+function ReserveDiagram() {
+  const barX = 210;
+  const barW = 460;
+  const rows = [
+    { y: 40, label: "Before", note: "reserve deposited", w: barW, ann: "idle balance: zero" },
+    { y: 108, label: "During", note: "one fill settles", w: barW, ann: "exact amount withdrawn" },
+    { y: 176, label: "After", note: "fill complete", w: barW - 80, ann: "remainder keeps earning" },
+  ];
+
+  return (
+    <figure className="docsFigure">
+      <svg
+        viewBox="0 0 880 232"
+        role="img"
+        aria-labelledby="reserveTitle reserveDesc"
+        className="docsDiagram"
+      >
+        <title id="reserveTitle">What a fill takes out of the reserve</title>
+        <desc id="reserveDesc">
+          Before a fill the whole reserve is deposited in the Aave vault and the
+          idle balance is zero. During a fill only the exact payment is
+          withdrawn. After a fill the remainder is still deposited and still
+          earning.
+        </desc>
+
+        {rows.map((row) => (
+          <g key={row.label}>
+            <text
+              x={190}
+              y={row.y + 14}
+              textAnchor="end"
+              fontFamily={SANS}
+              fontSize={10}
+              fontWeight={750}
+              letterSpacing="0.1em"
+              fill={TITLE_INK}
+            >
+              {row.label.toUpperCase()}
+            </text>
+            <text
+              x={190}
+              y={row.y + 28}
+              textAnchor="end"
+              fontFamily={SANS}
+              fontSize={9}
+              fill={MICRO_INK}
+            >
+              {row.note}
+            </text>
+            <rect
+              x={barX}
+              y={row.y}
+              width={row.w}
+              height={30}
+              rx={7}
+              fill="rgba(139, 92, 246, 0.14)"
+              stroke="rgba(139, 92, 246, 0.3)"
+            />
+            <text
+              x={690}
+              y={row.y + 19}
+              fontFamily={SANS}
+              fontSize={9}
+              fill={MICRO_INK}
+            >
+              {row.ann}
+            </text>
+          </g>
+        ))}
+
+        <text
+          x={barX + 190}
+          y={59}
+          textAnchor="middle"
+          fontFamily={MONO}
+          fontSize={10}
+          fill="#b9a6f5"
+        >
+          reserve earning in Aave StataWETH
+        </text>
+
+        <rect
+          x={barX + barW - 80}
+          y={108}
+          width={80}
+          height={30}
+          rx={7}
+          fill="rgba(139, 92, 246, 0.55)"
+          stroke="rgba(139, 92, 246, 0.75)"
+        />
+        <text
+          x={barX + (barW - 80) / 2}
+          y={127}
+          textAnchor="middle"
+          fontFamily={MONO}
+          fontSize={10}
+          fill="#b9a6f5"
+        >
+          still earning
+        </text>
+        <text
+          x={barX + barW - 40}
+          y={127}
+          textAnchor="middle"
+          fontFamily={MONO}
+          fontSize={9}
+          fill="#f4f4f4"
+        >
+          payment
+        </text>
+
+        <text
+          x={barX + (barW - 80) / 2}
+          y={195}
+          textAnchor="middle"
+          fontFamily={MONO}
+          fontSize={10}
+          fill="#b9a6f5"
+        >
+          reserve, less the payment
+        </text>
+      </svg>
+      <figcaption>
+        The factor is idle on most days. Nothing sits in a wallet waiting: the
+        reserve stays deposited, and a fill cuts out the exact payment and
+        nothing more.
+      </figcaption>
+    </figure>
+  );
+}
+
 export default function DocsPage() {
   return (
     <div className="docsPage">
@@ -171,6 +540,9 @@ export default function DocsPage() {
               </li>
             </ol>
 
+            <h3>Where the tokens actually go</h3>
+            <FundsFlowDiagram />
+
             <h3>Two kinds of claim</h3>
             <div className="docsCardGrid">
               <article>
@@ -209,6 +581,7 @@ complete value    → measured`}</pre>
               balance can be zero. After a fill, only the exact payment has
               left and the remainder keeps earning.
             </p>
+            <ReserveDiagram />
           </section>
 
           <section id="factor">
