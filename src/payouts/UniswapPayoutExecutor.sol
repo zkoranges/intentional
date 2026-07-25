@@ -12,8 +12,10 @@ import { PayoutTypes } from "./types/PayoutTypes.sol";
 ///         delivers the quote's payout asset to the recipient.
 /// @dev No arbitrary targets, no native value, no rescue methods, no calldata
 ///      rewriting, no owner, and no payable entry point — a contract that
-///      cannot receive native ETH cannot hold native dust. A griefed executor
-///      is replaced, not patched.
+///      cannot receive native ETH cannot hold native dust. ERC-20 donations
+///      are inert: every balance check measures against the pre-fill
+///      baseline, so donated funds can neither block a fill nor be captured
+///      by one — they are carried through untouched.
 contract UniswapPayoutExecutor is IPayoutExecutor {
     using SafeERC20 for IERC20;
 
@@ -23,8 +25,7 @@ contract UniswapPayoutExecutor is IPayoutExecutor {
     error InvalidSelector();
     error OnlySettlement(address caller);
     error InvalidPayoutAsset(address supplied);
-    error UnexpectedEntryFunding(uint256 balance, uint256 expected);
-    error UnexpectedEntryPayout(uint256 balance);
+    error InsufficientEntryFunding(uint256 balance, uint256 required);
     error PayoutCalldataTooShort(uint256 length);
     error PayoutSelectorMismatch(bytes4 supplied, bytes4 expected);
     error ProxyCallFailed();
@@ -73,19 +74,26 @@ contract UniswapPayoutExecutor is IPayoutExecutor {
             revert OnlySettlement(msg.sender);
         }
         // The funding asset settles directly through the v2 kernel; a payout
-        // in the funding asset would break the entry/exit dust accounting.
+        // in the funding asset would break the entry/exit baseline accounting.
         if (address(payoutAsset) == address(0) || address(payoutAsset) == fundingAsset) {
             revert InvalidPayoutAsset(address(payoutAsset));
         }
 
+        // Only a real shortfall reverts. Anything above the funded amount is
+        // a donation: inert, unspendable (the approval below is exact), and
+        // carried through untouched — never a revert reason.
         uint256 entryFunding = IERC20(fundingAsset).balanceOf(address(this));
-        if (entryFunding != fundingAmount) {
-            revert UnexpectedEntryFunding(entryFunding, fundingAmount);
+        if (entryFunding < fundingAmount) {
+            revert InsufficientEntryFunding(entryFunding, fundingAmount);
         }
-        uint256 entryPayout = payoutAsset.balanceOf(address(this));
-        if (entryPayout != 0) {
-            revert UnexpectedEntryPayout(entryPayout);
+        uint256 fundingBaseline;
+        unchecked {
+            fundingBaseline = entryFunding - fundingAmount;
         }
+        // Captured BEFORE approving or executing the route: the exit check
+        // proves the fill left no payout residue on top of what was already
+        // here when it started.
+        uint256 payoutBaseline = payoutAsset.balanceOf(address(this));
 
         PayoutTypes.UniswapPayoutData memory data = abi.decode(payoutData, (PayoutTypes.UniswapPayoutData));
         if (data.callData.length < 4) {
@@ -116,9 +124,11 @@ contract UniswapPayoutExecutor is IPayoutExecutor {
             revert InsufficientDelivery(delivered, minimumPayoutAmount);
         }
 
+        // Exactly the funded amount left and no payout stuck here: exit
+        // balances must equal the entry baselines, donations included.
         uint256 exitFunding = IERC20(fundingAsset).balanceOf(address(this));
         uint256 exitPayout = payoutAsset.balanceOf(address(this));
-        if (exitFunding != 0 || exitPayout != 0) {
+        if (exitFunding != fundingBaseline || exitPayout != payoutBaseline) {
             revert ExitResidue(exitFunding, exitPayout);
         }
     }
