@@ -1,0 +1,104 @@
+# Naming: Impatience and Reservoir
+
+Two names, on purpose.
+
+**Impatience** is the product. It is what a visitor sees, what the domain says,
+and the voice everything user-facing is written in.
+
+**Reservoir** is the protocol — the settlement kernel, its adapters, and the
+funding account. It is a technical term. It belongs in code, in contract and
+protocol documentation, in wire formats, and in attribution.
+
+Neither name is a rename of the other. A person selling a withdrawal claim is
+using Impatience; the thing that settles it is Reservoir. Keeping them separate
+lets the app be marketed freely while the protocol keeps a neutral identity that
+another front end could build on — the same shape as the SwapVM and Aqua
+attribution this repository already carries.
+
+## The rule
+
+| Surface | Name | Why |
+|---|---|---|
+| Page titles, meta descriptions, social cards | **Impatience** | This is the product a visitor found |
+| Headings, body copy, button labels | **Impatience** | Product voice |
+| Status messages and errors shown in the app | **neither, by default** | Errors should name what the person controls, not the system underneath |
+| Footer attribution | **Reservoir** | "Powered by Reservoir", deliberate, like "Powered by SwapVM" |
+| Protocol documentation (`/docs`) | **Reservoir** | It genuinely documents the protocol |
+| Contracts, specs, threat model, this repository | **Reservoir** | Technical register throughout |
+| Code identifiers, env vars, API enums, wire formats | **Reservoir** | Internal; renaming buys nothing and breaks things |
+
+The rule for user-facing failure text is worth stating on its own, because it is
+the one most easily broken: **a person who hits an error should not have to learn
+a second product name to understand it.** "Firm quotes are disabled while Lido
+bunker mode is active" tells them what happened. Naming the settlement engine in
+that sentence adds nothing they can act on.
+
+## Frozen — never rebrand these
+
+Some Reservoir strings are load-bearing. Changing them is not a rename; it is a
+breaking change.
+
+| String | Where | What breaks if changed |
+|---|---|---|
+| `"Reservoir v2"` | EIP-712 domain name, in [`lib/ethereum.ts`](../frontend/lib/ethereum.ts), [`scripts/create-lido-quote.mjs`](../frontend/scripts/create-lido-quote.mjs), and `EIP712("Reservoir v2", "1")` in [`AsyncClaimSettlement`](../src/claims/AsyncClaimSettlement.sol) | **Every factor signature.** The domain separator is hashed into the quote digest. A rename makes the frontend compute a different digest than the deployed kernel verifies, and every fill reverts with `InvalidFactorSignature` |
+| `"reservoir-v2-lido-1"` | Quote envelope `version` | The operator CLI, the browser parser, and the archived envelope in [`deployments/`](../deployments/) stop agreeing |
+| `NEXT_PUBLIC_RESERVOIR_KERNEL`, `NEXT_PUBLIC_RESERVOIR_LIDO_ADAPTER` | Build-pinned env vars | Vercel and CI configuration, and the pinned-build check |
+| `"reservoir"`, `"reservoir-indicative+lido-live"`, `"reservoir-indicative+lido-fallback"` | Quote API `recommendedRoute` and `source` enums | The public quote route's response contract |
+| `zkoranges/reservoir-v2-eth-lisbon` | Repository and links | Every published URL, including the ETHGlobal submission |
+
+The EIP-712 domain is the dangerous one. It reads like display text and is not.
+
+## What the scan found
+
+65 references to "Reservoir" across 10 frontend source files, as of the
+2026-07-25 audit:
+
+| File | Refs | Kind |
+|---|---:|---|
+| `lib/ethereum.ts` | 19 | identifiers, EIP-712 domain, envelope version, 4 user-facing errors |
+| `app/page.tsx` | 16 | imported identifiers, repo URL, 1 footer attribution |
+| `app/docs/page.tsx` | 7 | protocol documentation prose — correct usage |
+| `lib/lido-quote.ts` | 7 | API enums and field names |
+| `tests/rendered-html.test.mjs` | 6 | assertions on the above |
+| `app/api/quote/lido/indicative/route.ts` | 4 | API enums |
+| `scripts/create-lido-quote.mjs` | 2 | EIP-712 domain, envelope version |
+| `tests/disconnected-quote.test.mjs` | 2 | assertions on API enums |
+| `scripts/execute-lido-quote.mjs` | 1 | operator-only error text |
+| `worker/index.ts` | 1 | source comment |
+
+The split is already respected almost everywhere. Marketing metadata in
+[`app/layout.tsx`](../frontend/app/layout.tsx) is Impatience throughout, the
+wordmark is Impatience, and in-app copy that addresses the user by name already
+says things like "Impatience verifies its amount, signature, contracts, expiry".
+
+### The exception, and it is deliberate
+
+`Powered by Reservoir` appears in the footer of both the app and the docs, and
+is asserted by
+[`tests/rendered-html.test.mjs`](../frontend/tests/rendered-html.test.mjs). That
+is attribution, not a product name. It stays.
+
+### What violated the rule
+
+Four thrown `Error` messages in `lib/ethereum.ts` named the protocol in text
+that reaches the user. `errorMessage()` in `app/page.tsx` passes `error.message`
+straight into the status line, so these were product copy without being written
+like it:
+
+| Was | Now |
+|---|---|
+| "Reservoir fills are disabled until the reviewed deployment is pinned" | "Firm quotes are disabled until the reviewed deployment is pinned" |
+| "The quote does not use the reviewed Reservoir deployment" | "This quote does not use the reviewed deployment" |
+| "Reservoir firm quotes are disabled while Lido bunker mode is active" | "Firm quotes are disabled while Lido bunker mode is active" |
+| "The Reservoir transaction mined but reverted" | "The settlement transaction mined but reverted" |
+
+Each drops the name rather than swapping in "Impatience", because naming either
+system tells the reader nothing they can act on.
+
+## Enforcement
+
+[`frontend/tests/naming.test.mjs`](../frontend/tests/naming.test.mjs) runs with
+`npm test` and holds the line in both directions: it fails if the frozen strings
+drift, and it fails if the protocol name reappears in marketing metadata or in
+user-facing failure text. A test rather than a convention, because this is the
+kind of rule that erodes quietly.
