@@ -269,7 +269,14 @@ contract UniswapPayoutSettlement is EIP712, ReentrancyGuardTransient {
 
     function _payOut(PayoutTypes.Quote calldata quote, bytes calldata payoutData) private returns (uint256 delivered) {
         IERC20 payoutAsset = IERC20(quote.payoutAsset);
+        IERC20 fundingAsset = IERC20(payoutExecutor.fundingAsset());
         uint256 payoutBefore = payoutAsset.balanceOf(quote.seller);
+        // Executor baselines are snapshotted BEFORE the payment leaves the
+        // funding account: donations already sitting on the executor are
+        // inert and carried through untouched, so the residue check below
+        // compares against these pre-payment balances, never against zero.
+        uint256 executorFundingBaseline = fundingAsset.balanceOf(address(payoutExecutor));
+        uint256 executorPayoutBaseline = payoutAsset.balanceOf(address(payoutExecutor));
 
         uint256 paid = fundingAccount.materializeAndPay(address(payoutExecutor), quote.paymentAmount);
         if (paid != quote.paymentAmount) {
@@ -285,9 +292,12 @@ contract UniswapPayoutSettlement is EIP712, ReentrancyGuardTransient {
         if (delivered < quote.minimumPayoutAmount) {
             revert InsufficientPayout(delivered, quote.minimumPayoutAmount);
         }
+        // Defence in depth over the executor's own exit check: the fill must
+        // leave the executor exactly where it started — no funding retained
+        // or lost beyond the spent amount, no payout residue accumulating.
         if (
-            IERC20(payoutExecutor.fundingAsset()).balanceOf(address(payoutExecutor)) != 0
-                || payoutAsset.balanceOf(address(payoutExecutor)) != 0
+            fundingAsset.balanceOf(address(payoutExecutor)) != executorFundingBaseline
+                || payoutAsset.balanceOf(address(payoutExecutor)) != executorPayoutBaseline
         ) {
             revert PayoutResidue();
         }
