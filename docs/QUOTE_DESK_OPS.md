@@ -87,8 +87,10 @@ the v2 deployment. Therefore:
 - service-side guards (`MAX_QUOTE_WEI`, single-flight, expiry) bound the
   *service*, not the key — they are **no protection** against a key holder
   who signs outside the service;
-- any future desk runs against a **fresh deployment with a fresh key** that
-  never lives on a shared host.
+- any future desk runs against a **fresh deployment with a dedicated key**;
+  for this capped pre-alpha the protected service account on the shared VPS
+  holds that key, so host compromise remains an explicit risk bounded by the
+  `0.01 WETH` reserve and prompt retirement—not eliminated by service guards.
 
 ## Current state — retired, never to be re-armed
 

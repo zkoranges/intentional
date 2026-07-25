@@ -59,8 +59,10 @@ Consequences that are **operating rules, not suggestions**:
 - `MAX_QUOTE_WEI` and the other guards above bound the *service* only. They
   are **no protection** against someone who holds the key and signs outside
   the service — nothing in this service constrains an exposed key.
-- The desk relaunches only against a **fresh deployment with a fresh key**,
-  and that key never lives on a shared host.
+- The desk relaunches only against a **fresh deployment with a dedicated
+  key**. In the capped pre-alpha the protected service account on the shared
+  VPS holds it; host compromise is therefore an explicit residual risk bounded
+  by the `0.01 WETH` reserve and retirement procedure.
 
 The key material was removed from the VPS and the service units were stopped
 and disabled when the deployment was retired.
