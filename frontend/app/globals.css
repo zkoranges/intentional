@@ -94,9 +94,8 @@ a {
   width: min(780px, 48vw);
   height: min(470px, 45svh);
   pointer-events: none;
-  background:
-    linear-gradient(90deg, var(--canvas) 0%, rgba(5, 5, 5, 0) 35%),
-    url("/textures/gavel-impact-line.png") right bottom / contain no-repeat;
+  background: url("/textures/gavel-impact-line-transparent.png") right bottom /
+    contain no-repeat;
   opacity: 0.2;
 }
 
