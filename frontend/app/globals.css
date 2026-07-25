@@ -87,9 +87,9 @@ a {
 }
 
 .gavelBackdrop {
-  position: fixed;
+  position: absolute;
   z-index: 0;
-  bottom: 0;
+  top: max(72px, 55svh);
   right: 0;
   width: min(780px, 48vw);
   height: min(470px, 45svh);

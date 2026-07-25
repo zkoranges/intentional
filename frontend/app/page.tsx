@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   formatEther,
   getAddress,
@@ -195,16 +194,11 @@ export default function Home() {
   const [quoteInput, setQuoteInput] = useState("");
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
-  const [backdropMounted, setBackdropMounted] = useState(false);
   const [activeSection, setActiveSection] =
     useState<NavSection>("markets");
   const [lidoWaitEstimate, setLidoWaitEstimate] =
     useState<LidoWaitEstimate | null>(null);
   const walletMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setBackdropMounted(true);
-  }, []);
 
   const busy = action !== "idle";
   const amount = useMemo(() => {
@@ -710,11 +704,7 @@ export default function Home() {
 
   return (
     <>
-      {backdropMounted &&
-        createPortal(
-          <div className="gavelBackdrop" aria-hidden="true" />,
-          document.body,
-        )}
+      <div className="gavelBackdrop" aria-hidden="true" />
       <header className="appHeader">
         <a className="brand" href="#top" aria-label="Impatience home">
           <strong className="brandWordmark">
