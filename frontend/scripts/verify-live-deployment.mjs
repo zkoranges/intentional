@@ -16,6 +16,9 @@ const CANONICAL = {
   queue: getAddress("0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"),
   stataWeth: getAddress("0x0bfc9d54Fc184518A81162F8fB99c2eACa081202"),
 };
+// v2 allowlists exactly one adapter (the Lido withdrawal adapter). v3 is
+// expected to allowlist a second (existing-unstETH exit) adapter — when that
+// lands this must become 2n or configurable; do not treat 1n as an invariant.
 const EXPECTED_ADAPTER_COUNT = 1n;
 const EXPECTED_NONCE_FLOOR = 0n;
 
@@ -90,12 +93,22 @@ function same(left, right) {
 
 const rpcUrl = required("ETH_RPC_URL");
 const expectedState = required("EXPECTED_RELEASE_STATE");
-const allowedStates = new Set(["paused-unfunded", "funded-paused", "active"]);
+// Lifecycle: paused-unfunded -> funded-paused -> active -> retired-paused
+// -> claim-collected. The last two are terminal retirement states.
+const allowedStates = new Set([
+  "paused-unfunded",
+  "funded-paused",
+  "active",
+  "retired-paused",
+  "claim-collected",
+]);
 if (!allowedStates.has(expectedState)) {
   throw new Error(
-    "EXPECTED_RELEASE_STATE must be paused-unfunded, funded-paused, or active",
+    `EXPECTED_RELEASE_STATE must be one of: ${[...allowedStates].join(", ")}`,
   );
 }
+const retiredStates = new Set(["retired-paused", "claim-collected"]);
+const isRetired = retiredStates.has(expectedState);
 
 const expectedFactor = requiredAddress("FACTOR_ADDRESS");
 const kernel = requiredAddress("KERNEL_ADDRESS");
@@ -109,7 +122,7 @@ const expectedCodeHashes = {
   lidoAdapter: requiredCodeHash("EXPECTED_LIDO_ADAPTER_CODEHASH"),
 };
 const probe =
-  expectedState === "paused-unfunded"
+  expectedState === "paused-unfunded" || isRetired
     ? 1n
     : requiredUint("MIN_CAPACITY_WEI");
 if (probe === 0n) throw new Error("Capacity probe must be nonzero");
@@ -359,6 +372,7 @@ if (
   throw new Error("Reserve, Lido adapter, or canonical vault binding mismatch");
 }
 
+const warnings = [];
 if (expectedState === "paused-unfunded") {
   if (
     !settlementPaused ||
@@ -368,6 +382,38 @@ if (expectedState === "paused-unfunded") {
     vaultShares !== 0n
   ) {
     throw new Error("Deployment is not paused and unfunded");
+  }
+} else if (isRetired) {
+  // Terminal retirement states assert HARD only what the holder of the
+  // exposed factor key cannot cheaply fake from outside: both pausable
+  // contracts paused. (The seal, adapter allowlist, and every binding above
+  // are already hard checks for all states.)
+  //
+  // Balance checks are TOLERANT here. Exact-zero equality would be
+  // donation-griefable: anyone can send 1 wei of WETH or StataWETH to the
+  // funding account and permanently fail this verifier, and clearing that
+  // dust would require the burned factor key. A nonzero residual is
+  // therefore reported as a warning — possible donation dust, not a
+  // live-capital claim — never as a failure.
+  if (!settlementPaused || !fundingPaused) {
+    throw new Error(
+      `Deployment is not fully paused for terminal state ${expectedState}`,
+    );
+  }
+  if (idleWeth !== 0n) {
+    warnings.push(
+      `funding account holds a residual ${idleWeth} wei WETH — possible donation dust; not a live-capital claim`,
+    );
+  }
+  if (vaultShares !== 0n) {
+    warnings.push(
+      `funding account holds ${vaultShares} residual StataWETH shares — possible donation dust; not a live-capital claim`,
+    );
+  }
+  if (capacity !== 0n) {
+    warnings.push(
+      `availableFor(${probe}) reported ${capacity} wei on a retired deployment — possible donation dust; not a live-capital claim`,
+    );
   }
 } else {
   if (
@@ -396,12 +442,17 @@ const reserveNav =
         args: [vaultShares],
       });
 
+for (const warning of warnings) {
+  console.error(`WARNING: ${warning}`);
+}
+
 console.log(
   JSON.stringify(
     {
       ok: true,
       chainId,
       expectedState,
+      warnings,
       factor: expectedFactor,
       kernel,
       fundingAccount: expectedFunding,

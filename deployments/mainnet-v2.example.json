@@ -4,6 +4,13 @@
   "chainId": 1,
   "gitCommit": "<40-character reviewed commit>",
   "releaseState": "paused-unfunded",
+  "releaseStateVocabulary": {
+    "paused-unfunded": "deployed and sealed; both contracts paused, reserve empty",
+    "funded-paused": "reserve funded at the explicit ceiling; settlement still paused",
+    "active": "settlement unpaused; firm quotes are fillable",
+    "retired-paused": "terminal: proof complete, reserve recovered, both contracts paused forever — never re-arm",
+    "claim-collected": "terminal: retired and the outstanding unstETH claim collected after Lido finalization"
+  },
   "factor": "0x0000000000000000000000000000000000000000",
   "contracts": {
     "fundingAccount": {

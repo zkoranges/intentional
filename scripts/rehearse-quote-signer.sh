@@ -11,6 +11,11 @@ set -Eeuo pipefail
 #
 # Required env: ETH_RPC_URL, FACTOR_ADDRESS, FACTOR_PRIVATE_KEY, PRIVATE_KEY.
 # Reads live addresses from deployments/mainnet-v2.json.
+#
+# Retirement guard: this rehearsal changes deployment state on a disposable
+# Anvil fork. Once the manifest reports a terminal releaseState
+# (retired-paused or claim-collected), the run is refused unconditionally.
+# Rehearse only against the fresh deployment manifest prepared for v3.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_RPC_URL="${ETH_RPC_URL:?ETH_RPC_URL is required}"
@@ -48,6 +53,20 @@ manifest() {
     'import fs from "node:fs"; let o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); for (const k of process.argv[2].split(".")) o=o[k]; console.log(o);' \
     "$1" "$2"
 }
+release_state="$(manifest deployments/mainnet-v2.json releaseState)"
+case "${release_state}" in
+  retired-paused | claim-collected)
+    cat >&2 <<RETIRED
+ABORT: deployments/mainnet-v2.json reports releaseState=${release_state}.
+The v2 deployment is permanently retired (immutable factor key exposed) and
+must never be reused. This rehearsal changes deployment state on a disposable
+fork, but it still refuses terminal manifests so stale operational commands
+cannot normalize reuse of the compromised instance. Use the fresh v3 path.
+RETIRED
+    exit 1
+    ;;
+esac
+
 kernel_address="$(manifest deployments/mainnet-v2.json contracts.kernel.address)"
 funding_account="$(manifest deployments/mainnet-v2.json contracts.fundingAccount.address)"
 lido_adapter="$(manifest deployments/mainnet-v2.json contracts.lidoAdapter.address)"

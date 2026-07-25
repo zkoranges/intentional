@@ -38,6 +38,19 @@ manifest() {
     'import fs from "node:fs"; let o=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); for (const k of process.argv[2].split(".")) o=o[k]; console.log(o);' \
     "$1" "$2"
 }
+RELEASE_STATE="$(manifest deployments/mainnet-v2.json releaseState)"
+case "${RELEASE_STATE}" in
+  retired-paused | claim-collected)
+    cat >&2 <<RETIRED
+ABORT: deployments/mainnet-v2.json reports releaseState=${RELEASE_STATE}.
+That deployment is permanently retired — its immutable factor key was exposed
+and it must never be re-armed or quoted against. Deploying the quote desk
+against it would point live infrastructure at a compromised, paused instance.
+Wait for the fresh v3 deployment and point this script at its manifest.
+RETIRED
+    exit 1
+    ;;
+esac
 KERNEL="$(manifest deployments/mainnet-v2.json contracts.kernel.address)"
 LIDO_ADAPTER="$(manifest deployments/mainnet-v2.json contracts.lidoAdapter.address)"
 

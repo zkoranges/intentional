@@ -50,6 +50,21 @@ manifest() {
     "$1" "$2"
 }
 
+release_state="$(manifest deployments/mainnet-v2.json releaseState)"
+case "${release_state}" in
+  retired-paused | claim-collected)
+    cat >&2 <<RETIRED
+ABORT: deployments/mainnet-v2.json reports releaseState=${release_state}.
+The v2 deployment is permanently retired: settlement and funding are paused,
+the reserve was recovered, and the immutable factor key was exposed — it must
+never be re-armed. This rehearsal forks CURRENT mainnet and resumes the live
+deployment, so it would fail mid-run against a retired instance.
+Use the fresh v3 deployment path instead (docs/LIVE_ACTIVATION.md).
+RETIRED
+    exit 1
+    ;;
+esac
+
 kernel_address="$(manifest deployments/mainnet-v2.json contracts.kernel.address)"
 funding_account="$(manifest deployments/mainnet-v2.json contracts.fundingAccount.address)"
 lido_adapter="$(manifest deployments/mainnet-v2.json contracts.lidoAdapter.address)"
