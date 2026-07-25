@@ -399,7 +399,7 @@ export default function DocsPage() {
         </Link>
         <div className="docsHeaderActions">
           <a
-            href="https://github.com/zkoranges/reservoir-v2-eth-lisbon"
+            href="https://github.com/zkoranges/intentional"
             target="_blank"
             rel="noreferrer"
           >
@@ -837,7 +837,7 @@ complete value    → measured`}</pre>
             </div>
             <nav aria-label="Footer navigation">
               <a
-                href="https://github.com/zkoranges/reservoir-v2-eth-lisbon"
+                href="https://github.com/zkoranges/intentional"
                 target="_blank"
                 rel="noreferrer"
               >

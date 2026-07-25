@@ -59,7 +59,7 @@ type MarketStatusResponse = {
   observedAt: string;
 };
 
-const GITHUB_URL = "https://github.com/zkoranges/reservoir-v2-eth-lisbon";
+const GITHUB_URL = "https://github.com/zkoranges/intentional";
 const DOCS_URL = "/docs";
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
 const WALLET_DISCONNECTED_KEY = "intentional.wallet-disconnected";

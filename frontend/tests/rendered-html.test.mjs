@@ -53,7 +53,7 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Claim ETH",
     "Onchain factoring for delayed claims.",
     "Read the docs",
-    "https://github.com/zkoranges/reservoir-v2-eth-lisbon",
+    "https://github.com/zkoranges/intentional",
   ]) {
     assert.match(page, new RegExp(expected));
   }

@@ -1,4 +1,4 @@
-# Reservoir v2 web app
+# Intentional web app
 
 The public Intentional interface is a dark, minimal, non-custodial mainnet
 application. It does not contain a private key, custody funds, or manufacture a

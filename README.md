@@ -1,13 +1,14 @@
-# Reservoir v2
+# Intentional
 
 > **Future protocol cash flow → immediate WETH, atomically.**
 
-[Web app](https://reservoir-v2-eth-lisbon.vercel.app) ·
-[Source](https://github.com/zkoranges/reservoir-v2-eth-lisbon) ·
-[Production fork proof](https://github.com/zkoranges/reservoir-v2-eth-lisbon/actions/runs/30159264327) ·
+[Web app](https://intentional.so) ·
+[Source](https://github.com/zkoranges/intentional) ·
+[Production fork proof](https://github.com/zkoranges/intentional/actions/workflows/production-fork-proof.yml) ·
 [ETHGlobal provenance and track record](docs/ETHGLOBAL_SUBMISSION.md)
 
-Reservoir v2 is a state-contingent settlement engine for asynchronous claims.
+Intentional is an onchain-factoring product powered by the Reservoir v2
+state-contingent settlement engine.
 A seller receives an exact, factor-signed payment if and only if the complete
 quoted claim is irrevocably acquired in the same transaction. The factor's
 standby WETH stays productive in Aave StataWETH until that payment is needed.
