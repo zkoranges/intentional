@@ -1,6 +1,15 @@
 # Mainnet micro-demo — locked objective
 
-> Status: **locked 2026-07-25, revised same day after independent review.**
+> Status: **PROVEN IN PRODUCTION — 2026-07-25.** Both objective proofs exist
+> on Ethereum mainnet:
+> Aqua intent fill `0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37`
+> (block 25611688; 48380478256900 wei wstETH → 57142857142857 wei WETH, output
+> exactly equal to the router quote) and factoring settlement
+> `0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611`
+> (block 25611746; seller paid exactly 0.0049875 WETH, canonical unstETH
+> #130880 minted to the factor). Outstanding: recovery + unstETH claim after
+> Lido finalization (tracked in G-M), router/maker source verification, final
+> judge review.
 > This document is the single source of truth for the production demo. Any
 > change to a frozen parameter must be edited here first, then applied.
 

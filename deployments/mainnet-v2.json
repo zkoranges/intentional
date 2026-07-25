@@ -41,5 +41,20 @@
     "stETH": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
     "lidoWithdrawalQueue": "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"
   },
-  "activationTxHash": "0x1b39d85ed4f3e0c0779470f8a3cc1d742f6c03bf9ae2460ea5299f1056c0e223"
+  "activationTxHash": "0x1b39d85ed4f3e0c0779470f8a3cc1d742f6c03bf9ae2460ea5299f1056c0e223",
+  "factoringFill": {
+    "txHash": "0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611",
+    "blockNumber": 25611746,
+    "seller": "0x528C4E1d59fD4b187461BE9c61C668928C3cf9c3",
+    "requestedStETHWei": "5000000000000000",
+    "paymentWethWei": "4987500000000000",
+    "grossSpreadBps": 25,
+    "aquaProofTx": "0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37",
+    "revertedFirstAttempt": {
+      "txHash": "0xe2b5792d443b30b2d7aa4a4582ed316ff26fe47518c4373d3d1380fefb69984e",
+      "cause": "OutOfGas inside Aave withdraw during exact materialization; fixed with x1.5 gas cushion"
+    },
+    "note": "seller WETH delta exactly equals payment; unstETH minted directly to factor",
+    "unstETHRequestId": "130880"
+  }
 }
