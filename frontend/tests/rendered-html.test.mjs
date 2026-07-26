@@ -536,7 +536,9 @@ test("the quote signer service holds the key and enforces its guards", async () 
 
   assert.match(signer, /timingSafeEqual/);
   assert.match(signer, /MAX_QUOTE_WEI/);
-  assert.match(signer, /SINGLE_FLIGHT/);
+  assert.match(signer, /RESERVE_CAPACITY_RESERVED/);
+  assert.match(signer, /totalLiabilityWei/);
+  assert.match(signer, /verifyQuoteRequestAuthorization/);
   assert.match(signer, /SETTLEMENT_PAUSED/);
   assert.match(signer, /LIDO_BUNKER/);
   assert.match(signer, /INSUFFICIENT_CAPACITY/);

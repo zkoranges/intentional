@@ -38,12 +38,16 @@ export async function POST(request: Request) {
         mode: "originate";
         seller: string;
         requestedStEth: string;
+        authorization: object;
+        authorizationSignature: string;
         replaceNonce?: string;
       }
     | {
         mode: "existing-unsteth";
         seller: string;
         requestId: string;
+        authorization: object;
+        authorizationSignature: string;
         replaceNonce?: string;
       };
 
@@ -53,12 +57,23 @@ export async function POST(request: Request) {
       seller?: unknown;
       requestedStEth?: unknown;
       requestId?: unknown;
+      authorization?: unknown;
+      authorizationSignature?: unknown;
       replaceNonce?: unknown;
     };
     if (typeof body.seller !== "string" || !isAddress(body.seller)) {
       return error("Connect a valid Ethereum wallet", 400);
     }
     seller = body.seller;
+    if (
+      typeof body.authorization !== "object" ||
+      body.authorization === null ||
+      Array.isArray(body.authorization) ||
+      typeof body.authorizationSignature !== "string" ||
+      !/^0x[0-9a-fA-F]{130}$/.test(body.authorizationSignature)
+    ) {
+      return error("Confirm this firm quote request with your wallet", 401);
+    }
     if (
       body.replaceNonce !== undefined &&
       (typeof body.replaceNonce !== "string" ||
@@ -81,6 +96,8 @@ export async function POST(request: Request) {
         mode: "originate",
         seller,
         requestedStEth: body.requestedStEth,
+        authorization: body.authorization,
+        authorizationSignature: body.authorizationSignature,
         ...(body.replaceNonce === undefined
           ? {}
           : { replaceNonce: body.replaceNonce }),
@@ -96,6 +113,8 @@ export async function POST(request: Request) {
         mode: "existing-unsteth",
         seller,
         requestId: body.requestId,
+        authorization: body.authorization,
+        authorizationSignature: body.authorizationSignature,
         ...(body.replaceNonce === undefined
           ? {}
           : { replaceNonce: body.replaceNonce }),
@@ -140,7 +159,7 @@ export async function POST(request: Request) {
   }
 
   if (!upstream.ok) {
-    // Surface the desk's own reason (capacity, paused Lido, single-flight)
+    // Surface the desk's own reason (authorization, capacity, paused Lido)
     // without leaking transport details.
     const upstreamCode =
       typeof payload === "object" &&
@@ -183,6 +202,10 @@ export async function POST(request: Request) {
       typeof (payload as { canReplace?: unknown }).canReplace === "boolean"
         ? (payload as { canReplace: boolean }).canReplace
         : undefined;
+    const responseStatus =
+      upstream.status === 401 && !upstreamCode.includes("QUOTE_AUTH")
+        ? 503
+        : upstream.status;
     return json(
       {
         error: reason,
@@ -191,7 +214,7 @@ export async function POST(request: Request) {
         ...(activeDeadlineUnix === undefined ? {} : { activeDeadlineUnix }),
         ...(canReplace === undefined ? {} : { canReplace }),
       },
-      upstream.status === 401 ? 503 : upstream.status,
+      responseStatus,
     );
   }
 

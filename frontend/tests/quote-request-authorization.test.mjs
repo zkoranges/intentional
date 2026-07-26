@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 
 import { hexToString } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -91,4 +92,25 @@ test("browser-generated existing-unsteth authorization verifies at the signer", 
     nowSeconds: NOW,
   });
   assert.equal(verified.authorization.requestId, "130880");
+});
+
+test("both live quote modes require and forward seller authorization", async () => {
+  const [page, route, server] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/quote/lido/route.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../../services/quote-signer/server.mjs", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.equal(
+    page.match(/await signQuoteRequestAuthorization\(injected/g)?.length,
+    2,
+  );
+  assert.equal(page.match(/\.\.\.signedAuthorization/g)?.length, 2);
+  assert.match(route, /authorizationSignature/);
+  assert.match(route, /authorization: body\.authorization/g);
+  assert.match(server, /await verifyQuoteRequestAuthorization/);
+  assert.match(server, /replayGuard: quoteRequestReplayGuard/);
 });

@@ -8,6 +8,8 @@
 //   * binds 127.0.0.1 only; public exposure is a reverse proxy in front —
 //     a non-loopback HOST is always refused at startup
 //   * shared-secret header, constant-time compared
+//   * every public request carries a short-lived seller signature bound to its
+//     exact mode and amount/claim; public chain data alone cannot reserve funds
 //   * HARD ceiling (MAX_QUOTE_WEI) independent of measured reserve capacity —
 //     a signing key can never authorize more than this per quote
 //   * aggregate reservations: simultaneous wallet quotes are admitted only
@@ -46,6 +48,10 @@ import { mainnet } from "viem/chains";
 
 import { assertBindSafe, assertNoSecretMaterial, verifyDeploymentConfig } from "./guards.mjs";
 import { buildHealthPayload } from "./health.mjs";
+import {
+  QuoteRequestReplayGuard,
+  verifyQuoteRequestAuthorization,
+} from "./request-authorization.mjs";
 import { ReservationStore } from "./reservations.mjs";
 import { SerialExecutor } from "./serial-executor.mjs";
 
@@ -123,6 +129,7 @@ const { refusals: configRefusals } = verifyDeploymentConfig({
 
 const reservations = new ReservationStore(RESERVATIONS_DB);
 const quoteExecutor = new SerialExecutor();
+const quoteRequestReplayGuard = new QuoteRequestReplayGuard();
 
 const kernelAbi = parseAbi([
   "function factorSigner() view returns (address)",
@@ -994,6 +1001,26 @@ const server = createServer(async (request, response) => {
   }
 
   try {
+    if (configRefusals.length > 0) {
+      throw quoteError(
+        "this deployment is refused; see /health readiness for the reasons",
+        503,
+        "REFUSED_DEPLOYMENT",
+      );
+    }
+    await verifyQuoteRequestAuthorization({
+      authorization: body.authorization,
+      authorizationSignature: body.authorizationSignature,
+      request: {
+        seller: body.seller,
+        mode: body.mode,
+        ...(body.mode === "originate"
+          ? { requestedStEth: body.requestedStEth }
+          : { requestId: body.requestId }),
+      },
+      nowSeconds: Math.floor(Date.now() / 1_000),
+      replayGuard: quoteRequestReplayGuard,
+    });
     // Serialize the complete sweep -> validate -> sign -> durable-reserve
     // sequence. Node may accept several requests concurrently; without this
     // critical section, two requests could both observe an empty reservation

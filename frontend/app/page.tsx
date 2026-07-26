@@ -41,6 +41,10 @@ import {
   type ReservoirQuoteCheck,
   type WithdrawalStatus,
 } from "../lib/ethereum";
+import {
+  signQuoteRequestAuthorization,
+  type SignedQuoteRequestAuthorization,
+} from "../lib/quote-request-authorization";
 type ActionState = "idle" | "connecting" | "reading" | "signing" | "mining";
 type ExitMode = "sell" | "queue";
 type SourceAsset = "steth" | "unsteth";
@@ -1357,6 +1361,31 @@ export default function Home() {
     const requestedAccount = account;
     const requestedAmount = amount;
     const replacing = replaceNonce !== undefined;
+    beginPending(
+      "Confirm quote request…",
+      `Sign a request for a ${formatMainnetAmount(requestedAmount)} stETH firm offer. This does not move assets.`,
+    );
+    let signedAuthorization: SignedQuoteRequestAuthorization;
+    try {
+      signedAuthorization = await signQuoteRequestAuthorization(injected, {
+        mode: "originate",
+        seller: requestedAccount,
+        requestedStEth: requestedAmount,
+      });
+      const currentAccounts = await injected.request({ method: "eth_accounts" });
+      if (
+        !Array.isArray(currentAccounts) ||
+        typeof currentAccounts[0] !== "string" ||
+        getAddress(currentAccounts[0]) !== requestedAccount
+      ) {
+        throw new Error("The connected wallet changed while requesting the offer");
+      }
+    } catch (error) {
+      setPending(null);
+      setAction("idle");
+      setStatus(errorMessage(error));
+      return;
+    }
     const request = beginQuoteRequest(
       `originate:${requestedAccount.toLowerCase()}:${requestedAmount}`,
       {
@@ -1374,6 +1403,7 @@ export default function Home() {
           mode: "originate",
           seller: requestedAccount,
           requestedStEth: requestedAmount.toString(),
+          ...signedAuthorization,
           ...(replaceNonce === undefined ? {} : { replaceNonce }),
         }),
         signal: request.controller.signal,
@@ -1460,6 +1490,32 @@ export default function Home() {
     const requestedAccount = account;
     const replacing = replaceNonce !== undefined;
     setSelectedClaimId(position.requestId);
+    beginPending(
+      "Confirm quote request…",
+      `Sign a request for a firm offer on unstETH #${position.requestId}. This does not move the claim.`,
+      claimScope(position.requestId),
+    );
+    let signedAuthorization: SignedQuoteRequestAuthorization;
+    try {
+      signedAuthorization = await signQuoteRequestAuthorization(injected, {
+        mode: "existing-unsteth",
+        seller: requestedAccount,
+        requestId: position.requestId,
+      });
+      const currentAccounts = await injected.request({ method: "eth_accounts" });
+      if (
+        !Array.isArray(currentAccounts) ||
+        typeof currentAccounts[0] !== "string" ||
+        getAddress(currentAccounts[0]) !== requestedAccount
+      ) {
+        throw new Error("The connected wallet changed while requesting the offer");
+      }
+    } catch (error) {
+      setPending(null);
+      setAction("idle");
+      setStatus(errorMessage(error));
+      return;
+    }
     const request = beginQuoteRequest(
       `existing:${requestedAccount.toLowerCase()}:${position.requestId}`,
       {
@@ -1477,6 +1533,7 @@ export default function Home() {
           mode: "existing-unsteth",
           seller: requestedAccount,
           requestId: position.requestId.toString(),
+          ...signedAuthorization,
           ...(replaceNonce === undefined ? {} : { replaceNonce }),
         }),
         signal: request.controller.signal,
