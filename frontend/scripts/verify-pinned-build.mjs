@@ -18,7 +18,7 @@ assert.match(pageBundle, /Sell now/);
 assert.match(pageBundle, /Wait & claim/);
 assert.match(pageBundle, /Asset to sell/);
 assert.match(pageBundle, /Owned unstETH claim/);
-assert.match(pageBundle, /0\.0005 to 0\.005 stETH/);
+assert.match(pageBundle, /Firm offer size is determined by live reserve capacity/);
 assert.match(pageBundle, /Get firm offer/);
 assert.match(pageBundle, /Approve unstETH/);
 assert.match(pageBundle, /Sell for/);

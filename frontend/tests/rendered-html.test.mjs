@@ -46,8 +46,8 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Get firm offer",
     "Getting firm offer…",
     "Signed firm offer",
-    "Pre-alpha firm offers are capped to claims from 0.0005 to 0.005 stETH.",
-    "Claim outside 0.0005–0.005 stETH pilot",
+    "Firm offer size is determined by live reserve capacity.",
+    "Claim outside Lido request bounds",
     "Approve unstETH",
     "Sell for",
     "not pinned in this app build",
@@ -150,7 +150,7 @@ test("liquid stETH requests a real originate quote and verifies it independently
   assert.match(page, /fillQuote/);
 });
 
-test("the pre-alpha pilot supports the real 0.005-stETH claim but no larger quote", async () => {
+test("firm quotes use canonical Lido bounds and live reserve capacity", async () => {
   const [page, ethereum, quoteRoute] = await Promise.all([
     readFile(new URL("app/page.tsx", projectRoot), "utf8"),
     readFile(new URL("lib/ethereum.ts", projectRoot), "utf8"),
@@ -159,19 +159,20 @@ test("the pre-alpha pilot supports the real 0.005-stETH claim but no larger quot
 
   assert.match(
     ethereum,
-    /MAX_LIVE_LIDO_QUOTE = 5_000_000_000_000_000n;\s*\/\/ 0\.005 stETH/,
+    /MIN_LIDO_REQUEST = 100n/,
   );
   assert.match(
     ethereum,
-    /requestedStEth > MAX_LIVE_LIDO_QUOTE/,
+    /MAX_LIDO_REQUEST = 1_000n \* 10n \*\* 18n/,
   );
-  assert.match(quoteRoute, /LIVE_QUOTE_RANGE = "0\.0005 to 0\.005 stETH"/);
   assert.match(
     quoteRoute,
-    /amount < MIN_LIVE_LIDO_QUOTE \|\| amount > MAX_LIVE_LIDO_QUOTE/,
+    /amount < MIN_LIDO_REQUEST \|\| amount > MAX_LIDO_REQUEST/,
   );
-  assert.match(page, /0\.0005 to 0\.005 stETH/);
-  assert.match(page, /outside 0\.0005–0\.005 stETH pilot/);
+  assert.match(page, /firmPaymentFor\(selectedClaim\.amountOfStETH\) <= marketCapacity/);
+  assert.match(page, /Firm offer size is determined by live reserve capacity\./);
+  assert.match(page, /Claim outside Lido request bounds/);
+  assert.doesNotMatch(page, /0\.0005 to 0\.005 stETH|pre-alpha pilot/i);
 });
 
 test("market queue times distinguish live estimates from typical values", async () => {
@@ -467,9 +468,9 @@ test("the quote proxy route is keyless, validating, and fails closed", async () 
   assert.match(route, /AbortSignal\.timeout/);
   assert.match(route, /force-dynamic/);
   assert.match(route, /no-store, max-age=0/);
-  assert.match(route, /MIN_LIVE_LIDO_QUOTE/);
-  assert.match(route, /MAX_LIVE_LIDO_QUOTE/);
-  assert.match(route, /Pre-alpha firm quotes support/);
+  assert.match(route, /MIN_LIDO_REQUEST/);
+  assert.match(route, /MAX_LIDO_REQUEST/);
+  assert.match(route, /Firm quotes follow/);
   assert.match(route, /mode: "existing-unsteth"/);
   assert.match(route, /requestId: body\.requestId/);
   assert.ok(route.includes("!/^[1-9]\\d*$/.test(body.requestId)"));
@@ -589,7 +590,7 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Sell for/);
   assert.match(pageBundle, /existing-unsteth/);
   assert.match(pageBundle, /originate/);
-  assert.match(pageBundle, /0\.0005 to 0\.005 stETH/);
+  assert.match(pageBundle, /Firm offer size is determined by live reserve capacity/);
   assert.match(pageBundle, /\/api\/quote\/lido/);
   assert.doesNotMatch(pageBundle, /Paste signed quote JSON/);
   assert.doesNotMatch(pageBundle, /\/api\/quote\/lido\/indicative/);

@@ -68,7 +68,7 @@ test("the built product surface contains the owned-claim flow and no synthetic q
     "Sell now",
     "Asset to sell",
     "Wait & claim",
-    "0.0005 to 0.005 stETH",
+    "Firm offer size is determined by live reserve capacity.",
     "Get firm offer",
     "Approve unstETH",
     "Sell for",

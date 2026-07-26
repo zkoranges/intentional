@@ -1,13 +1,13 @@
 import { isAddress } from "viem";
 
 import {
-  MAX_LIVE_LIDO_QUOTE,
-  MIN_LIVE_LIDO_QUOTE,
+  MAX_LIDO_REQUEST,
+  MIN_LIDO_REQUEST,
 } from "../../../../lib/ethereum";
 
 export const dynamic = "force-dynamic";
 
-const LIVE_QUOTE_RANGE = "0.0005 to 0.005 stETH";
+const LIDO_REQUEST_RANGE = "Lido's canonical request bounds";
 
 function json(body: unknown, status: number) {
   return Response.json(body, {
@@ -89,8 +89,8 @@ export async function POST(request: Request) {
         return error("Enter a valid stETH amount", 400);
       }
       const amount = BigInt(body.requestedStEth);
-      if (amount < MIN_LIVE_LIDO_QUOTE || amount > MAX_LIVE_LIDO_QUOTE) {
-        return error(`Pre-alpha firm quotes support ${LIVE_QUOTE_RANGE}`, 400);
+      if (amount < MIN_LIDO_REQUEST || amount > MAX_LIDO_REQUEST) {
+        return error(`Firm quotes follow ${LIDO_REQUEST_RANGE}`, 400);
       }
       upstreamBody = {
         mode: "originate",
@@ -169,7 +169,7 @@ export async function POST(request: Request) {
         : "";
     const reason =
       upstreamCode === "AMOUNT_OUT_OF_BOUNDS"
-        ? `Pre-alpha firm quotes support ${LIVE_QUOTE_RANGE}`
+        ? `Firm quotes follow ${LIDO_REQUEST_RANGE}`
         : typeof payload === "object" &&
             payload !== null &&
             typeof (payload as { error?: unknown }).error === "string"

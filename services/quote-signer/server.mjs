@@ -10,8 +10,8 @@
 //   * shared-secret header, constant-time compared
 //   * every public request carries a short-lived seller signature bound to its
 //     exact mode and amount/claim; public chain data alone cannot reserve funds
-//   * HARD ceiling (MAX_QUOTE_WEI) independent of measured reserve capacity —
-//     a signing key can never authorize more than this per quote
+//   * canonical Lido request bounds plus measured reserve capacity; there is no
+//     smaller artificial pilot range
 //   * aggregate reservations: simultaneous wallet quotes are admitted only
 //     while their total payment liability fits authoritative reserve capacity.
 //     A seller can explicitly replace its active envelope while preserving
@@ -83,8 +83,10 @@ const KERNEL = getAddress(required("KERNEL_ADDRESS"));
 const LIDO_ADAPTER = getAddress(required("LIDO_ADAPTER_ADDRESS"));
 const LIDO_UNSTETH_ADAPTER = getAddress(required("LIDO_UNSTETH_ADAPTER_ADDRESS"));
 const SIGNER_SECRET = required("SIGNER_SECRET");
-const MAX_QUOTE_WEI = BigInt(required("MAX_QUOTE_WEI"));
-const MIN_QUOTE_WEI = BigInt(process.env.MIN_QUOTE_WEI?.trim() || "500000000000000"); // 0.0005
+const MAX_QUOTE_WEI = BigInt(
+  process.env.MAX_QUOTE_WEI?.trim() || "1000000000000000000000",
+); // canonical Lido maximum: 1,000 stETH
+const MIN_QUOTE_WEI = BigInt(process.env.MIN_QUOTE_WEI?.trim() || "100");
 const SPREAD_BPS = BigInt(process.env.SPREAD_BPS?.trim() || "25");
 const MAX_SPREAD_BPS = BigInt(process.env.MAX_SPREAD_BPS?.trim() || "100");
 const QUOTE_TTL_SECONDS = BigInt(process.env.QUOTE_TTL_SECONDS?.trim() || "120");

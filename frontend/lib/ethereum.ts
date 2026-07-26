@@ -23,11 +23,6 @@ import { mainnet } from "viem/chains";
 export const MAINNET_CHAIN_ID = 1;
 export const MIN_LIDO_REQUEST = 100n;
 export const MAX_LIDO_REQUEST = 1_000n * 10n ** 18n;
-// The canonical Lido queue supports a much wider range. These narrower values
-// are the deliberately capped pre-alpha firm-quote envelope backed by the
-// initial 0.006 WETH reserve.
-export const MIN_LIVE_LIDO_QUOTE = 500_000_000_000_000n; // 0.0005 stETH
-export const MAX_LIVE_LIDO_QUOTE = 5_000_000_000_000_000n; // 0.005 stETH
 export const MAX_LIVE_LIDO_DISCOUNT_BPS = 100n; // independent browser guard
 
 export const ADDRESSES = {
@@ -1009,11 +1004,8 @@ export async function verifyReservoirQuote(
     }
     approvalSatisfied = approved === envelope.quote.adapter || approvedForAll;
   }
-  if (
-    requestedStEth < MIN_LIVE_LIDO_QUOTE ||
-    requestedStEth > MAX_LIVE_LIDO_QUOTE
-  ) {
-    throw new Error("The signed claim amount is outside the pre-alpha pilot");
+  if (requestedStEth < MIN_LIDO_REQUEST || requestedStEth > MAX_LIDO_REQUEST) {
+    throw new Error("The signed claim amount is outside Lido request bounds");
   }
   const paymentAmount = BigInt(envelope.quote.paymentAmount);
   const maximumDiscount =

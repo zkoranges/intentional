@@ -11,7 +11,9 @@ import { mainnet } from "viem/chains";
 export const dynamic = "force-dynamic";
 
 const CAPACITY_PROBE = 1n * 10n ** 18n;
-const MINIMUM_QUOTE_WEI = 500_000_000_000_000n;
+// Canonical Lido minimum. Larger quotes are governed by live deliverable
+// reserve capacity rather than an artificial pilot range.
+const MINIMUM_QUOTE_WEI = 100n;
 const SPREAD_BPS = 25n;
 const MINIMUM_PAYMENT_WEI =
   MINIMUM_QUOTE_WEI -

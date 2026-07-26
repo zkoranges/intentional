@@ -18,9 +18,7 @@ import {
 
 import {
   ADDRESSES,
-  MAX_LIVE_LIDO_QUOTE,
   MAX_LIDO_REQUEST,
-  MIN_LIVE_LIDO_QUOTE,
   MIN_LIDO_REQUEST,
   MinedTransactionVerificationError,
   RESERVOIR_DEPLOYMENT,
@@ -146,7 +144,7 @@ function maximumClaimForCapacity(capacity: bigint) {
   const gross =
     (capacity * BPS_DENOMINATOR) /
     (BPS_DENOMINATOR - LIVE_SPREAD_BPS);
-  return gross < MAX_LIVE_LIDO_QUOTE ? gross : MAX_LIVE_LIDO_QUOTE;
+  return gross < MAX_LIDO_REQUEST ? gross : MAX_LIDO_REQUEST;
 }
 
 const SOURCE_ASSETS = [
@@ -657,14 +655,14 @@ export default function Home() {
     claimQuoteCheck.requestId === selectedClaim?.requestId
       ? claimQuoteCheck
       : null;
-  const selectedClaimWithinPilotLimits = Boolean(
+  const selectedClaimWithinProtocolLimits = Boolean(
     selectedClaim &&
-      selectedClaim.amountOfStETH >= MIN_LIVE_LIDO_QUOTE &&
-      selectedClaim.amountOfStETH <= MAX_LIVE_LIDO_QUOTE,
+      selectedClaim.amountOfStETH >= MIN_LIDO_REQUEST &&
+      selectedClaim.amountOfStETH <= MAX_LIDO_REQUEST,
   );
   const selectedClaimWithinFirmLimits = Boolean(
     selectedClaim &&
-      selectedClaimWithinPilotLimits &&
+      selectedClaimWithinProtocolLimits &&
       firmPaymentFor(selectedClaim.amountOfStETH) <= marketCapacity,
   );
   const amount = useMemo(() => {
@@ -676,8 +674,6 @@ export default function Home() {
   }, [amountInput]);
   const amountWithinLidoLimits =
     amount >= MIN_LIDO_REQUEST && amount <= MAX_LIDO_REQUEST;
-  const amountWithinFirmLimits =
-    amount >= MIN_LIVE_LIDO_QUOTE && amount <= MAX_LIVE_LIDO_QUOTE;
   const amountWithinLiveCapacity =
     amount > 0n && firmPaymentFor(amount) <= marketCapacity;
   const amountValid =
@@ -706,13 +702,9 @@ export default function Home() {
             : null;
   const firmAmountIssue =
     amountIssue ??
-    (amount < MIN_LIVE_LIDO_QUOTE
-      ? "Enter at least 0.0005 stETH"
-      : amount > MAX_LIVE_LIDO_QUOTE
-        ? "Pre-alpha maximum is 0.005 stETH"
-        : !amountWithinLiveCapacity
-          ? `Current reserve supports up to ${formatMainnetAmount(maximumLiveClaim, 6)} stETH`
-          : null);
+    (!amountWithinLiveCapacity
+      ? `Current reserve supports up to ${formatMainnetAmount(maximumLiveClaim, 6)} stETH`
+      : null);
   const quoteIssueLabel = retryLabel(quoteIssue, quoteClock);
   const quoteRetryBlocked = Boolean(
     quoteIssue?.retryAt && quoteIssue.retryAt > quoteClock,
@@ -1403,7 +1395,6 @@ export default function Home() {
       !injected ||
       !account ||
       !amountValid ||
-      !amountWithinFirmLimits ||
       !amountWithinLiveCapacity
     ) {
       return;
@@ -1531,8 +1522,8 @@ export default function Home() {
       !injected ||
       !account ||
       position.isClaimed ||
-      position.amountOfStETH < MIN_LIVE_LIDO_QUOTE ||
-      position.amountOfStETH > MAX_LIVE_LIDO_QUOTE ||
+      position.amountOfStETH < MIN_LIDO_REQUEST ||
+      position.amountOfStETH > MAX_LIDO_REQUEST ||
       firmPaymentFor(position.amountOfStETH) > marketCapacity
     ) {
       return;
@@ -1973,7 +1964,7 @@ export default function Home() {
             {mode === "sell"
               ? sourceAsset === "steth"
                 ? "Sell stETH for a signed WETH amount. Intentional creates the canonical withdrawal claim directly for the liquidity provider."
-                : "Choose an unstETH NFT you own. The claim and WETH payment move atomically. Pre-alpha firm offers are capped to claims from 0.0005 to 0.005 stETH."
+                : "Choose an unstETH NFT you own. The claim and WETH payment move atomically. Firm offer size is determined by live reserve capacity."
               : "Join the official Lido queue and claim ETH after finalization."}
           </p>
 
@@ -2118,10 +2109,9 @@ export default function Home() {
                     {marketStatus.detail}
                   </button>
                 ) : !amountValid ||
-                  !amountWithinFirmLimits ||
                   !amountWithinLiveCapacity ? (
                   <button className="actionButton" disabled>
-                    {firmAmountIssue ?? "Enter 0.0005–0.005 stETH"}
+                    {firmAmountIssue ?? "Enter a valid stETH amount"}
                   </button>
                 ) : !stEthOffer ? (
                   <button
@@ -2324,9 +2314,9 @@ export default function Home() {
                   >
                     Create a Lido claim first
                   </button>
-                ) : !selectedClaimWithinPilotLimits ? (
+                ) : !selectedClaimWithinProtocolLimits ? (
                   <button className="actionButton" disabled>
-                    Claim outside 0.0005–0.005 stETH pilot
+                    Claim outside Lido request bounds
                   </button>
                 ) : !selectedClaimWithinFirmLimits ? (
                   <button className="actionButton" disabled>
