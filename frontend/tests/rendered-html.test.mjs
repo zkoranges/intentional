@@ -338,6 +338,89 @@ test("owned unstETH firm offers are independently verified before exact approval
   assert.doesNotMatch(ethereum, /type\\(uint256\\)\\.max|MaxUint256/);
 });
 
+test("every wallet action shows a pending state and settlement opens a success modal", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+  const ethereum = await readFile(new URL("lib/ethereum.ts", projectRoot), "utf8");
+
+  // The wallet write reports its hash before the receipt is awaited, so the
+  // interface can separate "waiting on you" from "waiting on Ethereum".
+  assert.match(ethereum, /export type TransactionSubmitted = \(hash: Hash\) => void/);
+  for (const [fn, guard] of [
+    ["approveExact", /onSubmitted\?\.\(hash\)/],
+    ["approveUnstETH", /onSubmitted\?\.\(hash\)/],
+    ["fillReservoirQuote", /onSubmitted\?\.\(hash\)/],
+    ["requestLidoWithdrawal", /onSubmitted\?\.\(hash\)/],
+    ["claimLidoWithdrawal", /onSubmitted\?\.\(hash\)/],
+  ]) {
+    const start = ethereum.indexOf(`export async function ${fn}(`);
+    assert.ok(start >= 0, `${fn} is missing`);
+    const body = ethereum.slice(start, ethereum.indexOf("\n}\n", start));
+    assert.match(body, /onSubmitted\?: TransactionSubmitted/, `${fn} takes no submit hook`);
+    assert.match(body, guard, `${fn} never reports its pending hash`);
+    assert.ok(
+      body.indexOf("onSubmitted?.(hash)") <
+        body.indexOf("waitForTransactionReceipt"),
+      `${fn} must report the hash before it blocks on the receipt`,
+    );
+  }
+
+  // Every wallet action drives the primary button, not just a status line.
+  assert.match(page, /function PendingButton\(\{ label \}: \{ label: string \}\)/);
+  assert.match(page, /className="actionButton pending"/);
+  assert.match(page, /className="buttonSpinner"/);
+  assert.equal(
+    [...page.matchAll(/\{pending \? \(\s*<PendingButton label=\{pending\.label\} \/>/g)]
+      .length,
+    3,
+    "all three route action chains must render the pending button",
+  );
+  assert.match(page, /function beginPending\(/);
+  assert.match(page, /function markSubmitted\(/);
+  assert.match(page, /Confirm in your wallet…/);
+  assert.match(page, /Approving stETH…/);
+  assert.match(page, /Approving unstETH…/);
+  assert.match(page, /Settling the sale…/);
+  assert.match(page, /Approval sent\. Waiting for Ethereum to confirm it\./);
+  assert.match(page, /Pending transaction ↗/);
+  // A pending action belongs to one claim row, not to every row at once.
+  assert.match(page, /pending\?\.scope === claimScope\(request\.requestId\)/);
+
+  // Receiving the payout is confirmed with a modal, not only a status string.
+  assert.match(page, /function SuccessModal\(/);
+  assert.match(page, /role="dialog"/);
+  assert.match(page, /aria-modal="true"/);
+  assert.match(page, /className="successModal"/);
+  assert.match(page, /WETH received/);
+  assert.match(page, /ETH received/);
+  assert.match(page, /View on Etherscan/);
+  assert.ok(
+    page.indexOf("setSuccess({") > 0,
+    "no completed action opens the success modal",
+  );
+  const fillFlow = page.slice(
+    page.indexOf("async function fillQuote("),
+    page.indexOf("function selectMode("),
+  );
+  assert.ok(
+    fillFlow.indexOf("setSuccess({") > fillFlow.indexOf("await fillReservoirQuote("),
+    "success may only be shown after the settlement is verified onchain",
+  );
+
+  const stylesheet = await readFile(new URL("app/globals.css", projectRoot), "utf8");
+  for (const rule of [
+    ".successModal",
+    ".successBadge",
+    ".successAmount",
+    ".successFacts",
+    ".buttonSpinner",
+    ".positionPending",
+  ]) {
+    assert.ok(stylesheet.includes(rule), `${rule} is unstyled`);
+  }
+  // The modal is themed with the site tokens rather than browser defaults.
+  assert.doesNotMatch(page, /window\.alert|window\.confirm/);
+});
+
 test("the quote proxy route is keyless, validating, and fails closed", async () => {
   const route = await readFile(
     new URL("app/api/quote/lido/route.ts", projectRoot),

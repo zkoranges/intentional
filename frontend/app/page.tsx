@@ -51,6 +51,32 @@ type CompletedAction = {
   hash: Hash;
 };
 
+/**
+ * A wallet action that is in flight. `label` drives the primary button so the
+ * pending state is visible where the click happened, `detail` explains the same
+ * step in the status bar, and `hash` appears once the transaction is broadcast.
+ */
+type PendingAction = {
+  label: string;
+  detail: string;
+  hash: Hash | null;
+  /** Identifies the claim row that owns this action, when one does. */
+  scope: string | null;
+};
+
+function claimScope(requestId: bigint | null) {
+  return requestId === null ? null : `claim-${requestId}`;
+}
+
+type SuccessAction = {
+  eyebrow: string;
+  title: string;
+  amount: string;
+  body: string;
+  facts: { label: string; value: string }[];
+  hash: Hash;
+};
+
 type LidoWaitEstimate = {
   market: "lido";
   amountStEth: "1";
@@ -340,6 +366,110 @@ function AssetSelect({
   );
 }
 
+function PendingButton({ label }: { label: string }) {
+  return (
+    <button className="actionButton pending" type="button" disabled>
+      <span className="buttonSpinner" aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
+function SuccessModal({
+  success,
+  onClose,
+}: {
+  success: SuccessAction;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="modalBackdrop"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        className="successModal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="successModalTitle"
+      >
+        <div className="modalHeader">
+          <div>
+            <span>{success.eyebrow}</span>
+            <h2 id="successModalTitle">{success.title}</h2>
+          </div>
+          <button
+            className="closeButton"
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="successBadge" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+            <path
+              d="M7 13.4 11.2 17.6 19 9.8"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+
+        <p className="successAmount">{success.amount}</p>
+        <p className="successBody">{success.body}</p>
+
+        <dl className="successFacts">
+          {success.facts.map((fact) => (
+            <div key={fact.label}>
+              <dt>{fact.label}</dt>
+              <dd>{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="successActions">
+          <a
+            className="actionButton"
+            href={etherscanTx(success.hash)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View on Etherscan
+          </a>
+          <button
+            className="successDismiss"
+            type="button"
+            onClick={onClose}
+            autoFocus
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [account, setAccount] = useState<Address | null>(null);
   const [snapshot, setSnapshot] = useState<LiveWalletSnapshot | null>(null);
@@ -355,6 +485,8 @@ export default function Home() {
   );
   const [claimQuoteCheck, setClaimQuoteCheck] =
     useState<ReservoirQuoteCheck | null>(null);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [success, setSuccess] = useState<SuccessAction | null>(null);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
   const [activeSection, setActiveSection] =
     useState<NavSection>("markets");
@@ -477,6 +609,8 @@ export default function Home() {
     [account, refreshWallet],
   );
 
+  const closeSuccess = useCallback(() => setSuccess(null), []);
+
   const clearWalletState = useCallback((nextStatus: string | null = null) => {
     walletRefreshIdRef.current += 1;
     setAccount(null);
@@ -487,6 +621,8 @@ export default function Home() {
     setActions([]);
     setLastMintedRequest(null);
     setStatus(nextStatus);
+    setPending(null);
+    setSuccess(null);
     setAction("idle");
   }, []);
 
@@ -501,6 +637,8 @@ export default function Home() {
       setActions([]);
       setLastMintedRequest(null);
       setStatus(null);
+      setPending(null);
+      setSuccess(null);
       await refreshWallet(next);
     },
     [refreshWallet],
@@ -705,14 +843,36 @@ export default function Home() {
       if (account) await refresh(account);
     }
     setStatus(errorMessage(error));
+    setPending(null);
     setAction("idle");
+  }
+
+  /** Waiting on the wallet prompt: no transaction exists to link yet. */
+  function beginPending(label: string, detail: string, scope: string | null = null) {
+    setAction("signing");
+    setPending({ label, detail, hash: null, scope });
+    setStatus(detail);
+  }
+
+  /** The wallet returned a hash, so the wait is now onchain rather than human. */
+  function markSubmitted(label: string, detail: string) {
+    return (hash: Hash) => {
+      setAction("mining");
+      setPending((current) => ({
+        label,
+        detail,
+        hash,
+        scope: current?.scope ?? null,
+      }));
+      setStatus(detail);
+    };
   }
 
   async function approveQueue() {
     const injected = getInjectedProvider();
     if (!injected || !account || !amountValid) return;
-    setAction("signing");
-    setStatus(
+    beginPending(
+      "Confirm in your wallet…",
       `Approve exactly ${formatMainnetAmount(amount)} stETH for Lido.`,
     );
     try {
@@ -721,11 +881,16 @@ export default function Home() {
         account,
         ADDRESSES.lidoQueue,
         amount,
+        markSubmitted(
+          "Approving stETH…",
+          "Approval sent. Waiting for Ethereum to confirm it.",
+        ),
       );
       setActions((current) => [
         ...current,
         { label: "stETH approved for Lido", hash: receipt.transactionHash },
       ]);
+      setPending(null);
       setStatus("Approval confirmed. Your withdrawal is ready.");
       await refresh(account);
     } catch (error) {
@@ -739,17 +904,39 @@ export default function Home() {
   async function requestWithdrawal() {
     const injected = getInjectedProvider();
     if (!injected || !account || !amountValid || !queueApproved) return;
-    setAction("signing");
-    setStatus("Confirm the Lido withdrawal request in your wallet.");
+    beginPending(
+      "Confirm in your wallet…",
+      "Confirm the Lido withdrawal request in your wallet.",
+    );
     try {
-      const result = await requestLidoWithdrawal(injected, account, amount);
-      setAction("mining");
+      const result = await requestLidoWithdrawal(
+        injected,
+        account,
+        amount,
+        markSubmitted(
+          "Creating your claim…",
+          "Withdrawal request sent. Waiting for Ethereum to confirm it.",
+        ),
+      );
       setLastMintedRequest(result.requestId);
       setActions((current) => [
         ...current,
         { label: `unstETH #${result.requestId} created`, hash: result.hash },
       ]);
+      setPending(null);
       setStatus(`Withdrawal #${result.requestId} is now in your wallet.`);
+      setSuccess({
+        eyebrow: "Lido withdrawal",
+        title: "Claim created",
+        amount: `unstETH #${result.requestId}`,
+        body: "Your withdrawal claim is in your wallet. Claim the ETH once Lido finalizes the request, or sell the claim now and let a buyer take the wait.",
+        facts: [
+          { label: "Amount queued", value: `${formatMainnetAmount(amount)} stETH` },
+          { label: "Claim", value: `unstETH #${result.requestId}` },
+          { label: "Holder", value: "Your wallet" },
+        ],
+        hash: result.hash,
+      });
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
@@ -762,17 +949,44 @@ export default function Home() {
   async function claimRequest(requestId: bigint) {
     const injected = getInjectedProvider();
     if (!injected || !account) return;
-    setAction("signing");
-    setStatus(`Confirm the claim for unstETH #${requestId}.`);
+    beginPending(
+      "Confirm in your wallet…",
+      `Confirm the claim for unstETH #${requestId}.`,
+      claimScope(requestId),
+    );
     try {
-      const result = await claimLidoWithdrawal(injected, account, requestId);
+      const result = await claimLidoWithdrawal(
+        injected,
+        account,
+        requestId,
+        markSubmitted(
+          "Claiming your ETH…",
+          "Claim sent. Waiting for Ethereum to confirm it.",
+        ),
+      );
       setActions((current) => [
         ...current,
         { label: `unstETH #${requestId} claimed`, hash: result.hash },
       ]);
+      setPending(null);
       setStatus(
         `${formatMainnetAmount(result.amountOfEth)} ETH was sent to your wallet.`,
       );
+      setSuccess({
+        eyebrow: "Lido claim",
+        title: "ETH received",
+        amount: `${formatMainnetAmount(result.amountOfEth, 6)} ETH`,
+        body: `unstETH #${requestId} was redeemed and the ETH is now in your wallet.`,
+        facts: [
+          { label: "Claim", value: `unstETH #${requestId}` },
+          {
+            label: "Received",
+            value: `${formatMainnetAmount(result.amountOfEth, 6)} ETH`,
+          },
+          { label: "Paid to", value: short(account) },
+        ],
+        hash: result.hash,
+      });
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
@@ -787,44 +1001,58 @@ export default function Home() {
   ) {
     const injected = getInjectedProvider();
     if (!injected || !account || !selectedCheck) return;
-    setAction("signing");
-    setStatus(
-      selectedCheck.envelope.mode === "existing-unsteth"
+    const isExistingClaim = selectedCheck.envelope.mode === "existing-unsteth";
+    beginPending(
+      "Confirm in your wallet…",
+      isExistingClaim
         ? `Approve unstETH #${selectedCheck.requestId} for this sale.`
         : "Confirm the exact stETH approval for this exit.",
+      claimScope(selectedCheck.requestId),
+    );
+    const onSubmitted = markSubmitted(
+      isExistingClaim ? "Approving unstETH…" : "Approving stETH…",
+      "Approval sent. Waiting for Ethereum to confirm it.",
     );
     try {
       const receipt =
-        selectedCheck.envelope.mode === "existing-unsteth" &&
-        selectedCheck.requestId !== null
+        isExistingClaim && selectedCheck.requestId !== null
           ? await approveUnstETH(
               injected,
               account,
               selectedCheck.envelope.quote.adapter,
               selectedCheck.requestId,
+              onSubmitted,
             )
           : await approveExact(
               injected,
               account,
               selectedCheck.envelope.quote.adapter,
               selectedCheck.requestedStEth,
+              onSubmitted,
             );
       setActions((current) => [
         ...current,
         {
-          label:
-            selectedCheck.envelope.mode === "existing-unsteth"
-              ? `unstETH #${selectedCheck.requestId} approved`
-              : "stETH approved for Intentional",
+          label: isExistingClaim
+            ? `unstETH #${selectedCheck.requestId} approved`
+            : "stETH approved for Intentional",
           hash: receipt.transactionHash,
         },
       ]);
+      setPending({
+        label: "Rechecking the offer…",
+        detail: "Approval confirmed. Rechecking the signed quote.",
+        hash: receipt.transactionHash,
+        scope: claimScope(selectedCheck.requestId),
+      });
+      setStatus("Approval confirmed. Rechecking the signed quote.");
       const checked = await verifyReservoirQuote(
         injected,
         account,
         JSON.stringify(selectedCheck.envelope),
       );
       setClaimQuoteCheck(checked);
+      setPending(null);
       setStatus("Approval confirmed. The same firm quote is ready to fill.");
     } catch (error) {
       await handleMinedActionError(
@@ -832,10 +1060,11 @@ export default function Home() {
         "Intentional approval confirmed with a verification warning",
         selectedCheck.envelope.mode === "originate",
       );
-      if (selectedCheck.envelope.mode === "existing-unsteth") {
+      if (isExistingClaim) {
         setClaimQuoteCheck(null);
       }
     } finally {
+      setPending(null);
       setAction("idle");
     }
   }
@@ -854,6 +1083,12 @@ export default function Home() {
 
     setAction("reading");
     setClaimQuoteCheck(null);
+    setPending({
+      label: "Getting firm offer…",
+      detail: `Requesting a firm offer for ${formatMainnetAmount(amount)} stETH.`,
+      hash: null,
+      scope: null,
+    });
     setStatus(
       `Requesting a firm offer for ${formatMainnetAmount(amount)} stETH.`,
     );
@@ -896,6 +1131,7 @@ export default function Home() {
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
+      setPending(null);
       setAction("idle");
     }
   }
@@ -915,6 +1151,12 @@ export default function Home() {
     setSelectedClaimId(request.requestId);
     setAction("reading");
     setClaimQuoteCheck(null);
+    setPending({
+      label: "Getting firm offer…",
+      detail: `Requesting a firm offer for unstETH #${request.requestId}.`,
+      hash: null,
+      scope: claimScope(request.requestId),
+    });
     setStatus(`Requesting a firm offer for unstETH #${request.requestId}.`);
     try {
       const response = await fetch("/api/quote/lido", {
@@ -956,6 +1198,7 @@ export default function Home() {
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
+      setPending(null);
       setAction("idle");
     }
   }
@@ -965,10 +1208,22 @@ export default function Home() {
   ) {
     const injected = getInjectedProvider();
     if (!injected || !account || !selectedCheck) return;
-    setAction("signing");
-    setStatus("Confirm the atomic claim sale.");
+    const isExistingClaim = selectedCheck.envelope.mode === "existing-unsteth";
+    beginPending(
+      "Confirm in your wallet…",
+      "Confirm the atomic claim sale.",
+      claimScope(selectedCheck.requestId),
+    );
     try {
-      const result = await fillReservoirQuote(injected, account, selectedCheck);
+      const result = await fillReservoirQuote(
+        injected,
+        account,
+        selectedCheck,
+        markSubmitted(
+          "Settling the sale…",
+          "Sale sent. Waiting for Ethereum to settle the claim and the payment.",
+        ),
+      );
       setActions((current) => [
         ...current,
         {
@@ -976,23 +1231,46 @@ export default function Home() {
           hash: result.hash,
         },
       ]);
-      if (selectedCheck.envelope.mode === "originate") {
+      if (!isExistingClaim) {
         setLastMintedRequest(result.requestId);
       }
+      setPending(null);
       setStatus(
-        selectedCheck.envelope.mode === "existing-unsteth"
+        isExistingClaim
           ? `Sale complete. unstETH #${result.requestId} moved to the buyer and ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`
           : `Exit complete. ${formatMainnetAmount(result.paymentAmount)} WETH reached your wallet.`,
       );
+      setSuccess({
+        eyebrow: "Onchain factoring",
+        title: "WETH received",
+        amount: `${formatMainnetAmount(result.paymentAmount, 6)} WETH`,
+        body: isExistingClaim
+          ? `unstETH #${result.requestId} moved to the buyer and the payment reached your wallet in the same transaction.`
+          : "Your withdrawal claim went to the buyer and the payment reached your wallet in the same transaction. The buyer takes the Lido wait.",
+        facts: [
+          {
+            label: "You received",
+            value: `${formatMainnetAmount(result.paymentAmount, 6)} WETH`,
+          },
+          {
+            label: "You sold",
+            value: isExistingClaim
+              ? `unstETH #${result.requestId}`
+              : `${formatMainnetAmount(selectedCheck.requestedStEth, 6)} stETH`,
+          },
+          { label: "Paid to", value: short(account) },
+        ],
+        hash: result.hash,
+      });
       setClaimQuoteCheck(null);
       await refresh(account);
     } catch (error) {
       await handleMinedActionError(
         error,
         "Instant exit confirmed with a verification warning",
-        selectedCheck.envelope.mode === "originate",
+        !isExistingClaim,
       );
-      if (selectedCheck.envelope.mode === "existing-unsteth") {
+      if (isExistingClaim) {
         setClaimQuoteCheck(null);
       }
     }
@@ -1355,7 +1633,9 @@ export default function Home() {
               </div>
 
               <div className="primaryAction">
-                {!account ? (
+                {pending ? (
+                  <PendingButton label={pending.label} />
+                ) : !account ? (
                   <button className="actionButton" onClick={connect} disabled={busy}>
                     Connect wallet
                   </button>
@@ -1383,7 +1663,7 @@ export default function Home() {
                     onClick={requestStEthQuote}
                     disabled={busy}
                   >
-                    {action === "reading" ? "Getting firm offer…" : "Get firm offer"}
+                    Get firm offer
                   </button>
                 ) : !stEthOffer.approvalSatisfied ? (
                   <button
@@ -1532,7 +1812,9 @@ export default function Home() {
               </div>
 
               <div className="primaryAction">
-                {!account ? (
+                {pending ? (
+                  <PendingButton label={pending.label} />
+                ) : !account ? (
                   <button className="actionButton" onClick={connect} disabled={busy}>
                     Connect wallet
                   </button>
@@ -1570,7 +1852,7 @@ export default function Home() {
                     onClick={() => requestExistingClaimQuote(selectedClaim)}
                     disabled={busy}
                   >
-                    {action === "reading" ? "Getting firm offer…" : "Get firm offer"}
+                    Get firm offer
                   </button>
                 ) : !selectedClaimOffer.approvalSatisfied ? (
                   <button
@@ -1711,7 +1993,9 @@ export default function Home() {
               </div>
 
               <div className="primaryAction">
-                {!account ? (
+                {pending ? (
+                  <PendingButton label={pending.label} />
+                ) : !account ? (
                   <button className="actionButton" onClick={connect} disabled={busy}>
                     Connect wallet
                   </button>
@@ -1749,11 +2033,21 @@ export default function Home() {
           {(status || busy) && (
             <div className="statusBar" aria-live="polite">
               {busy && <span className="statusSpinner" />}
-              <p>{status ?? "Updating wallet…"}</p>
-              {account && (
-                <button onClick={() => refresh()} disabled={busy}>
-                  Refresh
-                </button>
+              <p>{pending?.detail ?? status ?? "Updating wallet…"}</p>
+              {pending?.hash ? (
+                <a
+                  href={etherscanTx(pending.hash)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Pending transaction ↗
+                </a>
+              ) : (
+                account && (
+                  <button onClick={() => refresh()} disabled={busy}>
+                    Refresh
+                  </button>
+                )
               )}
             </div>
           )}
@@ -1884,7 +2178,12 @@ export default function Home() {
                     </strong>
                   </div>
                       <div className="positionAction">
-                        {request.isClaimed ? (
+                        {pending?.scope === claimScope(request.requestId) ? (
+                          <span className="positionPending">
+                            <span className="buttonSpinner" aria-hidden="true" />
+                            {pending.label}
+                          </span>
+                        ) : request.isClaimed ? (
                           <a
                         href={etherscanToken(
                           ADDRESSES.lidoQueue,
@@ -2060,6 +2359,7 @@ export default function Home() {
         </div>
       </footer>
 
+      {success && <SuccessModal success={success} onClose={closeSuccess} />}
     </>
   );
 }

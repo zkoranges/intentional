@@ -196,6 +196,13 @@ export type ReservoirQuoteCheck = {
   quoteHash: Hex;
 };
 
+/**
+ * Called with the transaction hash the moment the wallet returns it, before the
+ * receipt is awaited, so the interface can move from "confirm in your wallet"
+ * to a mining state that links the pending transaction.
+ */
+export type TransactionSubmitted = (hash: Hash) => void;
+
 export class MinedTransactionVerificationError extends Error {
   readonly transactionHash: Hash;
 
@@ -364,6 +371,7 @@ export async function approveExact(
   account: Address,
   spender: Address,
   amount: bigint,
+  onSubmitted?: TransactionSubmitted,
 ) {
   const { publicClient, walletClient } = clients(provider, account);
   if (!walletClient) throw new Error("Wallet client unavailable");
@@ -375,6 +383,7 @@ export async function approveExact(
     args: [spender, amount],
   });
   const hash = await walletClient.writeContract(request);
+  onSubmitted?.(hash);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
@@ -390,6 +399,7 @@ export async function approveUnstETH(
   account: Address,
   adapter: Address,
   requestId: bigint,
+  onSubmitted?: TransactionSubmitted,
 ) {
   const { publicClient, walletClient } = clients(provider, account);
   if (!walletClient) throw new Error("Wallet client unavailable");
@@ -410,6 +420,7 @@ export async function approveUnstETH(
     args: [adapter, requestId],
   });
   const hash = await walletClient.writeContract(request);
+  onSubmitted?.(hash);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
@@ -436,6 +447,7 @@ export async function requestLidoWithdrawal(
   provider: InjectedEthereum,
   account: Address,
   amount: bigint,
+  onSubmitted?: TransactionSubmitted,
 ) {
   const { publicClient, walletClient } = clients(provider, account);
   if (!walletClient) throw new Error("Wallet client unavailable");
@@ -458,6 +470,7 @@ export async function requestLidoWithdrawal(
     args: [[amount], account],
   });
   const hash = await walletClient.writeContract(request);
+  onSubmitted?.(hash);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
@@ -499,6 +512,7 @@ export async function claimLidoWithdrawal(
   provider: InjectedEthereum,
   account: Address,
   requestId: bigint,
+  onSubmitted?: TransactionSubmitted,
 ) {
   const { publicClient, walletClient } = clients(provider, account);
   if (!walletClient) throw new Error("Wallet client unavailable");
@@ -510,6 +524,7 @@ export async function claimLidoWithdrawal(
     args: [requestId],
   });
   const hash = await walletClient.writeContract(request);
+  onSubmitted?.(hash);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
@@ -1044,6 +1059,7 @@ export async function fillReservoirQuote(
   provider: InjectedEthereum,
   account: Address,
   check: ReservoirQuoteCheck,
+  onSubmitted?: TransactionSubmitted,
 ) {
   const { envelope } = check;
   const { publicClient, walletClient } = clients(provider, account);
@@ -1129,6 +1145,7 @@ export async function fillReservoirQuote(
     ...request,
     gas: (estimatedGas * 15n) / 10n,
   });
+  onSubmitted?.(hash);
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {
     throw new MinedTransactionVerificationError(
