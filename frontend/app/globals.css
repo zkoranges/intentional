@@ -586,6 +586,7 @@ main {
 }
 
 .helpLink {
+  position: relative;
   display: grid;
   width: 32px;
   height: 32px;
@@ -606,6 +607,58 @@ main {
 .helpLink:hover {
   background: var(--surface-hover);
   color: var(--ink);
+}
+
+.helpTooltip {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 236px;
+  padding: 11px 13px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: rgba(17, 17, 18, 0.98);
+  box-shadow:
+    0 18px 44px rgba(0, 0, 0, 0.46),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  backdrop-filter: blur(20px);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 520;
+  line-height: 1.5;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms;
+  pointer-events: none;
+}
+
+.helpLink:hover .helpTooltip,
+.helpLink:focus-visible .helpTooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.helpTooltip strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 690;
+}
+
+.helpTooltip em {
+  display: block;
+  margin-top: 7px;
+  color: #aa8cf7;
+  font-style: normal;
+  font-weight: 680;
 }
 
 .modeTabs {
@@ -1063,12 +1116,14 @@ main {
 }
 
 .statusBar p {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 520;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .statusBar button {
@@ -1640,11 +1695,30 @@ main {
 }
 
 .statusBar a {
+  flex: 0 0 auto;
+  padding: 3px;
   color: #aa8cf7;
   font-size: 11px;
   font-weight: 680;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.routeSummary strong.queueTime {
+  font-variant-numeric: tabular-nums;
+}
+
+.routeSummary strong.queueTime.live {
+  color: #cbb7ff;
+}
+
+.routeSummary strong.queueTime.live::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.7);
+  content: "";
 }
 
 @keyframes spin {

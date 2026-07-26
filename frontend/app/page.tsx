@@ -1476,8 +1476,18 @@ export default function Home() {
                   : "Keep the withdrawal claim in your wallet."}
               </p>
             </div>
-            <a className="helpLink" href="#faq" aria-label="Learn about exits">
-              ?
+            <a
+              className="helpLink"
+              href="#faq"
+              aria-label="How exits work: sell the claim now for WETH, or wait in the Lido queue and claim ETH yourself. Opens the FAQ."
+            >
+              <span aria-hidden="true">?</span>
+              <span className="helpTooltip" aria-hidden="true">
+                <strong>Two ways out</strong>
+                Sell the claim now and a buyer takes the Lido wait, or keep it
+                and claim ETH yourself once Lido finalizes.
+                <em>Read the FAQ</em>
+              </span>
             </a>
           </div>
 
@@ -1987,6 +1997,21 @@ export default function Home() {
                   <strong>None</strong>
                 </div>
                 <div>
+                  <span>Queue time</span>
+                  <strong
+                    className={lidoWaitEstimate ? "queueTime live" : "queueTime"}
+                    title={
+                      lidoWaitEstimate
+                        ? "Live Lido estimate for a representative 1 stETH withdrawal"
+                        : undefined
+                    }
+                  >
+                    {lidoWaitEstimate
+                      ? formatMarketWait(lidoWaitEstimate.estimatedWaitMs)
+                      : "Checking live…"}
+                  </strong>
+                </div>
+                <div>
                   <span>Who waits</span>
                   <strong>You</strong>
                 </div>
@@ -2040,7 +2065,7 @@ export default function Home() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Pending transaction ↗
+                  View ↗
                 </a>
               ) : (
                 account && (

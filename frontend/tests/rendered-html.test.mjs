@@ -99,6 +99,30 @@ test("Sell now selects a source asset while Wait & claim remains a separate rout
   assert.match(page, /Lido · unstETH → WETH/);
   assert.match(page, /Lido · stETH → unstETH/);
   assert.match(page, /Join the official Lido queue and claim ETH after finalization/);
+
+  // The help affordance explains itself on hover and still opens the FAQ.
+  assert.match(page, /className="helpLink"\s+href="#faq"/);
+  assert.match(page, /className="helpTooltip"/);
+  assert.match(page, /Two ways out/);
+  assert.match(page, /Read the FAQ/);
+
+  // Waiting is the product of the queue route, so quote how long it lasts
+  // rather than only naming who absorbs it.
+  const queueSummary = page.slice(
+    page.lastIndexOf('<div className="routeSummary">'),
+    page.lastIndexOf('<div className="primaryAction">'),
+  );
+  assert.ok(queueSummary.length > 0, "the queue route summary is missing");
+  assert.match(queueSummary, /<span>Queue time<\/span>/);
+  assert.match(
+    queueSummary,
+    /lidoWaitEstimate\s*\?\s*formatMarketWait\(lidoWaitEstimate\.estimatedWaitMs\)/,
+  );
+  assert.match(queueSummary, /Checking live…/);
+  assert.ok(
+    queueSummary.indexOf("Queue time") < queueSummary.indexOf("Who waits"),
+    "the wait length must be stated before who absorbs it",
+  );
 });
 
 test("liquid stETH requests a real originate quote and verifies it independently", async () => {
@@ -381,7 +405,7 @@ test("every wallet action shows a pending state and settlement opens a success m
   assert.match(page, /Approving unstETH…/);
   assert.match(page, /Settling the sale…/);
   assert.match(page, /Approval sent\. Waiting for Ethereum to confirm it\./);
-  assert.match(page, /Pending transaction ↗/);
+  assert.match(page, /href=\{etherscanTx\(pending\.hash\)\}/);
   // A pending action belongs to one claim row, not to every row at once.
   assert.match(page, /pending\?\.scope === claimScope\(request\.requestId\)/);
 
