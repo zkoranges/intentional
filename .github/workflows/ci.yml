@@ -50,10 +50,17 @@ jobs:
         with:
           node-version: "22.18.0"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            services/quote-signer/package-lock.json
 
       - name: Install locked frontend dependencies
         run: npm --prefix frontend ci
+
+      - name: Install and test the production quote signer
+        run: |
+          npm --prefix services/quote-signer ci
+          npm --prefix services/quote-signer test
 
       - name: Run frontend build, lint, and truthfulness tests
         run: |
