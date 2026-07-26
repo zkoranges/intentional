@@ -1,17 +1,25 @@
-# Intentional
-
-[![CI](https://github.com/zkoranges/intentional/actions/workflows/ci.yml/badge.svg)](https://github.com/zkoranges/intentional/actions/workflows/ci.yml)
-[![Production fork proof](https://github.com/zkoranges/intentional/actions/workflows/production-fork-proof.yml/badge.svg)](https://github.com/zkoranges/intentional/actions/workflows/production-fork-proof.yml)
-[![App](https://img.shields.io/badge/app-intentional.so-f4f4f5)](https://intentional.so)
-
-**Onchain factoring for delayed claims.**
+<div align="center">
+  <a href="https://intentional.so">
+    <img src="frontend/public/icons/intentional-mark.svg" width="64" height="64" alt="Intentional">
+  </a>
+  <h1>Intentional</h1>
+  <p><strong>Onchain factoring for delayed claims.</strong></p>
+  <p>
+    <a href="https://github.com/zkoranges/intentional/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/zkoranges/intentional/ci.yml?branch=main&style=flat-square&label=CI"></a>
+    <a href="https://github.com/zkoranges/intentional/actions/workflows/production-fork-proof.yml"><img alt="Production fork proof" src="https://img.shields.io/github/actions/workflow/status/zkoranges/intentional/production-fork-proof.yml?branch=main&style=flat-square&label=fork%20proof"></a>
+    <a href="https://intentional.so"><img alt="Open Intentional" src="https://img.shields.io/badge/app-intentional.so-f4f4f5?style=flat-square"></a>
+  </p>
+  <p>
+    <a href="https://intentional.so">Open the app</a>
+    ·
+    <a href="https://intentional.so/docs">Read the docs</a>
+    ·
+    <a href="https://etherscan.io/address/0x906e0f4583834d44d55f26f0D6Ac842FafdCCcc5#code">View the contracts</a>
+  </p>
+</div>
 
 Intentional lets a user sell a pending withdrawal right for WETH now. A factor
 buys the claim, takes over the wait, and receives the eventual protocol payout.
-
-[Open the app](https://intentional.so) ·
-[Read the docs](https://intentional.so/docs) ·
-[View the contracts](https://etherscan.io/address/0x906e0f4583834d44d55f26f0D6Ac842FafdCCcc5#code)
 
 ## How it works
 
@@ -37,6 +45,31 @@ flowchart LR
 
 Factor liquidity remains in Aave StataWETH until a payment is required. The
 reserve withdraws only the amount needed for the accepted quote.
+
+## Standards path
+
+[ERC-7540](https://eips.ethereum.org/EIPS/eip-7540) extends tokenized vaults
+with asynchronous deposit and redemption requests. A redemption moves through
+`Pending`, `Claimable`, and `Claimed` states under the control of a request
+controller. ERC-7540 also uses the
+[ERC-7575](https://eips.ethereum.org/EIPS/eip-7575) `share()` interface, which
+allows the vault entry point and its share token to be separate contracts.
+
+[ERC-8161](https://eips.ethereum.org/EIPS/eip-8161) is an optional extension
+that lets an ERC-7540 vault transfer the controller's entire pending deposit or
+redemption balance to a new controller. It transfers only pending requests—not
+claimable requests—and does not define a price, liquidity source, order book,
+or payment mechanism.
+
+Intentional supplies that market layer. A factor prices a pending redemption,
+the settlement transfers the factor's payment to the seller, and the ERC-8161
+request moves to the factor's escrow in the same transaction. The factor later
+claims the vault assets when the request becomes claimable.
+
+Lido is the current live market and represents withdrawal rights as `unstETH`
+NFTs rather than ERC-7540 requests. The ERC-7540/ERC-8161 adapter is the
+standards-based path for supporting asynchronous vaults through the same
+factoring settlement.
 
 ## Live status
 
@@ -171,9 +204,9 @@ docs/                   protocol, security and operations documentation
 
 ### ERC-7540 and ERC-8161
 
-The repository includes an adapter for transferable asynchronous vault
-requests, including requests that move from Pending to Claimable between quote
-and execution. It is a standards reference; no production ERC-8161 vault is
+The repository includes the standards adapter described above, including
+handling for requests that move from Pending to Claimable between quote and
+execution. It is a reference integration; no production ERC-8161 vault is
 claimed as supported.
 
 ### Uniswap payouts
