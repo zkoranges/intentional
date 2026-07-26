@@ -135,7 +135,7 @@ test("liquid stETH requests a real originate quote and verifies it independently
 
   assert.match(
     instantQuoteFlow,
-    /body:\s*JSON\.stringify\(\{\s*mode: "originate",\s*seller: account,\s*requestedStEth: amount\.toString\(\)/s,
+    /body:\s*JSON\.stringify\(\{\s*mode: "originate",\s*seller: requestedAccount,\s*requestedStEth: requestedAmount\.toString\(\)/s,
   );
   assert.match(
     instantQuoteFlow,
@@ -297,12 +297,12 @@ test("owned unstETH firm offers are independently verified before exact approval
   // against chain state; no envelope passes through a human.
   assert.match(
     existingQuoteFlow,
-    /body:\s*JSON\.stringify\(\{\s*mode: "existing-unsteth",\s*seller: account,\s*requestId: request\.requestId\.toString\(\)/s,
+    /body:\s*JSON\.stringify\(\{\s*mode: "existing-unsteth",\s*seller: requestedAccount,\s*requestId: position\.requestId\.toString\(\)/s,
   );
   assert.match(page, /"\/api\/quote\/lido"/);
   assert.match(
     existingQuoteFlow,
-    /const checked = await verifyReservoirQuote\(\s*injected,\s*account,\s*JSON\.stringify\(payload\)/s,
+    /const checked = await verifyReservoirQuote\(\s*injected,\s*requestedAccount,\s*JSON\.stringify\(payload\)/s,
   );
   assert.ok(
     existingQuoteFlow.indexOf("verifyReservoirQuote(") <

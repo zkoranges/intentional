@@ -62,11 +62,24 @@ type PendingAction = {
   hash: Hash | null;
   /** Identifies the claim row that owns this action, when one does. */
   scope: string | null;
+  /** Quote reads are cancellable; wallet writes deliberately are not. */
+  kind?: "quote";
 };
 
 function claimScope(requestId: bigint | null) {
   return requestId === null ? null : `claim-${requestId}`;
 }
+
+type QuoteRequest = {
+  generation: number;
+  controller: AbortController;
+  identity: string;
+};
+
+type QuoteIssue = {
+  message: string;
+  retryAt: number | null;
+};
 
 type SuccessAction = {
   eyebrow: string;
@@ -221,6 +234,45 @@ function errorMessage(error: unknown) {
     return message.length > 220 ? `${message.slice(0, 217)}…` : message;
   }
   return "The wallet action failed";
+}
+
+function retryAtFromResponse(
+  response: Response,
+  payload: unknown,
+  fallback: number | null,
+) {
+  const record =
+    typeof payload === "object" && payload !== null
+      ? (payload as Record<string, unknown>)
+      : null;
+  if (typeof record?.retryAt === "string") {
+    const parsed = Date.parse(record.retryAt);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  if (
+    typeof record?.retryAfterSeconds === "number" &&
+    Number.isFinite(record.retryAfterSeconds) &&
+    record.retryAfterSeconds > 0
+  ) {
+    return Date.now() + Math.ceil(record.retryAfterSeconds) * 1_000;
+  }
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter && /^\d+$/.test(retryAfter)) {
+    return Date.now() + Number(retryAfter) * 1_000;
+  }
+  return fallback && fallback > Date.now() ? fallback : null;
+}
+
+function retryLabel(issue: QuoteIssue | null, now: number) {
+  if (!issue?.retryAt || issue.retryAt <= now) return issue?.message ?? null;
+  const seconds = Math.max(1, Math.ceil((issue.retryAt - now) / 1_000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  const wait =
+    minutes > 0
+      ? `${minutes}:${remainder.toString().padStart(2, "0")}`
+      : `${seconds}s`;
+  return `${issue.message} Try again in ${wait}.`;
 }
 
 function quoteDiscount(check: ReservoirQuoteCheck | null) {
@@ -485,6 +537,8 @@ export default function Home() {
   );
   const [claimQuoteCheck, setClaimQuoteCheck] =
     useState<ReservoirQuoteCheck | null>(null);
+  const [quoteIssue, setQuoteIssue] = useState<QuoteIssue | null>(null);
+  const [quoteClock, setQuoteClock] = useState(() => Date.now());
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [success, setSuccess] = useState<SuccessAction | null>(null);
   const [walletMenuOpen, setWalletMenuOpen] = useState(false);
@@ -502,6 +556,10 @@ export default function Home() {
   });
   const walletMenuRef = useRef<HTMLDivElement>(null);
   const walletRefreshIdRef = useRef(0);
+  const quoteGenerationRef = useRef(0);
+  const quoteRequestRef = useRef<QuoteRequest | null>(null);
+  const lastQuoteDeadlineRef = useRef<number | null>(null);
+  const hasIssuedQuoteRef = useRef(false);
 
   const busy = action !== "idle";
   const marketLive = marketStatus.firmQuotesEnabled;
@@ -516,7 +574,10 @@ export default function Home() {
     sellableClaims[0] ??
     null;
   const selectedClaimOffer =
-    claimQuoteCheck?.requestId === selectedClaim?.requestId
+    account &&
+    claimQuoteCheck?.envelope.quote.seller.toLowerCase() ===
+      account.toLowerCase() &&
+    claimQuoteCheck.requestId === selectedClaim?.requestId
       ? claimQuoteCheck
       : null;
   const selectedClaimWithinPilotLimits = Boolean(
@@ -546,7 +607,10 @@ export default function Home() {
     amountWithinLidoLimits &&
     Boolean(snapshot && amount <= snapshot.stEthBalance);
   const stEthOffer =
-    claimQuoteCheck?.envelope.mode === "originate" &&
+    account &&
+    claimQuoteCheck?.envelope.quote.seller.toLowerCase() ===
+      account.toLowerCase() &&
+    claimQuoteCheck.envelope.mode === "originate" &&
     claimQuoteCheck.requestedStEth === amount
       ? claimQuoteCheck
       : null;
@@ -572,6 +636,61 @@ export default function Home() {
         : !amountWithinLiveCapacity
           ? `Current reserve supports up to ${formatMainnetAmount(maximumLiveClaim, 6)} stETH`
           : null);
+  const quoteIssueLabel = retryLabel(quoteIssue, quoteClock);
+  const quoteRetryBlocked = Boolean(
+    quoteIssue?.retryAt && quoteIssue.retryAt > quoteClock,
+  );
+
+  const invalidateQuoteRequest = useCallback(
+    (clearVisibleOffer = true, clearIssue = true) => {
+      quoteGenerationRef.current += 1;
+      const active = quoteRequestRef.current;
+      active?.controller.abort();
+      quoteRequestRef.current = null;
+      if (clearVisibleOffer) setClaimQuoteCheck(null);
+      if (clearIssue) setQuoteIssue(null);
+      if (clearVisibleOffer || clearIssue) setStatus(null);
+      if (active) {
+        setPending((current) =>
+          current?.kind === "quote" ? null : current,
+        );
+        setAction((current) => (current === "reading" ? "idle" : current));
+      }
+    },
+    [],
+  );
+
+  function beginQuoteRequest(identity: string, nextPending: PendingAction) {
+    invalidateQuoteRequest(true);
+    const request: QuoteRequest = {
+      generation: ++quoteGenerationRef.current,
+      controller: new AbortController(),
+      identity,
+    };
+    quoteRequestRef.current = request;
+    setAction("reading");
+    setPending({ ...nextPending, kind: "quote" });
+    setStatus(nextPending.detail);
+    return request;
+  }
+
+  function isCurrentQuoteRequest(request: QuoteRequest) {
+    const current = quoteRequestRef.current;
+    return (
+      current?.generation === request.generation &&
+      current.identity === request.identity &&
+      !request.controller.signal.aborted
+    );
+  }
+
+  function finishQuoteRequest(request: QuoteRequest) {
+    if (!isCurrentQuoteRequest(request)) return;
+    quoteRequestRef.current = null;
+    setPending((current) =>
+      current?.kind === "quote" ? null : current,
+    );
+    setAction((current) => (current === "reading" ? "idle" : current));
+  }
 
   const refreshWallet = useCallback(
     async (connectedAccount: Address) => {
@@ -612,6 +731,9 @@ export default function Home() {
   const closeSuccess = useCallback(() => setSuccess(null), []);
 
   const clearWalletState = useCallback((nextStatus: string | null = null) => {
+    invalidateQuoteRequest();
+    hasIssuedQuoteRef.current = false;
+    lastQuoteDeadlineRef.current = null;
     walletRefreshIdRef.current += 1;
     setAccount(null);
     setSnapshot(null);
@@ -624,10 +746,13 @@ export default function Home() {
     setPending(null);
     setSuccess(null);
     setAction("idle");
-  }, []);
+  }, [invalidateQuoteRequest]);
 
   const loadWalletAccount = useCallback(
     async (next: Address) => {
+      invalidateQuoteRequest();
+      hasIssuedQuoteRef.current = false;
+      lastQuoteDeadlineRef.current = null;
       walletRefreshIdRef.current += 1;
       setAccount(next);
       setSnapshot(null);
@@ -641,7 +766,7 @@ export default function Home() {
       setSuccess(null);
       await refreshWallet(next);
     },
-    [refreshWallet],
+    [invalidateQuoteRequest, refreshWallet],
   );
 
   useEffect(() => {
@@ -661,6 +786,9 @@ export default function Home() {
       syncAccounts(args[0] as string[] | undefined);
     };
     const onChain = () => {
+      invalidateQuoteRequest();
+      hasIssuedQuoteRef.current = false;
+      lastQuoteDeadlineRef.current = null;
       walletRefreshIdRef.current += 1;
       setSnapshot(null);
       void injected
@@ -686,7 +814,51 @@ export default function Home() {
       injected.removeListener?.("accountsChanged", onAccounts);
       injected.removeListener?.("chainChanged", onChain);
     };
-  }, [clearWalletState, loadWalletAccount]);
+  }, [clearWalletState, invalidateQuoteRequest, loadWalletAccount]);
+
+  useEffect(
+    () => () => {
+      quoteGenerationRef.current += 1;
+      quoteRequestRef.current?.controller.abort();
+      quoteRequestRef.current = null;
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!quoteIssue?.retryAt) return;
+    if (quoteIssue.retryAt <= Date.now()) {
+      setQuoteClock(Date.now());
+      return;
+    }
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setQuoteClock(now);
+      if (quoteIssue.retryAt && now >= quoteIssue.retryAt) {
+        window.clearInterval(timer);
+      }
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [quoteIssue]);
+
+  useEffect(() => {
+    if (!claimQuoteCheck) return;
+    const nonce = claimQuoteCheck.envelope.quote.nonce;
+    const expiresAt = Number(claimQuoteCheck.envelope.quote.deadline) * 1_000;
+    const expire = () => {
+      setClaimQuoteCheck((current) =>
+        current?.envelope.quote.nonce === nonce ? null : current,
+      );
+      setStatus("The firm offer expired. Request a fresh quote.");
+    };
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) {
+      expire();
+      return;
+    }
+    const timer = window.setTimeout(expire, remaining + 250);
+    return () => window.clearTimeout(timer);
+  }, [claimQuoteCheck]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1058,20 +1230,24 @@ export default function Home() {
       await handleMinedActionError(
         error,
         "Intentional approval confirmed with a verification warning",
-        selectedCheck.envelope.mode === "originate",
       );
-      if (isExistingClaim) {
-        setClaimQuoteCheck(null);
-      }
     } finally {
       setPending(null);
       setAction("idle");
     }
   }
 
-  async function requestStEthQuote() {
+  async function requestStEthQuote(replace = hasIssuedQuoteRef.current) {
     const injected = getInjectedProvider();
-    if (!injected || !account || !amountValid || !amountWithinFirmLimits) return;
+    if (
+      !injected ||
+      !account ||
+      !amountValid ||
+      !amountWithinFirmLimits ||
+      !amountWithinLiveCapacity
+    ) {
+      return;
+    }
     if (!marketLive) {
       setStatus(marketStatus.detail);
       return;
@@ -1081,16 +1257,16 @@ export default function Home() {
       return;
     }
 
-    setAction("reading");
-    setClaimQuoteCheck(null);
-    setPending({
-      label: "Getting firm offer…",
-      detail: `Requesting a firm offer for ${formatMainnetAmount(amount)} stETH.`,
-      hash: null,
-      scope: null,
-    });
-    setStatus(
-      `Requesting a firm offer for ${formatMainnetAmount(amount)} stETH.`,
+    const requestedAccount = account;
+    const requestedAmount = amount;
+    const request = beginQuoteRequest(
+      `originate:${requestedAccount.toLowerCase()}:${requestedAmount}`,
+      {
+        label: replace ? "Refreshing firm offer…" : "Getting firm offer…",
+        detail: `${replace ? "Refreshing" : "Requesting"} a firm offer for ${formatMainnetAmount(requestedAmount)} stETH.`,
+        hash: null,
+        scope: null,
+      },
     );
     try {
       const response = await fetch("/api/quote/lido", {
@@ -1098,11 +1274,14 @@ export default function Home() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           mode: "originate",
-          seller: account,
-          requestedStEth: amount.toString(),
+          seller: requestedAccount,
+          requestedStEth: requestedAmount.toString(),
+          replace,
         }),
+        signal: request.controller.signal,
       });
       const payload: unknown = await response.json();
+      if (!isCurrentQuoteRequest(request)) return;
       if (!response.ok) {
         const message =
           typeof payload === "object" &&
@@ -1110,35 +1289,69 @@ export default function Home() {
           typeof (payload as { error?: unknown }).error === "string"
             ? (payload as { error: string }).error
             : "Firm offers are unavailable right now";
+        if (response.status === 409) {
+          setQuoteIssue({
+            message,
+            retryAt: retryAtFromResponse(
+              response,
+              payload,
+              lastQuoteDeadlineRef.current,
+            ),
+          });
+          setQuoteClock(Date.now());
+        }
         throw new Error(message);
       }
       const checked = await verifyReservoirQuote(
         injected,
-        account,
+        requestedAccount,
         JSON.stringify(payload),
       );
+      if (!isCurrentQuoteRequest(request)) return;
       if (
         checked.envelope.mode !== "originate" ||
         checked.requestId !== null ||
-        checked.requestedStEth !== amount
+        checked.requestedStEth !== requestedAmount ||
+        checked.envelope.quote.seller.toLowerCase() !==
+          requestedAccount.toLowerCase()
       ) {
         throw new Error("The firm offer does not match this stETH exit");
       }
+      hasIssuedQuoteRef.current = true;
+      lastQuoteDeadlineRef.current =
+        Number(checked.envelope.quote.deadline) * 1_000;
       setClaimQuoteCheck(checked);
+      setQuoteIssue(null);
       setStatus(
-        `Firm offer ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH for ${formatMainnetAmount(amount)} stETH.`,
+        `Firm offer ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH for ${formatMainnetAmount(requestedAmount)} stETH.`,
       );
     } catch (error) {
-      setStatus(errorMessage(error));
+      if (
+        isCurrentQuoteRequest(request) &&
+        !(error instanceof DOMException && error.name === "AbortError")
+      ) {
+        setStatus(errorMessage(error));
+      }
     } finally {
-      setPending(null);
-      setAction("idle");
+      finishQuoteRequest(request);
     }
   }
 
-  async function requestExistingClaimQuote(request: WithdrawalStatus) {
+  async function requestExistingClaimQuote(
+    position: WithdrawalStatus,
+    replace = hasIssuedQuoteRef.current,
+  ) {
     const injected = getInjectedProvider();
-    if (!injected || !account || request.isClaimed) return;
+    if (
+      !injected ||
+      !account ||
+      position.isClaimed ||
+      position.amountOfStETH < MIN_LIVE_LIDO_QUOTE ||
+      position.amountOfStETH > MAX_LIVE_LIDO_QUOTE ||
+      firmPaymentFor(position.amountOfStETH) > marketCapacity
+    ) {
+      return;
+    }
     if (!marketLive) {
       setStatus(marketStatus.detail);
       return;
@@ -1148,27 +1361,31 @@ export default function Home() {
       return;
     }
 
-    setSelectedClaimId(request.requestId);
-    setAction("reading");
-    setClaimQuoteCheck(null);
-    setPending({
-      label: "Getting firm offer…",
-      detail: `Requesting a firm offer for unstETH #${request.requestId}.`,
-      hash: null,
-      scope: claimScope(request.requestId),
-    });
-    setStatus(`Requesting a firm offer for unstETH #${request.requestId}.`);
+    const requestedAccount = account;
+    setSelectedClaimId(position.requestId);
+    const request = beginQuoteRequest(
+      `existing:${requestedAccount.toLowerCase()}:${position.requestId}`,
+      {
+        label: replace ? "Refreshing firm offer…" : "Getting firm offer…",
+        detail: `${replace ? "Refreshing" : "Requesting"} a firm offer for unstETH #${position.requestId}.`,
+        hash: null,
+        scope: claimScope(position.requestId),
+      },
+    );
     try {
       const response = await fetch("/api/quote/lido", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           mode: "existing-unsteth",
-          seller: account,
-          requestId: request.requestId.toString(),
+          seller: requestedAccount,
+          requestId: position.requestId.toString(),
+          replace,
         }),
+        signal: request.controller.signal,
       });
       const payload: unknown = await response.json();
+      if (!isCurrentQuoteRequest(request)) return;
       if (!response.ok) {
         const message =
           typeof payload === "object" &&
@@ -1176,30 +1393,52 @@ export default function Home() {
           typeof (payload as { error?: unknown }).error === "string"
             ? (payload as { error: string }).error
             : "Firm offers are unavailable right now";
+        if (response.status === 409) {
+          setQuoteIssue({
+            message,
+            retryAt: retryAtFromResponse(
+              response,
+              payload,
+              lastQuoteDeadlineRef.current,
+            ),
+          });
+          setQuoteClock(Date.now());
+        }
         throw new Error(message);
       }
       const checked = await verifyReservoirQuote(
         injected,
-        account,
+        requestedAccount,
         JSON.stringify(payload),
       );
+      if (!isCurrentQuoteRequest(request)) return;
       if (
         checked.envelope.mode !== "existing-unsteth" ||
-        checked.requestId !== request.requestId ||
-        checked.requestedStEth !== request.amountOfStETH ||
-        checked.amountOfShares !== request.amountOfShares
+        checked.requestId !== position.requestId ||
+        checked.requestedStEth !== position.amountOfStETH ||
+        checked.amountOfShares !== position.amountOfShares ||
+        checked.envelope.quote.seller.toLowerCase() !==
+          requestedAccount.toLowerCase()
       ) {
         throw new Error("The firm offer does not match this unstETH position");
       }
+      hasIssuedQuoteRef.current = true;
+      lastQuoteDeadlineRef.current =
+        Number(checked.envelope.quote.deadline) * 1_000;
       setClaimQuoteCheck(checked);
+      setQuoteIssue(null);
       setStatus(
-        `Firm offer ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH for unstETH #${request.requestId}.`,
+        `Firm offer ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH for unstETH #${position.requestId}.`,
       );
     } catch (error) {
-      setStatus(errorMessage(error));
+      if (
+        isCurrentQuoteRequest(request) &&
+        !(error instanceof DOMException && error.name === "AbortError")
+      ) {
+        setStatus(errorMessage(error));
+      }
     } finally {
-      setPending(null);
-      setAction("idle");
+      finishQuoteRequest(request);
     }
   }
 
@@ -1268,17 +1507,14 @@ export default function Home() {
       await handleMinedActionError(
         error,
         "Instant exit confirmed with a verification warning",
-        !isExistingClaim,
+        error instanceof MinedTransactionVerificationError,
       );
-      if (isExistingClaim) {
-        setClaimQuoteCheck(null);
-      }
     }
   }
 
   function selectMode(nextMode: ExitMode) {
+    invalidateQuoteRequest();
     setMode(nextMode);
-    setClaimQuoteCheck(null);
     setStatus(
       nextMode === "sell"
         ? marketLive
@@ -1291,8 +1527,8 @@ export default function Home() {
   }
 
   function selectSourceAsset(nextAsset: SourceAsset) {
+    invalidateQuoteRequest();
     setSourceAsset(nextAsset);
-    setClaimQuoteCheck(null);
     setStatus(
       marketLive
         ? nextAsset === "steth"
@@ -1304,6 +1540,7 @@ export default function Home() {
 
   function setBalancePercent(percent: 25 | 50 | 100) {
     if (!snapshot) return;
+    invalidateQuoteRequest();
     const spendableBalance =
       mode === "sell" && sourceAsset === "steth"
         ? snapshot.stEthBalance < maximumLiveClaim
@@ -1539,8 +1776,8 @@ export default function Home() {
                     inputMode="decimal"
                     value={amountInput}
                     onChange={(event) => {
+                      invalidateQuoteRequest();
                       setAmountInput(event.target.value);
-                      setClaimQuoteCheck(null);
                     }}
                     aria-label="stETH amount"
                     placeholder="0.00"
@@ -1556,7 +1793,6 @@ export default function Home() {
                     type="button"
                     onClick={() => {
                       setBalancePercent(25);
-                      setClaimQuoteCheck(null);
                     }}
                     disabled={!snapshot || busy}
                   >
@@ -1566,7 +1802,6 @@ export default function Home() {
                     type="button"
                     onClick={() => {
                       setBalancePercent(50);
-                      setClaimQuoteCheck(null);
                     }}
                     disabled={!snapshot || busy}
                   >
@@ -1577,7 +1812,6 @@ export default function Home() {
                     type="button"
                     onClick={() => {
                       setBalancePercent(100);
-                      setClaimQuoteCheck(null);
                     }}
                     disabled={!snapshot || busy}
                   >
@@ -1670,10 +1904,10 @@ export default function Home() {
                 ) : !stEthOffer ? (
                   <button
                     className="actionButton"
-                    onClick={requestStEthQuote}
-                    disabled={busy}
+                    onClick={() => requestStEthQuote()}
+                    disabled={busy || quoteRetryBlocked}
                   >
-                    Get firm offer
+                    {quoteRetryBlocked ? "Firm offer reserved" : "Get firm offer"}
                   </button>
                 ) : !stEthOffer.approvalSatisfied ? (
                   <button
@@ -1697,6 +1931,16 @@ export default function Home() {
                     WETH
                   </button>
                 )}
+                {stEthOffer && !pending && (
+                  <button
+                    className="requoteButton"
+                    type="button"
+                    onClick={() => requestStEthQuote(true)}
+                    disabled={busy}
+                  >
+                    Requote
+                  </button>
+                )}
               </div>
               </>
             ) : (
@@ -1718,8 +1962,8 @@ export default function Home() {
                     value={selectedClaim?.requestId.toString() ?? ""}
                     onChange={(event) => {
                       const requestId = BigInt(event.target.value);
+                      invalidateQuoteRequest();
                       setSelectedClaimId(requestId);
-                      setClaimQuoteCheck(null);
                       setStatus(`Selected unstETH #${requestId}.`);
                     }}
                   >
@@ -1860,9 +2104,9 @@ export default function Home() {
                   <button
                     className="actionButton"
                     onClick={() => requestExistingClaimQuote(selectedClaim)}
-                    disabled={busy}
+                    disabled={busy || quoteRetryBlocked}
                   >
-                    Get firm offer
+                    {quoteRetryBlocked ? "Firm offer reserved" : "Get firm offer"}
                   </button>
                 ) : !selectedClaimOffer.approvalSatisfied ? (
                   <button
@@ -1886,6 +2130,18 @@ export default function Home() {
                     WETH
                   </button>
                 )}
+                {selectedClaimOffer && selectedClaim && !pending && (
+                  <button
+                    className="requoteButton"
+                    type="button"
+                    onClick={() =>
+                      requestExistingClaimQuote(selectedClaim, true)
+                    }
+                    disabled={busy}
+                  >
+                    Requote
+                  </button>
+                )}
               </div>
               </>
             )
@@ -1905,7 +2161,10 @@ export default function Home() {
                   <input
                     inputMode="decimal"
                     value={amountInput}
-                    onChange={(event) => setAmountInput(event.target.value)}
+                    onChange={(event) => {
+                      invalidateQuoteRequest();
+                      setAmountInput(event.target.value);
+                    }}
                     aria-label="stETH amount"
                     placeholder="0.00"
                   />
@@ -2058,7 +2317,12 @@ export default function Home() {
           {(status || busy) && (
             <div className="statusBar" aria-live="polite">
               {busy && <span className="statusSpinner" />}
-              <p>{pending?.detail ?? status ?? "Updating wallet…"}</p>
+              <p>
+                {pending?.detail ??
+                  quoteIssueLabel ??
+                  status ??
+                  "Updating wallet…"}
+              </p>
               {pending?.hash ? (
                 <a
                   href={etherscanTx(pending.hash)}
@@ -2160,7 +2424,10 @@ export default function Home() {
             <div className="positionList">
                   {snapshot.requests.map((request) => {
                     const activeOffer =
+                      account &&
                       claimQuoteCheck?.envelope.mode === "existing-unsteth" &&
+                      claimQuoteCheck.envelope.quote.seller.toLowerCase() ===
+                        account.toLowerCase() &&
                       claimQuoteCheck.requestId === request.requestId
                         ? claimQuoteCheck
                         : null;
@@ -2220,7 +2487,8 @@ export default function Home() {
                             View ↗
                           </a>
                         ) : activeOffer ? (
-                          !activeOffer.approvalSatisfied ? (
+                          <>
+                          {!activeOffer.approvalSatisfied ? (
                             <button
                               onClick={() => approveReservoir(activeOffer)}
                               disabled={busy}
@@ -2240,14 +2508,28 @@ export default function Home() {
                               WETH
                             </button>
                           )
+                          }
+                          <button
+                            onClick={() =>
+                              requestExistingClaimQuote(request, true)
+                            }
+                            disabled={busy}
+                          >
+                            Requote
+                          </button>
+                          </>
                         ) : (
                           <>
                             <button
                               onClick={() => requestExistingClaimQuote(request)}
-                              disabled={busy || !marketLive}
+                              disabled={
+                                busy || !marketLive || quoteRetryBlocked
+                              }
                               title={!marketLive ? marketStatus.detail : undefined}
                             >
-                              {marketLive
+                              {quoteRetryBlocked
+                                ? "Firm offer reserved"
+                                : marketLive
                                 ? "Get firm offer"
                                 : marketStatus.state === "Retired"
                                   ? "Deployment retired"

@@ -33,7 +33,10 @@ test("wallet account and chain events refresh the active account in place", asyn
   assert.match(page, /chainChanged/);
   assert.match(page, /loadWalletAccount\(next\)/);
   assert.match(page, /walletRefreshIdRef/);
-  assert.match(page, /\[clearWalletState, loadWalletAccount\]/);
+  assert.match(
+    page,
+    /\[clearWalletState, invalidateQuoteRequest, loadWalletAccount\]/,
+  );
   assert.doesNotMatch(
     page,
     /Ethereum contracts verified\. Choose an exit route\./,
