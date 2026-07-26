@@ -1,5 +1,13 @@
 # ETHGlobal Lisbon 2026 submission record
 
+> **On the two names.** The product is **Intentional** (intentional.so) — that
+> is the name on the site, the wordmark, and the documentation. **Reservoir**
+> is retained in this record and inside signed wire formats: the EIP-712 domain
+> `"Reservoir v2"` is hashed into every quote digest and is verified by the
+> deployed kernel, so renaming it would invalidate every factor signature. Where
+> this document says Reservoir, read it as the settlement engine underneath
+> Intentional. See [`NAMING.md`](NAMING.md).
+
 This document is the honest provenance and eligibility record for Reservoir.
 It exists because the 1inch Aqua prize requires official Aqua/SwapVM use,
 onchain token transfers in the final demo (local forks are allowed), and proper
@@ -66,6 +74,65 @@ Reservoir v2 / asynchronous-claim extension:
 
 v2 is a settlement sidecar that reuses the v1 ERC-4626 reserve adapter. It does
 not pretend that the claims kernel itself executes inside SwapVM.
+
+## Uniswap Trading API integration
+
+Entered additionally for **Best Uniswap API Integration**. The integration is a
+payout layer: a seller sells a delayed claim and is paid in the asset they
+chose rather than in WETH. The factor still underwrites and funds in WETH; a
+Uniswap-produced CLASSIC route converts the exact advance and delivers the
+payout asset directly to the seller inside the same atomic fill.
+
+**The API is load-bearing.** Without route calldata from the API there is no
+payout. A displayed quote is not shipped and would not qualify — the calldata
+returned by `/swap` is executed on-chain, unaltered, and the fill reverts
+unless the seller's *measured* payout delta clears the signed minimum.
+
+Load-bearing files:
+
+- `src/payouts/UniswapPayoutSettlement.sol` — kernel with the payout branch;
+- `src/payouts/UniswapPayoutExecutor.sol` — the swap boundary; immutable proxy
+  target and selector, exact approval, baseline accounting;
+- `frontend/scripts/fetch-uniswap-route.mjs` — server-side `/quote` + `/swap`
+  fetch with the §8 validation table applied before a fixture is written;
+- `frontend/scripts/create-uniswap-payout-quote.mjs` — validates the route
+  against the *deployed* executor's bindings, then factor-signs the quote;
+- `test/fork/UniswapPayoutMainnet.t.sol` — the canonical proof; and
+- `test/fork/UniswapPayoutSpike.t.sol` — the Gate 0 fork spike.
+
+Replaying the proof needs no API key — both fixtures are committed, and they
+contain only a public API response and public addresses:
+
+```sh
+forge test --match-path "test/fork/UniswapPayout*.t.sol" --fork-url "$ETH_RPC_URL" -vv
+```
+
+Archive RPC is required: the fixtures pin the block observed at route-fetch
+time, and both are far outside the ~128-block window non-archive endpoints
+retain.
+
+Retained API provenance:
+
+| Fixture | Block | `/quote` requestId | `/swap` requestId | Quoted out |
+|---|---|---|---|---|
+| `uniswap-route.json` (spike) | 25611938 | `49eb7df2320d0176a4ac0c50982c6566` | `7723a7005f44c9a9bfd8c10964010ba0` | 9348354 USDC |
+| `uniswap-payout-route.json` (proof) | 25612024 | `1398e97651e506e52958d7947869fde2` | `5394e1e66610aa06ea7878ee475f3b35` | 9349109 USDC |
+
+The exact `/quote` body is retained byte-for-byte and its `keccak256` is bound
+into the factor signature, so the demo cannot drift from the evidence it shows.
+Observed proxy target `0x02E5be68D46DAc0B524905bfF209cf47EE6dB2a9`, selector
+`0x2894adf9`, `swap.value` zero in both.
+
+Integration feedback for the sponsor — key onboarding, contract-as-swapper
+behaviour, the no-Permit2 proxy flow, a separate recipient, the zero-balance
+simulation gap, and the `permitData` omission rule — is in
+[`FEEDBACK.md`](../FEEDBACK.md).
+
+**Boundary, stated plainly.** The payout layer is proven on a mainnet fork and
+is *not* deployed to mainnet; it is a sibling of the live v2 kernel with its
+own EIP-712 domain, not an upgrade to it. The frontend payout selector is
+deferred — the payout path is exercised by the fork proof and the operator CLI,
+not by the live site.
 
 ## Repository history
 

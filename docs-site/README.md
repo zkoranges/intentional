@@ -21,7 +21,7 @@ You get:      ~2.59 ETH now
 The factor:   waits, then collects the payout — ~2.6 ETH if no impairment
 ```
 
-The production demo factored Lido withdrawals on Ethereum mainnet; that deployment is now retired — see [Status](status.md). The settlement kernel is claim-agnostic: supporting a new claim type means writing an adapter, not changing the kernel. An ERC-7540/8161 adapter ships alongside the Lido one to demonstrate this.
+The production demo factored Lido withdrawals on Ethereum mainnet. That proof deployment is permanently retired and is never a fallback; the current live stack is the `pre-alpha-001` deployment recorded in `deployments/mainnet-pre-alpha-001.json`. The settlement kernel is claim-agnostic: supporting a new claim type means writing an adapter, not changing the kernel. An ERC-7540/8161 adapter ships alongside the Lido one to demonstrate this.
 
 ## The invariant
 

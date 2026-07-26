@@ -40,7 +40,7 @@ Factoring demand is episodic stress liquidity: in externally produced sample dat
 
 ## One factor today
 
-Each deployment binds a single factor address: one funding account, one payment asset, and the administrative controls (pause, adapter allowlist, quote cancellation, withdrawals). The mainnet proof deployment is retired — see [Status](status.md).
+Each deployment binds a single factor address: one funding account, one payment asset, and the administrative controls (pause, adapter allowlist, quote cancellation, withdrawals). The original mainnet proof deployment is permanently retired; the current live stack is the `pre-alpha-001` deployment recorded in `deployments/mainnet-pre-alpha-001.json`.
 
 The design targets multiple factors competing on the same claim. A withdrawal claim has no reference price; each factor prices from its own cost of capital and its own estimate of queue time, so competitive quoting is how a price forms. This is why settlement is built around signed quotes rather than pool pricing.
 

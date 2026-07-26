@@ -1,10 +1,12 @@
 # Uniswap Trading API — integration feedback
 
-> From building Reservoir's payout layer at ETHGlobal Lisbon 2026: a
+> From building Intentional's payout layer at ETHGlobal Lisbon 2026: a
 > settlement contract funds an exact WETH amount and the API route converts it
 > to the seller's chosen payout asset inside one atomic factoring transaction.
-> Every observation below was hit for real; request IDs are retained in
-> `test/spikes/fixtures/` and `deployments/`.
+> Every observation below was hit for real; the exact `/quote` and `/swap`
+> request IDs, the retained quote hash, and the block each route was fetched at
+> are committed in `test/fork/fixtures/uniswap-route.json` and
+> `test/fork/fixtures/uniswap-payout-route.json`.
 
 ## Setup experience
 
