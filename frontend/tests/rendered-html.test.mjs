@@ -92,8 +92,8 @@ test("Sell now selects a source asset while Wait & claim remains a separate rout
   assert.doesNotMatch(routeTabs, />\s*Sell unstETH\s*</);
 
   assert.match(page, /aria-label="Asset to sell"/);
-  assert.match(page, /<option value="steth">\s*stETH\s*<\/option>/i);
-  assert.match(page, /<option value="unsteth">\s*unstETH\s*<\/option>/i);
+  assert.match(page, /id: "steth",\s*symbol: "stETH"/);
+  assert.match(page, /id: "unsteth",\s*symbol: "unstETH"/);
 
   assert.match(page, /Lido · stETH → WETH/);
   assert.match(page, /Lido · unstETH → WETH/);

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import {
   formatEther,
   getAddress,
@@ -66,6 +73,23 @@ const GITHUB_URL = "https://github.com/zkoranges/intentional";
 const DOCS_URL = "/docs";
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
 const WALLET_DISCONNECTED_KEY = "intentional.wallet-disconnected";
+
+const SOURCE_ASSETS = [
+  {
+    id: "steth",
+    symbol: "stETH",
+    name: "Lido staked ETH",
+    icon: "/icons/steth.png",
+    iconClass: "stethIcon",
+  },
+  {
+    id: "unsteth",
+    symbol: "unstETH",
+    name: "Lido withdrawal NFT",
+    icon: "/icons/unsteth.svg",
+    iconClass: "nftIcon",
+  },
+] as const;
 
 const MARKETS = [
   {
@@ -174,6 +198,133 @@ function formatMarketWait(milliseconds: number) {
   if (hours < 48) return `~${Math.max(1, Math.round(hours))} hours`;
   const days = hours / 24;
   return `~${days < 10 ? days.toFixed(1) : Math.round(days)} days`;
+}
+
+function AssetSelect({
+  value,
+  disabled,
+  onSelect,
+}: {
+  value: SourceAsset;
+  disabled: boolean;
+  onSelect: (asset: SourceAsset) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selected =
+    SOURCE_ASSETS.find((asset) => asset.id === value) ?? SOURCE_ASSETS[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+
+  function moveFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const options = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=option]"),
+    );
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const current = options.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      current < 0
+        ? options[step === 1 ? 0 : options.length - 1]
+        : options[(current + step + options.length) % options.length];
+    next?.focus();
+  }
+
+  return (
+    <div className="assetSelect" ref={menuRef}>
+      <button
+        type="button"
+        ref={triggerRef}
+        className="tokenSelect assetTrigger"
+        aria-label="Asset to sell"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((previous) => !previous)}
+      >
+        <span className={`tokenIcon ${selected.iconClass}`}>
+          <img src={selected.icon} alt="" width={18} height={18} />
+        </span>
+        {selected.symbol}
+        <svg
+          className="assetChevron"
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M3.5 5.25 7 8.75l3.5-3.5"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="assetPopover"
+          role="listbox"
+          aria-label="Asset to sell"
+          onKeyDown={moveFocus}
+        >
+          <p className="assetPopoverTitle">Select an asset</p>
+          {SOURCE_ASSETS.map((asset) => (
+            <button
+              key={asset.id}
+              type="button"
+              role="option"
+              aria-selected={asset.id === value}
+              autoFocus={asset.id === value}
+              onClick={() => {
+                setOpen(false);
+                triggerRef.current?.focus();
+                if (asset.id !== value) onSelect(asset.id);
+              }}
+            >
+              <span className={`tokenIcon ${asset.iconClass}`}>
+                <img src={asset.icon} alt="" width={18} height={18} />
+              </span>
+              <span className="assetOptionText">
+                <strong>{asset.symbol}</strong>
+                <small>{asset.name}</small>
+              </span>
+              <span className="assetOptionCheck" aria-hidden="true">
+                {asset.id === value ? "✓" : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Home() {
@@ -1066,27 +1217,11 @@ export default function Home() {
                     aria-label="stETH amount"
                     placeholder="0.00"
                   />
-                  <label className="tokenSelect assetSelect">
-                    <span className="tokenIcon stethIcon">
-                      <img
-                        src="/icons/steth.png"
-                        alt="stETH"
-                        width={18}
-                        height={18}
-                      />
-                    </span>
-                    <select
-                      aria-label="Asset to sell"
-                      value={sourceAsset}
-                      onChange={(event) =>
-                        selectSourceAsset(event.target.value as SourceAsset)
-                      }
-                      disabled={busy}
-                    >
-                      <option value="steth">stETH</option>
-                      <option value="unsteth">unstETH</option>
-                    </select>
-                  </label>
+                  <AssetSelect
+                    value={sourceAsset}
+                    disabled={busy}
+                    onSelect={selectSourceAsset}
+                  />
                 </div>
                 <div className="amountActions" aria-label="Amount shortcuts">
                   <button
@@ -1270,27 +1405,11 @@ export default function Home() {
                       <option value="">No unstETH claim found</option>
                     )}
                   </select>
-                  <label className="tokenSelect assetSelect">
-                    <span className="tokenIcon nftIcon">
-                      <img
-                        src="/icons/unsteth.svg"
-                        alt="unstETH"
-                        width={18}
-                        height={18}
-                      />
-                    </span>
-                    <select
-                      aria-label="Asset to sell"
-                      value={sourceAsset}
-                      onChange={(event) =>
-                        selectSourceAsset(event.target.value as SourceAsset)
-                      }
-                      disabled={busy}
-                    >
-                      <option value="steth">stETH</option>
-                      <option value="unsteth">unstETH</option>
-                    </select>
-                  </label>
+                  <AssetSelect
+                    value={sourceAsset}
+                    disabled={busy}
+                    onSelect={selectSourceAsset}
+                  />
                 </div>
               </div>
 

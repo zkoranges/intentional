@@ -746,18 +746,124 @@ main {
   cursor: default;
 }
 
-.tokenSelect.assetSelect {
-  cursor: pointer;
+.assetSelect {
+  position: relative;
+  flex: 0 0 auto;
 }
 
-.tokenSelect.assetSelect select {
-  max-width: 98px;
-  border: 0;
-  outline: 0;
+.tokenSelect.assetTrigger {
+  padding-right: 9px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.tokenSelect.assetTrigger:hover:not(:disabled),
+.tokenSelect.assetTrigger[aria-expanded="true"] {
+  border-color: rgba(139, 92, 246, 0.38);
+  background: var(--surface-hover);
+}
+
+.tokenSelect.assetTrigger:disabled {
+  color: var(--muted);
+}
+
+.assetChevron {
+  flex: 0 0 auto;
+  color: #77777d;
+  transition: transform 150ms ease;
+}
+
+.tokenSelect.assetTrigger[aria-expanded="true"] .assetChevron {
+  transform: rotate(180deg);
+}
+
+.assetPopover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 244px;
+  padding: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 17px;
+  background: rgba(17, 17, 18, 0.98);
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  backdrop-filter: blur(20px);
+  animation: walletMenuIn 140ms ease-out;
+}
+
+.assetPopoverTitle {
+  margin: 0 0 5px;
+  padding: 7px 10px 9px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 620;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.assetPopover button {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 12px;
   background: transparent;
   color: var(--ink);
-  cursor: pointer;
-  font: inherit;
+  text-align: left;
+  transition: background 130ms ease;
+}
+
+.assetPopover button:hover {
+  background: var(--surface-hover);
+}
+
+.assetPopover button[aria-selected="true"] {
+  background: var(--pink-soft);
+}
+
+.assetPopover .tokenIcon {
+  flex: 0 0 auto;
+}
+
+.assetOptionText {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.assetOptionText strong,
+.assetOptionText small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assetOptionText strong {
+  font-size: 14px;
+  font-weight: 660;
+}
+
+.assetOptionText small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 540;
+}
+
+.assetOptionCheck {
+  flex: 0 0 auto;
+  width: 12px;
+  color: var(--pink);
+  font-size: 13px;
+  font-weight: 760;
 }
 
 .tokenIcon {

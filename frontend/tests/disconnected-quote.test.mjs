@@ -22,9 +22,13 @@ test("the hero has two routes and an explicit asset selector inside Sell now", a
   assert.doesNotMatch(routeTabs, />\s*Sell stETH\s*</);
   assert.doesNotMatch(routeTabs, />\s*Sell unstETH\s*</);
 
-  assert.match(page, /<select[\s\S]{0,300}aria-label="Asset to sell"/);
-  assert.match(page, /<option value="steth">\s*stETH\s*<\/option>/i);
-  assert.match(page, /<option value="unsteth">\s*unstETH\s*<\/option>/i);
+  // The asset selector is a token dropdown with an icon per option, not a
+  // native select that hides the assets behind an OS menu.
+  assert.doesNotMatch(page, /<select[^>]*aria-label="Asset to sell"/);
+  assert.match(page, /aria-label="Asset to sell"\s+aria-haspopup="listbox"/);
+  assert.match(page, /role="option"/);
+  assert.match(page, /id: "steth",\s*symbol: "stETH"/);
+  assert.match(page, /id: "unsteth",\s*symbol: "unstETH"/);
   assert.match(
     page,
     /snapshot\?\.requests\.filter\(\(request\) => !request\.isClaimed\)/,
