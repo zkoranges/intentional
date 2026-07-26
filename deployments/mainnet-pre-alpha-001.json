@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "network": "ethereum-mainnet",
+  "chainId": 1,
+  "gitCommit": "178ec3457471b865052172d7ede01aa5fb2475b5",
+  "releaseState": "paused-unfunded",
+  "factor": "0x6bC1bf768b65Ee5b27a63eF22eAc48ff10e8E07b",
+  "contracts": {
+    "fundingAccount": {
+      "address": "0x1Ca68bC3D9c8Ff07e13A9013af9eC6A2c635b713",
+      "runtimeCodeHash": "0xda5cbc5e4552db87becf148c9e35b6ec2b880d98d4fabcad3e77dfd0635fc3c7",
+      "deploymentTxHash": "0x833d3446427e0009f9c5c534f0e323e3581fa424dbe01f2afdeca34f8b200fcf",
+      "blockNumber": 25613409,
+      "sourceVerified": true,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x1Ca68bC3D9c8Ff07e13A9013af9eC6A2c635b713#code"
+    },
+    "reserveAdapter": {
+      "address": "0xD0c4ee0851a39333E5696701C6cc902d7aCDc40b",
+      "runtimeCodeHash": "0xb3e1c8c92c840052c203c28b3ee73f7c5d2098016a0e9f0d3bc25f9fefab9f9e",
+      "deploymentTxHash": "0xa77674f8219558cedca64bc8b24c72623616236b5f5cb2b240ec707ced3bef93",
+      "blockNumber": 25613410,
+      "sourceVerified": true,
+      "sourceVerificationUrl": "https://etherscan.io/address/0xD0c4ee0851a39333E5696701C6cc902d7aCDc40b#code"
+    },
+    "kernel": {
+      "address": "0x906e0f4583834d44d55f26f0D6Ac842FafdCCcc5",
+      "runtimeCodeHash": "0x4ffc1ebe5200254b61b09e4d8be073e8cb8aaefd530665ae36b1d5ea032de29a",
+      "deploymentTxHash": "0x73216c0c6d61bebaee0cd459bdc56344ccb1ffad78ab2612c5cc04c78c8e95cd",
+      "blockNumber": 25613412,
+      "sourceVerified": true,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x906e0f4583834d44d55f26f0D6Ac842FafdCCcc5#code"
+    },
+    "lidoAdapter": {
+      "address": "0xe32f43D326a4c104365D8C9ACC657c90C8E03f81",
+      "runtimeCodeHash": "0xd046fa464da3f0c599b7ce35fdeace8f86b4ab64cc118a116bb9bcc2aaa3078e",
+      "deploymentTxHash": "0xd5cfd96630d464df4a3175de51b6818d3a58b5707f9f9e9c6fc3b08ed3d9b8eb",
+      "blockNumber": 25613413,
+      "sourceVerified": true,
+      "sourceVerificationUrl": "https://etherscan.io/address/0xe32f43D326a4c104365D8C9ACC657c90C8E03f81#code"
+    },
+    "lidoUnstETHExitAdapter": {
+      "address": "0x645193BC4748109f9A7e582B00ac7D41208BF91F",
+      "runtimeCodeHash": "0xd7342d7d36b4f04d64025d209b6ca5a44358568e490cf156df32d133b5a55f8a",
+      "deploymentTxHash": "0xec3ebc83571e57dccbc3e4ec9ad6736e74ac6384bc809bf07e2b656ae32d22d4",
+      "blockNumber": 25613416,
+      "sourceVerified": true,
+      "sourceVerificationUrl": "https://etherscan.io/address/0x645193BC4748109f9A7e582B00ac7D41208BF91F#code"
+    }
+  },
+  "canonical": {
+    "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "stataWeth": "0x0bfc9d54Fc184518A81162F8fB99c2eACa081202",
+    "stETH": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+    "lidoWithdrawalQueue": "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"
+  },
+  "releaseLimits": {
+    "reserveFundingWei": "6000000000000000",
+    "minimumCapacityWei": "5000000000000000",
+    "minimumClaimWei": "500000000000000",
+    "maximumClaimWei": "5000000000000000",
+    "spreadBps": 25
+  }
+}
