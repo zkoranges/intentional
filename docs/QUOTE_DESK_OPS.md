@@ -95,7 +95,7 @@ the v2 deployment. Therefore:
 - any future desk runs against a **fresh deployment with a dedicated key**;
   for this capped pre-alpha the protected service account on the shared VPS
   holds that key, so host compromise remains an explicit risk bounded by the
-  `0.002 WETH` first-test reserve and prompt retirement—not eliminated by
+  `0.006 WETH` first-test reserve and prompt retirement—not eliminated by
   service guards.
 
 ## Current state — retired, never to be re-armed

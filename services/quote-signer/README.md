@@ -65,7 +65,7 @@ Consequences that are **operating rules, not suggestions**:
 - The desk relaunches only against a **fresh deployment with a dedicated
   key**. In the capped pre-alpha the protected service account on the shared
   VPS holds it; host compromise is therefore an explicit residual risk bounded
-  by the `0.002 WETH` first-test reserve and retirement procedure.
+  by the `0.006 WETH` first-test reserve and retirement procedure.
 
 The key material was removed from the VPS and the service units were stopped
 and disabled when the deployment was retired.

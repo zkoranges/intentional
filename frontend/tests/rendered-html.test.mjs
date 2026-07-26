@@ -31,7 +31,8 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Lido",
     "Ether.fi",
     "ERC-7540",
-    "Sell claim",
+    "Sell stETH",
+    "Sell unstETH",
     "Wait & claim",
     "Owned unstETH claim",
     "No unstETH claim found",
@@ -45,8 +46,8 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Get firm offer",
     "Getting firm offer…",
     "Signed firm offer",
-    "Pre-alpha firm offers are capped to claims from 0.0005 to 0.0015 stETH.",
-    "Claim outside 0.0005–0.0015 stETH pilot",
+    "Pre-alpha firm offers are capped to claims from 0.0005 to 0.005 stETH.",
+    "Claim outside 0.0005–0.005 stETH pilot",
     "Approve unstETH",
     "Sell for",
     "not pinned in this app build",
@@ -71,6 +72,81 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     page,
     /Sell now|Finding your quote|Indicative · no wallet needed|requestLidoQuote/,
   );
+});
+
+test("the three Lido routes have distinct source assets and settlement semantics", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+
+  assert.match(
+    page,
+    /type ExitMode = (?=[^;]*"instant")(?=[^;]*"claim")(?=[^;]*"queue")[^;]+;/,
+  );
+  assert.match(
+    page,
+    /onClick=\{\(\) => selectMode\("instant"\)\}[\s\S]{0,180}>\s*Sell stETH\s*</,
+  );
+  assert.match(
+    page,
+    /onClick=\{\(\) => selectMode\("claim"\)\}[\s\S]{0,180}>\s*Sell unstETH\s*</,
+  );
+  assert.match(
+    page,
+    /onClick=\{\(\) => selectMode\("queue"\)\}[\s\S]{0,180}>\s*Wait & claim\s*</,
+  );
+
+  assert.match(page, /Lido · stETH → WETH/);
+  assert.match(page, /Lido · unstETH → WETH/);
+  assert.match(page, /Lido · stETH → unstETH/);
+  assert.match(page, /Join the official Lido queue and claim ETH after finalization/);
+});
+
+test("liquid stETH requests a real originate quote and verifies it independently", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+  const instantQuoteFlow = page.slice(
+    page.indexOf("async function requestStEthQuote"),
+    page.indexOf("async function requestExistingClaimQuote"),
+  );
+  assert.ok(instantQuoteFlow.length > 0, "stETH firm-quote handler is missing");
+
+  assert.match(
+    instantQuoteFlow,
+    /body:\s*JSON\.stringify\(\{\s*mode: "originate",\s*seller: account,\s*requestedStEth: amount\.toString\(\)/s,
+  );
+  assert.match(
+    instantQuoteFlow,
+    /const checked = await verifyReservoirQuote\(/,
+  );
+  assert.match(
+    instantQuoteFlow,
+    /checked\.envelope\.mode !== "originate"[\s\S]{0,700}setClaimQuoteCheck\(checked\)/,
+  );
+  assert.match(page, /snapshot\.stEthBalance/);
+  assert.match(page, /approveReservoir/);
+  assert.match(page, /fillQuote/);
+});
+
+test("the pre-alpha pilot supports the real 0.005-stETH claim but no larger quote", async () => {
+  const [page, ethereum, quoteRoute] = await Promise.all([
+    readFile(new URL("app/page.tsx", projectRoot), "utf8"),
+    readFile(new URL("lib/ethereum.ts", projectRoot), "utf8"),
+    readFile(new URL("app/api/quote/lido/route.ts", projectRoot), "utf8"),
+  ]);
+
+  assert.match(
+    ethereum,
+    /MAX_LIVE_LIDO_QUOTE = 5_000_000_000_000_000n;\s*\/\/ 0\.005 stETH/,
+  );
+  assert.match(
+    ethereum,
+    /requestedStEth > MAX_LIVE_LIDO_QUOTE/,
+  );
+  assert.match(quoteRoute, /LIVE_QUOTE_RANGE = "0\.0005 to 0\.005 stETH"/);
+  assert.match(
+    quoteRoute,
+    /amount < MIN_LIVE_LIDO_QUOTE \|\| amount > MAX_LIVE_LIDO_QUOTE/,
+  );
+  assert.match(page, /0\.0005 to 0\.005 stETH/);
+  assert.match(page, /outside 0\.0005–0\.005 stETH pilot/);
 });
 
 test("market queue times distinguish live estimates from typical values", async () => {
@@ -300,7 +376,11 @@ test("market status is derived server-side and gates the complete firm path", as
   assert.match(page, /fetch\("\/api\/status"/);
   assert.match(page, /marketStatus\.firmQuotesEnabled/);
   assert.match(page, /!marketLive/);
-  assert.match(page, /Firm offers paused · deployment retired/);
+  assert.match(
+    page,
+    /!marketLive \?[\s\S]{0,700}marketStatus\.detail/,
+    "disabled firm-quote actions must show the server-verified reason",
+  );
   assert.match(page, /Lido: \{marketStatus\.state\}/);
   assert.doesNotMatch(page, /status:\s*"Open"/);
   assert.doesNotMatch(page, /One market open/);
@@ -319,6 +399,16 @@ test("market status is derived server-side and gates the complete firm path", as
   assert.match(statusRoute, /"Retired"/);
   assert.match(statusRoute, /"Unavailable"/);
   assert.match(statusRoute, /state === "Live" && firmQuoteConfigured/);
+  assert.match(
+    statusRoute,
+    /Onchain settlement is funded, but public firm quotes are unavailable/,
+  );
+  assert.match(
+    statusRoute,
+    /Mainnet proof completed; this deployment is permanently retired/,
+  );
+  assert.match(statusRoute, /Deployment status is not configured/);
+  assert.match(statusRoute, /Live Ethereum status could not be verified/);
   assert.match(statusRoute, /!adapterAllowed \|\|\s*!unstETHAdapterAllowed/);
   assert.match(
     statusRoute,
@@ -371,11 +461,16 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Connect wallet/);
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
+  assert.match(pageBundle, /Sell stETH/);
+  assert.match(pageBundle, /Sell unstETH/);
+  assert.match(pageBundle, /Wait & claim/);
   assert.match(pageBundle, /Owned unstETH claim/);
   assert.match(pageBundle, /Get firm offer/);
   assert.match(pageBundle, /Approve unstETH/);
   assert.match(pageBundle, /Sell for/);
   assert.match(pageBundle, /existing-unsteth/);
+  assert.match(pageBundle, /originate/);
+  assert.match(pageBundle, /0\.0005 to 0\.005 stETH/);
   assert.match(pageBundle, /\/api\/quote\/lido/);
   assert.doesNotMatch(pageBundle, /Paste signed quote JSON/);
   assert.doesNotMatch(pageBundle, /\/api\/quote\/lido\/indicative/);

@@ -5,10 +5,19 @@ import test from "node:test";
 
 const projectRoot = new URL("../", import.meta.url);
 
-test("the hero sells an owned unstETH claim and never fabricates a disconnected estimate", async () => {
+test("the hero makes the stETH, unstETH, and direct-Lido source choices explicit", async () => {
   const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
 
-  assert.match(page, /useState<ExitMode>\("claim"\)/);
+  assert.match(
+    page,
+    /type ExitMode = (?=[^;]*"instant")(?=[^;]*"claim")(?=[^;]*"queue")[^;]+;/,
+  );
+  assert.match(page, /onClick=\{\(\) => selectMode\("instant"\)\}/);
+  assert.match(page, /onClick=\{\(\) => selectMode\("claim"\)\}/);
+  assert.match(page, /onClick=\{\(\) => selectMode\("queue"\)\}/);
+  assert.match(page, />\s*Sell stETH\s*</);
+  assert.match(page, />\s*Sell unstETH\s*</);
+  assert.match(page, />\s*Wait & claim\s*</);
   assert.match(
     page,
     /snapshot\?\.requests\.filter\(\(request\) => !request\.isClaimed\)/,
@@ -20,9 +29,10 @@ test("the hero sells an owned unstETH claim and never fabricates a disconnected 
   assert.match(page, /Signed firm offer/);
   assert.match(page, /No estimate shown/);
   assert.match(page, /Connect wallet/);
+  assert.match(page, /Join the official Lido queue and claim ETH after finalization/);
 
-  // A disconnected visitor may inspect the product, but must not be shown a
-  // synthetic payout or offered a quote without an owned onchain request.
+  // A disconnected visitor may choose a source, but must not be shown a
+  // synthetic payout or offered a quote before connecting a wallet.
   assert.doesNotMatch(page, /requestLidoQuote/);
   assert.doesNotMatch(page, /\/api\/quote\/lido\/indicative/);
   assert.doesNotMatch(page, /Indicative · no wallet needed/);
@@ -44,6 +54,10 @@ test("the built product surface contains the owned-claim flow and no synthetic q
   for (const expected of [
     "Owned unstETH claim",
     "Sell an unstETH claim",
+    "Sell stETH",
+    "Sell unstETH",
+    "Wait & claim",
+    "0.0005 to 0.005 stETH",
     "Get firm offer",
     "Approve unstETH",
     "Sell for",

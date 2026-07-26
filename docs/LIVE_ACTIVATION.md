@@ -19,7 +19,7 @@
 - one sealed settlement kernel with exactly those two adapters;
 - a localhost-only quote desk behind `https://quotes.intentional.so`;
 - a keyless Vercel frontend at `https://intentional.so`; and
-- a maximum initial reserve of `0.002 WETH`.
+- a maximum initial reserve of `0.006 WETH`.
 
 The product demo is the existing-unstETH path. The user selects an NFT already
 owned by their wallet, receives a request- and seller-bound firm quote, approves
@@ -176,27 +176,27 @@ shares, and zero capacity.
 
 ## 5. Fund while settlement remains paused
 
-The factor must hold `0.002 WETH` in addition to ETH for gas. After deployment
+The factor must hold `0.006 WETH` in addition to ETH for gas. After deployment
 has completed and its nonce-derived addresses are final, wrap exactly the pilot
 funding amount from the factor:
 
 ```sh
 cast send 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 \
   "deposit()" \
-  --value 2000000000000000 \
+  --value 6000000000000000 \
   --rpc-url "$ETH_RPC_URL" \
   --private-key "$FACTOR_PRIVATE_KEY"
 ```
 
 Do not perform this wrap before deployment: it would consume nonce `0` and
 change every predicted contract address. Verify the factor now holds exactly
-`0.002 WETH`. Then use the manifest values below, simulate first, and add
+`0.006 WETH`. Then use the manifest values below, simulate first, and add
 `--broadcast --slow` only after separate funding authorization:
 
 ```sh
 RESERVOIR_MAINNET_ACK=FUND_PAUSED_RESERVOIR_V2 \
-FUNDING_WETH_WEI=2000000000000000 \
-MIN_CAPACITY_WEI=1500000000000000 \
+FUNDING_WETH_WEI=6000000000000000 \
+MIN_CAPACITY_WEI=5000000000000000 \
 FACTOR_ADDRESS="0x..." \
 FUNDING_ACCOUNT_ADDRESS="0x..." \
 RESERVE_ADAPTER_ADDRESS="0x..." \
@@ -215,8 +215,8 @@ forge script script/FundV2Mainnet.s.sol:FundV2Mainnet \
   -vvvv
 ```
 
-The operation transfers exactly `0.002 WETH`, enables only the funding account,
-deposits into canonical StataWETH, and asserts at least `0.0015 WETH` of
+The operation transfers exactly `0.006 WETH`, enables only the funding account,
+deposits into canonical StataWETH, and asserts at least `0.005 WETH` of
 deliverable capacity while settlement remains paused. Verify
 `EXPECTED_RELEASE_STATE=funded-paused`, commit the receipt and manifest update,
 and inspect the live StataWETH balance before activation.
@@ -227,7 +227,7 @@ Simulate the single-operation activation:
 
 ```sh
 RESERVOIR_MAINNET_ACK=ACTIVATE_VERIFIED_RESERVOIR_V2 \
-MIN_CAPACITY_WEI=1500000000000000 \
+MIN_CAPACITY_WEI=5000000000000000 \
 FACTOR_ADDRESS="0x..." \
 FUNDING_ACCOUNT_ADDRESS="0x..." \
 RESERVE_ADAPTER_ADDRESS="0x..." \
@@ -285,7 +285,7 @@ DEPLOYMENT_MANIFEST_PATH=deployments/mainnet-pre-alpha-001.json \
 ETH_RPC_URL="$ETH_RPC_URL" \
 FACTOR_PRIVATE_KEY="$FACTOR_PRIVATE_KEY" \
 SIGNER_SECRET="$SIGNER_SECRET" \
-MAX_QUOTE_WEI=1500000000000000 \
+MAX_QUOTE_WEI=5000000000000000 \
 MIN_QUOTE_WEI=500000000000000 \
 SPREAD_BPS=25 \
 MAX_SPREAD_BPS=100 \
@@ -344,7 +344,8 @@ Validate the immutable Vercel deployment URL first, then:
 ## 9. Jury transaction and release
 
 Use a seller-controlled wallet holding one real unclaimed unstETH of at least
-approximately `0.001 stETH` and no more than the `0.0015 stETH` quote cap.
+unstETH #130880 at `0.004999999999999999 stETH`, which remains below the
+`0.005 stETH` quote cap.
 The jury flow is:
 
 1. select the existing NFT;

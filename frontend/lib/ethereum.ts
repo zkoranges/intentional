@@ -25,9 +25,9 @@ export const MIN_LIDO_REQUEST = 100n;
 export const MAX_LIDO_REQUEST = 1_000n * 10n ** 18n;
 // The canonical Lido queue supports a much wider range. These narrower values
 // are the deliberately capped pre-alpha firm-quote envelope backed by the
-// initial 0.002 WETH reserve.
+// initial 0.006 WETH reserve.
 export const MIN_LIVE_LIDO_QUOTE = 500_000_000_000_000n; // 0.0005 stETH
-export const MAX_LIVE_LIDO_QUOTE = 1_500_000_000_000_000n; // 0.0015 stETH
+export const MAX_LIVE_LIDO_QUOTE = 5_000_000_000_000_000n; // 0.005 stETH
 export const MAX_LIVE_LIDO_DISCOUNT_BPS = 100n; // independent browser guard
 
 export const ADDRESSES = {

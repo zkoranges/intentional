@@ -35,7 +35,7 @@ import {
   type WithdrawalStatus,
 } from "../lib/ethereum";
 type ActionState = "idle" | "connecting" | "reading" | "signing" | "mining";
-type ExitMode = "claim" | "queue";
+type ExitMode = "instant" | "claim" | "queue";
 type NavSection = "markets" | "positions" | "faq";
 
 type CompletedAction = {
@@ -233,9 +233,16 @@ export default function Home() {
   }, [amountInput]);
   const amountWithinLidoLimits =
     amount >= MIN_LIDO_REQUEST && amount <= MAX_LIDO_REQUEST;
+  const amountWithinFirmLimits =
+    amount >= MIN_LIVE_LIDO_QUOTE && amount <= MAX_LIVE_LIDO_QUOTE;
   const amountValid =
     amountWithinLidoLimits &&
     Boolean(snapshot && amount <= snapshot.stEthBalance);
+  const stEthOffer =
+    claimQuoteCheck?.envelope.mode === "originate" &&
+    claimQuoteCheck.requestedStEth === amount
+      ? claimQuoteCheck
+      : null;
   const queueApproved = Boolean(
     snapshot && amount > 0n && snapshot.queueAllowance === amount,
   );
@@ -649,6 +656,66 @@ export default function Home() {
     }
   }
 
+  async function requestStEthQuote() {
+    const injected = getInjectedProvider();
+    if (!injected || !account || !amountValid || !amountWithinFirmLimits) return;
+    if (!marketLive) {
+      setStatus(marketStatus.detail);
+      return;
+    }
+    if (!RESERVOIR_DEPLOYMENT) {
+      setStatus("The firm quote deployment is not pinned in this app build");
+      return;
+    }
+
+    setAction("reading");
+    setClaimQuoteCheck(null);
+    setStatus(
+      `Requesting a firm offer for ${formatMainnetAmount(amount)} stETH.`,
+    );
+    try {
+      const response = await fetch("/api/quote/lido", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: "originate",
+          seller: account,
+          requestedStEth: amount.toString(),
+        }),
+      });
+      const payload: unknown = await response.json();
+      if (!response.ok) {
+        const message =
+          typeof payload === "object" &&
+          payload !== null &&
+          typeof (payload as { error?: unknown }).error === "string"
+            ? (payload as { error: string }).error
+            : "Firm offers are unavailable right now";
+        throw new Error(message);
+      }
+      const checked = await verifyReservoirQuote(
+        injected,
+        account,
+        JSON.stringify(payload),
+      );
+      if (
+        checked.envelope.mode !== "originate" ||
+        checked.requestId !== null ||
+        checked.requestedStEth !== amount
+      ) {
+        throw new Error("The firm offer does not match this stETH exit");
+      }
+      setClaimQuoteCheck(checked);
+      setStatus(
+        `Firm offer ready: ${formatMainnetAmount(BigInt(checked.envelope.quote.paymentAmount))} WETH for ${formatMainnetAmount(amount)} stETH.`,
+      );
+    } catch (error) {
+      setStatus(errorMessage(error));
+    } finally {
+      setAction("idle");
+    }
+  }
+
   async function requestExistingClaimQuote(request: WithdrawalStatus) {
     const injected = getInjectedProvider();
     if (!injected || !account || request.isClaimed) return;
@@ -749,11 +816,16 @@ export default function Home() {
 
   function selectMode(nextMode: ExitMode) {
     setMode(nextMode);
+    setClaimQuoteCheck(null);
     setStatus(
-      nextMode === "claim"
+      nextMode === "instant"
+        ? marketLive
+          ? "Enter stETH to request a signed firm offer."
+          : marketStatus.detail
+        : nextMode === "claim"
         ? marketLive
           ? "Choose an owned unstETH claim to request a firm offer."
-          : "Connect to inspect claims; public firm offers are not active."
+          : marketStatus.detail
         : "Use Lido directly and keep the withdrawal claim in your wallet.",
     );
   }
@@ -898,19 +970,25 @@ export default function Home() {
           <div className="cardHeader">
             <div>
               <span className="cardEyebrow">
-                {mode === "claim"
-                  ? "Lido · unstETH → WETH"
-                  : "Lido · stETH → unstETH"}
+                {mode === "instant"
+                  ? "Lido · stETH → WETH"
+                  : mode === "claim"
+                    ? "Lido · unstETH → WETH"
+                    : "Lido · stETH → unstETH"}
               </span>
               <h2>
-                {mode === "claim"
-                  ? "Sell an unstETH claim"
-                  : "Withdraw through Lido"}
+                {mode === "instant"
+                  ? "Sell stETH now"
+                  : mode === "claim"
+                    ? "Sell an unstETH claim"
+                    : "Withdraw through Lido"}
               </h2>
               <p>
-                {mode === "claim"
-                  ? "Transfer an owned withdrawal NFT and get paid now."
-                  : "Keep the withdrawal claim in your wallet."}
+                {mode === "instant"
+                  ? "Turn stETH into WETH while the buyer takes the Lido wait."
+                  : mode === "claim"
+                    ? "Transfer an owned withdrawal NFT and get paid now."
+                    : "Keep the withdrawal claim in your wallet."}
               </p>
             </div>
             <a className="helpLink" href="#faq" aria-label="Learn about exits">
@@ -921,11 +999,19 @@ export default function Home() {
           <div className="modeTabs" role="tablist" aria-label="Exit route">
             <button
               role="tab"
+              aria-selected={mode === "instant"}
+              className={mode === "instant" ? "selected" : ""}
+              onClick={() => selectMode("instant")}
+            >
+              Sell stETH
+            </button>
+            <button
+              role="tab"
               aria-selected={mode === "claim"}
               className={mode === "claim" ? "selected" : ""}
               onClick={() => selectMode("claim")}
             >
-              Sell claim
+              Sell unstETH
             </button>
             <button
               role="tab"
@@ -938,12 +1024,193 @@ export default function Home() {
           </div>
 
           <p className="modeNote">
-            {mode === "claim"
-              ? "Choose an unstETH NFT you own. The claim and WETH payment move atomically. Pre-alpha firm offers are capped to claims from 0.0005 to 0.0015 stETH."
-              : "Join the official Lido queue and claim ETH after finalization."}
+            {mode === "instant"
+              ? "Sell stETH for a signed WETH amount. Intentional creates the canonical withdrawal claim directly for the liquidity provider."
+              : mode === "claim"
+                ? "Choose an unstETH NFT you own. The claim and WETH payment move atomically. Pre-alpha firm offers are capped to claims from 0.0005 to 0.005 stETH."
+                : "Join the official Lido queue and claim ETH after finalization."}
           </p>
 
-          {mode === "claim" ? (
+          {mode === "instant" ? (
+            <>
+              <div className="tokenPanel inputPanel">
+                <div className="tokenPanelLabel">
+                  <span>You sell</span>
+                  <span>
+                    Balance:{" "}
+                    {snapshot
+                      ? formatMainnetAmount(snapshot.stEthBalance, 6)
+                      : "—"}
+                  </span>
+                </div>
+                <div className="tokenRow">
+                  <input
+                    inputMode="decimal"
+                    value={amountInput}
+                    onChange={(event) => {
+                      setAmountInput(event.target.value);
+                      setClaimQuoteCheck(null);
+                    }}
+                    aria-label="stETH amount"
+                    placeholder="0.00"
+                  />
+                  <div className="tokenSelect static">
+                    <span className="tokenIcon stethIcon">
+                      <img
+                        src="/icons/steth.png"
+                        alt="stETH"
+                        width={18}
+                        height={18}
+                      />
+                    </span>
+                    stETH
+                  </div>
+                </div>
+                <div className="amountActions" aria-label="Amount shortcuts">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBalancePercent(25);
+                      setClaimQuoteCheck(null);
+                    }}
+                    disabled={!snapshot || busy}
+                  >
+                    25%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBalancePercent(50);
+                      setClaimQuoteCheck(null);
+                    }}
+                    disabled={!snapshot || busy}
+                  >
+                    50%
+                  </button>
+                  <button
+                    className="maxButton"
+                    type="button"
+                    onClick={() => {
+                      setBalancePercent(100);
+                      setClaimQuoteCheck(null);
+                    }}
+                    disabled={!snapshot || busy}
+                  >
+                    Max
+                  </button>
+                </div>
+                {amountIssue && amount > 0n && (
+                  <p className="amountError">{amountIssue}</p>
+                )}
+              </div>
+
+              <div className="routeArrow" aria-hidden="true">
+                ↓
+              </div>
+
+              <div className="tokenPanel outputPanel">
+                <div className="tokenPanelLabel">
+                  <span>You receive</span>
+                  <span>{stEthOffer ? "Signed firm offer" : "No estimate shown"}</span>
+                </div>
+                <div className="tokenRow">
+                  <output>
+                    {stEthOffer
+                      ? formatMainnetAmount(
+                          BigInt(stEthOffer.envelope.quote.paymentAmount),
+                          6,
+                        )
+                      : "—"}
+                  </output>
+                  <div className="tokenSelect static">
+                    <span className="tokenIcon wethIcon">
+                      <img
+                        src="/icons/weth.svg"
+                        alt="WETH"
+                        width={18}
+                        height={18}
+                      />
+                    </span>
+                    WETH
+                  </div>
+                </div>
+              </div>
+
+              <div className="routeSummary">
+                <div>
+                  <span>Input asset</span>
+                  <strong>stETH</strong>
+                </div>
+                <div>
+                  <span>Factoring discount</span>
+                  <strong>
+                    {stEthOffer ? quoteDiscount(stEthOffer) : "Set by signed offer"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Withdrawal claim</span>
+                  <strong>Created for liquidity provider</strong>
+                </div>
+                <div>
+                  <span>Who waits</span>
+                  <strong>Liquidity provider</strong>
+                </div>
+              </div>
+
+              <div className="primaryAction">
+                {!account ? (
+                  <button className="actionButton" onClick={connect} disabled={busy}>
+                    Connect wallet
+                  </button>
+                ) : !snapshot ? (
+                  <button
+                    className="actionButton"
+                    onClick={switchToMainnet}
+                    disabled={busy}
+                  >
+                    Switch to Ethereum
+                  </button>
+                ) : !marketLive ? (
+                  <button className="actionButton" disabled>
+                    {marketStatus.detail}
+                  </button>
+                ) : !amountValid || !amountWithinFirmLimits ? (
+                  <button className="actionButton" disabled>
+                    {amountIssue ?? "Enter 0.0005–0.005 stETH"}
+                  </button>
+                ) : !stEthOffer ? (
+                  <button
+                    className="actionButton"
+                    onClick={requestStEthQuote}
+                    disabled={busy}
+                  >
+                    {action === "reading" ? "Getting firm offer…" : "Get firm offer"}
+                  </button>
+                ) : !stEthOffer.approvalSatisfied ? (
+                  <button
+                    className="actionButton"
+                    onClick={() => approveReservoir(stEthOffer)}
+                    disabled={busy}
+                  >
+                    Approve stETH
+                  </button>
+                ) : (
+                  <button
+                    className="actionButton"
+                    onClick={() => fillQuote(stEthOffer)}
+                    disabled={busy}
+                  >
+                    Sell for{" "}
+                    {formatMainnetAmount(
+                      BigInt(stEthOffer.envelope.quote.paymentAmount),
+                      6,
+                    )}{" "}
+                    WETH
+                  </button>
+                )}
+              </div>
+            </>
+          ) : mode === "claim" ? (
             <>
               <div className="tokenPanel inputPanel">
                 <div className="tokenPanelLabel">
@@ -1086,9 +1353,7 @@ export default function Home() {
                   </button>
                 ) : !marketLive ? (
                   <button className="actionButton" disabled>
-                    {marketStatus.state === "Retired"
-                      ? "Firm offers paused · deployment retired"
-                      : "Firm offers unavailable"}
+                    {marketStatus.detail}
                   </button>
                 ) : !selectedClaim ? (
                   <button
@@ -1100,7 +1365,7 @@ export default function Home() {
                   </button>
                 ) : !selectedClaimWithinFirmLimits ? (
                   <button className="actionButton" disabled>
-                    Claim outside 0.0005–0.0015 stETH pilot
+                    Claim outside 0.0005–0.005 stETH pilot
                   </button>
                 ) : !selectedClaimOffer ? (
                   <button
@@ -1399,7 +1664,7 @@ export default function Home() {
                   <div>
                     <span>Amount</span>
                     <strong>
-                      {formatMainnetAmount(request.amountOfStETH)} stETH
+                      {formatMainnetAmount(request.amountOfStETH, 6)} stETH
                     </strong>
                   </div>
                   <div>
@@ -1458,8 +1723,13 @@ export default function Home() {
                             <button
                               onClick={() => requestExistingClaimQuote(request)}
                               disabled={busy || !marketLive}
+                              title={!marketLive ? marketStatus.detail : undefined}
                             >
-                              {marketLive ? "Get firm offer" : "Offers paused"}
+                              {marketLive
+                                ? "Get firm offer"
+                                : marketStatus.state === "Retired"
+                                  ? "Deployment retired"
+                                  : "Market unavailable"}
                             </button>
                             {request.isFinalized && (
                               <button

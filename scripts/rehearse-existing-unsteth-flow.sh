@@ -11,12 +11,12 @@ UPSTREAM_RPC_URL="${ETH_RPC_URL:?ETH_RPC_URL with archive access is required}"
 LOCAL_RPC_URL="http://127.0.0.1:8551"
 SIGNER_URL="http://127.0.0.1:8791"
 FORK_BLOCK="25612678"
-# A real canonical pending request at the pinned block whose notional is
-# exactly the pre-alpha cap: 0.0015 stETH.
-REQUEST_ID="130871"
-FUNDING_WEI="2000000000000000"
+# The real canonical pending request owned by the jury-demo wallet. Its
+# measured notional is one wei below the pre-alpha cap: 0.005 stETH.
+REQUEST_ID="130880"
+FUNDING_WEI="6000000000000000"
 MIN_QUOTE_WEI="500000000000000"
-MAX_QUOTE_WEI="1500000000000000"
+MAX_QUOTE_WEI="5000000000000000"
 QUEUE="0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/intentional-unsteth-e2e.XXXXXX")"
 ANVIL_LOG="${TEMP_DIR}/anvil.log"
@@ -85,6 +85,7 @@ seller_address="$(cast wallet address --private-key "${seller_key}")"
 echo "==> deploy fresh settlement, both Lido adapters, and productive Aave reserve"
 FACTOR_PRIVATE_KEY="${factor_key}" SELLER_PRIVATE_KEY="${seller_key}" \
 REHEARSAL_FUNDING_WEI="${FUNDING_WEI}" \
+REHEARSAL_MIN_CAPACITY_WEI="${MAX_QUOTE_WEI}" \
 forge script script/DeployV2MainnetFork.s.sol:DeployV2MainnetFork \
   --rpc-url "${LOCAL_RPC_URL}" --broadcast --slow -vv >"${DEPLOYMENT_LOG}" 2>&1 || {
     sed -n '1,260p' "${DEPLOYMENT_LOG}" >&2
@@ -210,4 +211,4 @@ factor_address_lower="$(printf '%s' "${factor_address}" | tr '[:upper:]' '[:lowe
 capacity="$(cast call "${funding}" "availableFor(uint256)(uint256)" 1 --rpc-url "${LOCAL_RPC_URL}" | awk '{print $1}')"
 [[ "${capacity}" == "1" ]] || { echo "productive reserve unavailable after fill" >&2; exit 1; }
 
-echo "EXISTING UNSTETH REHEARSAL PASS | 0.0015 stETH production-cap claim, 0.002 WETH canonical Aave reserve, real HTTP quote, exact approval, atomic fill"
+echo "EXISTING UNSTETH REHEARSAL PASS | real unstETH #130880 at 0.004999999999999999 stETH, 0.006 WETH canonical Aave reserve, real HTTP quote, exact approval, atomic fill"

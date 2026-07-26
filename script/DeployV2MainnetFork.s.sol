@@ -47,7 +47,9 @@ contract DeployV2MainnetFork is Script {
         uint256 factorKey = vm.envUint("FACTOR_PRIVATE_KEY");
         uint256 sellerKey = vm.envUint("SELLER_PRIVATE_KEY");
         uint256 fundingWeth = vm.envOr("REHEARSAL_FUNDING_WEI", DEFAULT_FUNDING_WETH);
+        uint256 minimumCapacity = vm.envOr("REHEARSAL_MIN_CAPACITY_WEI", fundingWeth * 99 / 100);
         require(fundingWeth != 0, "rehearsal funding required");
+        require(minimumCapacity != 0 && minimumCapacity <= fundingWeth, "invalid minimum capacity");
         address factor = vm.addr(factorKey);
         address seller = vm.addr(sellerKey);
         IMainnetWETH weth = IMainnetWETH(WETH);
@@ -80,7 +82,7 @@ contract DeployV2MainnetFork is Script {
 
         require(weth.balanceOf(address(fundingAccount)) == 0, "funding account retained idle WETH");
         require(IERC4626(STATA_WETH).balanceOf(address(fundingAccount)) != 0, "funding account received no shares");
-        require(fundingAccount.availableFor(fundingWeth - 1) == fundingWeth - 1, "reserve unavailable");
+        require(fundingAccount.availableFor(minimumCapacity) == minimumCapacity, "reserve unavailable");
         require(stETH.balanceOf(seller) > 0.9 ether, "seller received insufficient stETH");
         require(settlement.factorSigner() == factor, "factor binding mismatch");
         require(settlement.isAdapterAllowed(address(lidoAdapter)), "adapter not allowed");

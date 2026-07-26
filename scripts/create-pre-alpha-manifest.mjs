@@ -204,10 +204,10 @@ const manifest = {
     lidoWithdrawalQueue: "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1",
   },
   releaseLimits: {
-    reserveFundingWei: "2000000000000000",
-    minimumCapacityWei: "1500000000000000",
+    reserveFundingWei: "6000000000000000",
+    minimumCapacityWei: "5000000000000000",
     minimumClaimWei: "500000000000000",
-    maximumClaimWei: "1500000000000000",
+    maximumClaimWei: "5000000000000000",
     spreadBps: 25,
   },
 };

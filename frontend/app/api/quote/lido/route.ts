@@ -7,7 +7,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const LIVE_QUOTE_RANGE = "0.0005 to 0.0015 stETH";
+const LIVE_QUOTE_RANGE = "0.0005 to 0.005 stETH";
 
 function json(body: unknown, status: number) {
   return Response.json(body, {
