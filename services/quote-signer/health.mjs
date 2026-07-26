@@ -27,7 +27,12 @@ export const ERROR = "error";
  * `snapshot` is the latest observation of on-chain state, or null before the
  * first read completes.
  */
-export function deriveReadiness({ refusals, snapshot, expectedChainId }) {
+export function deriveReadiness({
+  refusals,
+  snapshot,
+  expectedChainId,
+  minimumPaymentWei = 1n,
+}) {
   if (refusals.length > 0) return { state: REFUSED, reasons: [...refusals] };
   if (snapshot === null) {
     return { state: PENDING, reasons: ["chain state has not been observed yet"] };
@@ -65,8 +70,10 @@ export function deriveReadiness({ refusals, snapshot, expectedChainId }) {
   }
   if (snapshot.queuePaused) notReadyReasons.push("canonical Lido withdrawals are paused");
   if (snapshot.bunkerMode) notReadyReasons.push("Lido bunker mode is active");
-  if (snapshot.capacityWei === 0n) {
-    notReadyReasons.push("the reserve reports no available capacity");
+  if (snapshot.capacityWei < minimumPaymentWei) {
+    notReadyReasons.push(
+      `the reserve cannot cover the minimum payment of ${minimumPaymentWei} wei`,
+    );
   }
   if (notReadyReasons.length > 0) return { state: NOT_READY, reasons: notReadyReasons };
 
@@ -83,6 +90,7 @@ export function buildHealthPayload({ config, refusals, snapshot, activeReservati
     refusals,
     snapshot,
     expectedChainId: config.expectedChainId,
+    minimumPaymentWei: config.minPaymentWei,
   });
 
   return {
@@ -119,7 +127,12 @@ export function buildHealthPayload({ config, refusals, snapshot, activeReservati
     },
     capacity: {
       probePaymentWei: config.maxPaymentWei,
+      minimumPaymentWei: config.minPaymentWei,
       availableWei: snapshot?.capacityWei ?? null,
+      coversMinimumQuote:
+        snapshot && !snapshot.error
+          ? snapshot.capacityWei >= config.minPaymentWei
+          : null,
       coversMaxQuote:
         snapshot && !snapshot.error ? snapshot.capacityWei === config.maxPaymentWei : null,
     },

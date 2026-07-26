@@ -166,6 +166,7 @@ const queueAbi = parseAbi([
 ]);
 
 const MAX_PAYMENT_WEI = MAX_QUOTE_WEI - (MAX_QUOTE_WEI * SPREAD_BPS) / 10_000n;
+const MIN_PAYMENT_WEI = MIN_QUOTE_WEI - (MIN_QUOTE_WEI * SPREAD_BPS) / 10_000n;
 
 const healthConfig = {
   expectedChainId: EXPECTED_CHAIN_ID,
@@ -180,6 +181,7 @@ const healthConfig = {
   spreadBps: SPREAD_BPS,
   minQuoteWei: MIN_QUOTE_WEI,
   maxQuoteWei: MAX_QUOTE_WEI,
+  minPaymentWei: MIN_PAYMENT_WEI,
   maxPaymentWei: MAX_PAYMENT_WEI,
   quoteTtlSeconds: QUOTE_TTL_SECONDS,
 };

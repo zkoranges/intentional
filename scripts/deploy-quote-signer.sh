@@ -63,6 +63,7 @@ for numeric_value in \
     exit 1
   }
 done
+MIN_PAYMENT_WEI="$((MIN_QUOTE_WEI - (MIN_QUOTE_WEI * SPREAD_BPS / 10000)))"
 
 manifest() {
   node --input-type=module -e \
@@ -128,7 +129,7 @@ EXPECTED_KERNEL_CODEHASH="${KERNEL_CODEHASH}" \
 EXPECTED_LIDO_ADAPTER_CODEHASH="${LIDO_ADAPTER_CODEHASH}" \
 EXPECTED_LIDO_UNSTETH_ADAPTER_CODEHASH="${LIDO_UNSTETH_ADAPTER_CODEHASH}" \
 EXPECTED_RELEASE_STATE=active \
-MIN_CAPACITY_WEI="${MIN_QUOTE_WEI}" \
+MIN_CAPACITY_WEI="${MIN_PAYMENT_WEI}" \
 node frontend/scripts/verify-live-deployment.mjs >/dev/null
 
 echo "==> preflight: co-tenant safety and disk"

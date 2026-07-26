@@ -299,11 +299,10 @@ The deployment script verifies the active mainnet identity before touching the
 VPS, stages atomically with rollback, runs under the legacy isolated system
 user, and requires a ready health response containing both adapters.
 
-The deploy gate requires live capacity at least equal to `MAX_QUOTE_WEI`.
-After a successful fill reduces capacity, either replenish the reserve before
-redeploying the signer or deliberately lower `MAX_QUOTE_WEI` to the remaining
-reviewed capacity. A post-fill signer redeploy with the original cap is
-expected to fail closed.
+The deploy gate requires live capacity for at least the minimum executable
+pilot payment. It does not require the full `MAX_QUOTE_WEI` after successful
+fills, while the runtime desk still rejects every individual or aggregate
+liability above current chain-observed capacity.
 
 Public checks:
 

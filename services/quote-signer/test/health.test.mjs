@@ -17,6 +17,7 @@ const CONFIG = {
   spreadBps: 25n,
   minQuoteWei: 1000000000000000n,
   maxQuoteWei: 6000000000000000n,
+  minPaymentWei: 997500000000000n,
   maxPaymentWei: 5985000000000000n,
   quoteTtlSeconds: 120n,
 };
@@ -96,11 +97,13 @@ test("readiness: live preconditions gate as not-ready", () => {
     { queuePaused: true },
     { bunkerMode: true },
     { capacityWei: 0n },
+    { capacityWei: CONFIG.minPaymentWei - 1n },
   ]) {
     const readiness = deriveReadiness({
       refusals: [],
       snapshot: { ...READY_SNAPSHOT, ...patch },
       expectedChainId: 1,
+      minimumPaymentWei: CONFIG.minPaymentWei,
     });
     assert.equal(readiness.state, "not-ready", Object.keys(patch).join(","));
     assert.ok(readiness.reasons.length > 0);
@@ -108,7 +111,12 @@ test("readiness: live preconditions gate as not-ready", () => {
 });
 
 test("readiness: everything green is ready", () => {
-  const readiness = deriveReadiness({ refusals: [], snapshot: READY_SNAPSHOT, expectedChainId: 1 });
+  const readiness = deriveReadiness({
+    refusals: [],
+    snapshot: READY_SNAPSHOT,
+    expectedChainId: 1,
+    minimumPaymentWei: CONFIG.minPaymentWei,
+  });
   assert.equal(readiness.state, "ready");
   assert.deepEqual(readiness.reasons, []);
 });
@@ -132,6 +140,8 @@ test("/health payload shape: chain id, addresses, pause state, capacity, readine
   assert.equal(payload.settlement.kernelPaused, false);
   assert.equal(payload.settlement.lidoQueuePaused, false);
   assert.equal(payload.capacity.availableWei, READY_SNAPSHOT.capacityWei);
+  assert.equal(payload.capacity.minimumPaymentWei, CONFIG.minPaymentWei);
+  assert.equal(payload.capacity.coversMinimumQuote, true);
   assert.equal(payload.capacity.coversMaxQuote, true);
   assert.equal(payload.reservations.active, 1);
   assert.equal(payload.outstanding, true, "legacy field preserved");

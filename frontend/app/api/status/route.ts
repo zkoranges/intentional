@@ -11,6 +11,11 @@ import { mainnet } from "viem/chains";
 export const dynamic = "force-dynamic";
 
 const CAPACITY_PROBE = 1n * 10n ** 18n;
+const MINIMUM_QUOTE_WEI = 500_000_000_000_000n;
+const SPREAD_BPS = 25n;
+const MINIMUM_PAYMENT_WEI =
+  MINIMUM_QUOTE_WEI -
+  (MINIMUM_QUOTE_WEI * SPREAD_BPS) / 10_000n;
 
 const kernelAbi = parseAbi([
   "function fundingAccount() view returns (address)",
@@ -191,7 +196,11 @@ export async function GET() {
       );
     }
 
-    if (!kernelPaused && !fundingPaused && capacity > 0n) {
+    if (
+      !kernelPaused &&
+      !fundingPaused &&
+      capacity >= MINIMUM_PAYMENT_WEI
+    ) {
       return response(
         "Live",
         capacity,
@@ -206,7 +215,11 @@ export async function GET() {
       "Standby",
       capacity,
       false,
-      "Deployment is not accepting public firm quotes",
+      !kernelPaused &&
+        !fundingPaused &&
+        capacity < MINIMUM_PAYMENT_WEI
+        ? "Reserve capacity is below the minimum firm offer"
+        : "Deployment is not accepting public firm quotes",
     );
   } catch {
     return response(
