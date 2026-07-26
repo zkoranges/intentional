@@ -73,6 +73,19 @@ const GITHUB_URL = "https://github.com/zkoranges/intentional";
 const DOCS_URL = "/docs";
 const CONTRACTS_URL = `${GITHUB_URL}/tree/main/src/claims`;
 const WALLET_DISCONNECTED_KEY = "intentional.wallet-disconnected";
+const BPS_DENOMINATOR = 10_000n;
+const LIVE_SPREAD_BPS = 25n;
+
+function firmPaymentFor(claimAmount: bigint) {
+  return claimAmount - (claimAmount * LIVE_SPREAD_BPS) / BPS_DENOMINATOR;
+}
+
+function maximumClaimForCapacity(capacity: bigint) {
+  const gross =
+    (capacity * BPS_DENOMINATOR) /
+    (BPS_DENOMINATOR - LIVE_SPREAD_BPS);
+  return gross < MAX_LIVE_LIDO_QUOTE ? gross : MAX_LIVE_LIDO_QUOTE;
+}
 
 const SOURCE_ASSETS = [
   {
@@ -360,6 +373,8 @@ export default function Home() {
 
   const busy = action !== "idle";
   const marketLive = marketStatus.firmQuotesEnabled;
+  const marketCapacity = BigInt(marketStatus.capacityWei);
+  const maximumLiveClaim = maximumClaimForCapacity(marketCapacity);
   const sellableClaims = useMemo(
     () => snapshot?.requests.filter((request) => !request.isClaimed) ?? [],
     [snapshot],
@@ -372,10 +387,15 @@ export default function Home() {
     claimQuoteCheck?.requestId === selectedClaim?.requestId
       ? claimQuoteCheck
       : null;
-  const selectedClaimWithinFirmLimits = Boolean(
+  const selectedClaimWithinPilotLimits = Boolean(
     selectedClaim &&
       selectedClaim.amountOfStETH >= MIN_LIVE_LIDO_QUOTE &&
       selectedClaim.amountOfStETH <= MAX_LIVE_LIDO_QUOTE,
+  );
+  const selectedClaimWithinFirmLimits = Boolean(
+    selectedClaim &&
+      selectedClaimWithinPilotLimits &&
+      firmPaymentFor(selectedClaim.amountOfStETH) <= marketCapacity,
   );
   const amount = useMemo(() => {
     try {
@@ -388,6 +408,8 @@ export default function Home() {
     amount >= MIN_LIDO_REQUEST && amount <= MAX_LIDO_REQUEST;
   const amountWithinFirmLimits =
     amount >= MIN_LIVE_LIDO_QUOTE && amount <= MAX_LIVE_LIDO_QUOTE;
+  const amountWithinLiveCapacity =
+    amount > 0n && firmPaymentFor(amount) <= marketCapacity;
   const amountValid =
     amountWithinLidoLimits &&
     Boolean(snapshot && amount <= snapshot.stEthBalance);
@@ -409,6 +431,15 @@ export default function Home() {
           : snapshot && amount > snapshot.stEthBalance
             ? "Insufficient stETH balance"
             : null;
+  const firmAmountIssue =
+    amountIssue ??
+    (amount < MIN_LIVE_LIDO_QUOTE
+      ? "Enter at least 0.0005 stETH"
+      : amount > MAX_LIVE_LIDO_QUOTE
+        ? "Pre-alpha maximum is 0.005 stETH"
+        : !amountWithinLiveCapacity
+          ? `Current reserve supports up to ${formatMainnetAmount(maximumLiveClaim, 6)} stETH`
+          : null);
 
   const refreshWallet = useCallback(
     async (connectedAccount: Address) => {
@@ -995,7 +1026,13 @@ export default function Home() {
 
   function setBalancePercent(percent: 25 | 50 | 100) {
     if (!snapshot) return;
-    const nextAmount = (snapshot.stEthBalance * BigInt(percent)) / 100n;
+    const spendableBalance =
+      mode === "sell" && sourceAsset === "steth"
+        ? snapshot.stEthBalance < maximumLiveClaim
+          ? snapshot.stEthBalance
+          : maximumLiveClaim
+        : snapshot.stEthBalance;
+    const nextAmount = (spendableBalance * BigInt(percent)) / 100n;
     setAmountInput(formatEther(nextAmount));
   }
 
@@ -1204,6 +1241,9 @@ export default function Home() {
                     {snapshot
                       ? formatMainnetAmount(snapshot.stEthBalance, 6)
                       : "—"}
+                    {marketLive
+                      ? ` · Live max: ${formatMainnetAmount(maximumLiveClaim, 6)}`
+                      : ""}
                   </span>
                 </div>
                 <div className="tokenRow">
@@ -1256,8 +1296,8 @@ export default function Home() {
                     Max
                   </button>
                 </div>
-                {amountIssue && amount > 0n && (
-                  <p className="amountError">{amountIssue}</p>
+                {firmAmountIssue && amount > 0n && (
+                  <p className="amountError">{firmAmountIssue}</p>
                 )}
               </div>
 
@@ -1331,9 +1371,11 @@ export default function Home() {
                   <button className="actionButton" disabled>
                     {marketStatus.detail}
                   </button>
-                ) : !amountValid || !amountWithinFirmLimits ? (
+                ) : !amountValid ||
+                  !amountWithinFirmLimits ||
+                  !amountWithinLiveCapacity ? (
                   <button className="actionButton" disabled>
-                    {amountIssue ?? "Enter 0.0005–0.005 stETH"}
+                    {firmAmountIssue ?? "Enter 0.0005–0.005 stETH"}
                   </button>
                 ) : !stEthOffer ? (
                   <button
@@ -1514,9 +1556,13 @@ export default function Home() {
                   >
                     Create a Lido claim first
                   </button>
-                ) : !selectedClaimWithinFirmLimits ? (
+                ) : !selectedClaimWithinPilotLimits ? (
                   <button className="actionButton" disabled>
                     Claim outside 0.0005–0.005 stETH pilot
+                  </button>
+                ) : !selectedClaimWithinFirmLimits ? (
+                  <button className="actionButton" disabled>
+                    Claim exceeds current WETH capacity
                   </button>
                 ) : !selectedClaimOffer ? (
                   <button
