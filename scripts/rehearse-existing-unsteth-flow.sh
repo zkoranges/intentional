@@ -26,6 +26,8 @@ MANIFEST="${TEMP_DIR}/active-manifest.json"
 QUOTE_FILE="${TEMP_DIR}/quote.json"
 QUOTE_A="${TEMP_DIR}/quote-a.json"
 QUOTE_B="${TEMP_DIR}/quote-b.json"
+QUOTE_BODY_A="${TEMP_DIR}/quote-body-a.json"
+QUOTE_BODY_B="${TEMP_DIR}/quote-body-b.json"
 QUOTE_STATUS_A="${TEMP_DIR}/quote-a.status"
 QUOTE_STATUS_B="${TEMP_DIR}/quote-b.status"
 SIGNER_LOG="${TEMP_DIR}/signer.log"
@@ -160,32 +162,93 @@ if [[ "${ready}" != "true" ]]; then
   exit 1
 fi
 
-echo "==> race two real quote requests; exactly one may reserve and sign"
-quote_request() {
+make_quote_body() {
   local output_file="$1"
-  local status_file="$2"
+  (
+    cd services/quote-signer
+    SELLER_PRIVATE_KEY="${seller_key}" SELLER_ADDRESS="${seller_address}" \
+      REQUEST_ID="${REQUEST_ID}" OUTPUT_FILE="${output_file}" \
+      node --input-type=module <<'NODE'
+import { randomBytes } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { privateKeyToAccount } from "viem/accounts";
+import {
+  QUOTE_REQUEST_AUTH_CHAIN_ID,
+  QUOTE_REQUEST_AUTH_VERSION,
+  quoteRequestAuthorizationMessage,
+} from "./request-authorization.mjs";
+
+const account = privateKeyToAccount(process.env.SELLER_PRIVATE_KEY);
+if (account.address.toLowerCase() !== process.env.SELLER_ADDRESS.toLowerCase()) {
+  throw new Error("throwaway seller key/address mismatch");
+}
+const now = Math.floor(Date.now() / 1_000);
+const authorization = {
+  version: QUOTE_REQUEST_AUTH_VERSION,
+  chainId: QUOTE_REQUEST_AUTH_CHAIN_ID,
+  seller: account.address,
+  mode: "existing-unsteth",
+  requestedStEth: null,
+  requestId: process.env.REQUEST_ID,
+  nonce: `0x${randomBytes(32).toString("hex")}`,
+  issuedAt: String(now),
+  expiresAt: String(now + 60),
+};
+const authorizationSignature = await account.signMessage({
+  message: quoteRequestAuthorizationMessage(authorization),
+});
+writeFileSync(
+  process.env.OUTPUT_FILE,
+  JSON.stringify({
+    mode: "existing-unsteth",
+    seller: account.address,
+    requestId: process.env.REQUEST_ID,
+    authorization,
+    authorizationSignature,
+  }),
+  { mode: 0o600 },
+);
+NODE
+  )
+}
+make_quote_body "${QUOTE_BODY_A}"
+make_quote_body "${QUOTE_BODY_B}"
+
+echo "==> race two authenticated real quote requests; both must recover one envelope"
+quote_request() {
+  local body_file="$1"
+  local output_file="$2"
+  local status_file="$3"
   curl --silent --output "${output_file}" --write-out '%{http_code}' \
     -X POST "${SIGNER_URL}/quote" \
     -H 'content-type: application/json' -H "x-signer-secret: ${signer_secret}" \
-    -d "{\"mode\":\"existing-unsteth\",\"seller\":\"${seller_address}\",\"requestId\":\"${REQUEST_ID}\"}" \
+    --data-binary "@${body_file}" \
     >"${status_file}"
 }
-quote_request "${QUOTE_A}" "${QUOTE_STATUS_A}" &
+quote_request "${QUOTE_BODY_A}" "${QUOTE_A}" "${QUOTE_STATUS_A}" &
 quote_pid_a="$!"
-quote_request "${QUOTE_B}" "${QUOTE_STATUS_B}" &
+quote_request "${QUOTE_BODY_B}" "${QUOTE_B}" "${QUOTE_STATUS_B}" &
 quote_pid_b="$!"
 wait "${quote_pid_a}"
 wait "${quote_pid_b}"
 status_a="$(cat "${QUOTE_STATUS_A}")"
 status_b="$(cat "${QUOTE_STATUS_B}")"
-if [[ "${status_a}:${status_b}" == "200:409" ]]; then
-  cp "${QUOTE_A}" "${QUOTE_FILE}"
-elif [[ "${status_a}:${status_b}" == "409:200" ]]; then
-  cp "${QUOTE_B}" "${QUOTE_FILE}"
-else
-  echo "concurrent aggregate-capacity test expected one 200 and one 409, got ${status_a}:${status_b}" >&2
+if [[ "${status_a}:${status_b}" != "200:200" ]]; then
+  echo "concurrent idempotent quote test expected 200:200, got ${status_a}:${status_b}" >&2
   exit 1
 fi
+cp "${QUOTE_A}" "${QUOTE_FILE}"
+node --input-type=module - "${QUOTE_A}" "${QUOTE_B}" <<'NODE'
+import { readFileSync } from "node:fs";
+const first = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const second = JSON.parse(readFileSync(process.argv[3], "utf8"));
+if (
+  first.quote.nonce !== second.quote.nonce ||
+  first.factorSignature !== second.factorSignature
+) {
+  throw new Error("concurrent identical requests returned independently fillable envelopes");
+}
+NODE
 node --input-type=module - "${QUOTE_FILE}" "${unsteth_adapter}" "${REQUEST_ID}" <<'NODE'
 import { readFileSync } from "node:fs";
 const quote = JSON.parse(readFileSync(process.argv[2], "utf8"));

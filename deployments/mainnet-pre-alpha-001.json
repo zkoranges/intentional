@@ -55,7 +55,8 @@
   },
   "releaseLimits": {
     "reserveFundingWei": "6000000000000000",
-    "minimumCapacityWei": "5000000000000000",
+    "activationMinimumCapacityWei": "5000000000000000",
+    "operationalMinimumPaymentWei": "498750000000000",
     "minimumClaimWei": "500000000000000",
     "maximumClaimWei": "5000000000000000",
     "spreadBps": 25,
@@ -93,8 +94,43 @@
     "reinvestBlockNumber": 25613564,
     "postReinvestReserveNavWei": "6012502562579901"
   },
+  "latestReplenishment": {
+    "amountWethWei": "1000000000000000",
+    "reason": "restore a deliberately small executable pilot reserve after repeated real browser fills",
+    "wrapTxHash": "0xb3f9755e89e5ee5caf90d2950342bde4d2037681267d833a459b852cbb7de3f7",
+    "wrapBlockNumber": 25613851,
+    "transferTxHash": "0xba7beb5dae67c3d168fc78c9eac7a573256a46a6c2d56368e38068cb95a4d6ec",
+    "transferBlockNumber": 25613854,
+    "reinvestTxHash": "0xe582184219339885a7ef56fc430b79ac57fe93e46fd4b2f4f716ece91092fc9b",
+    "reinvestBlockNumber": 25613855,
+    "postReinvestVaultShares": "1309550335298495",
+    "postReinvestAvailableAssetsObservedWei": "1399308938940375"
+  },
+  "runtimeRelease": {
+    "gitCommit": "152072df9e62c9c843435f161b92f1777205eaf2",
+    "quoteSigner": {
+      "url": "https://quotes.intentional.so",
+      "readiness": "ready",
+      "minimumPaymentWei": "498750000000000",
+      "quoteTtlSeconds": 600
+    },
+    "nonSettlingRequoteSmoke": {
+      "seller": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+      "nonce": "118666048881533563824639303922270191862",
+      "firstClaimAmountWei": "800000000000000",
+      "firstPaymentWei": "798000000000000",
+      "replacementClaimAmountWei": "500000000000000",
+      "replacementPaymentWei": "498750000000000",
+      "retainedLiabilityWei": "798000000000000",
+      "independentClaimAmountWei": "700000000000000",
+      "independentResult": "409 RESERVE_CAPACITY_RESERVED",
+      "sameNonce": true,
+      "assetsMoved": false,
+      "deadlineUnix": 1785032399
+    }
+  },
   "frontend": {
     "productionUrl": "https://www.intentional.so",
-    "vercelDeploymentId": "dpl_4RQgPn3WpoktYTUtHUzUWZAQH8ok"
+    "vercelDeploymentId": "dpl_FjnsmKCaqy6DArqY5DNP6UanoExw"
   }
 }

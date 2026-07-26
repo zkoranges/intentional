@@ -205,7 +205,8 @@ const manifest = {
   },
   releaseLimits: {
     reserveFundingWei: "6000000000000000",
-    minimumCapacityWei: "5000000000000000",
+    activationMinimumCapacityWei: "5000000000000000",
+    operationalMinimumPaymentWei: "498750000000000",
     minimumClaimWei: "500000000000000",
     maximumClaimWei: "5000000000000000",
     spreadBps: 25,
