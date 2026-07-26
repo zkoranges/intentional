@@ -698,6 +698,21 @@ export default function Home() {
       BigInt(Math.floor(Date.now() / 1_000))
       ? lastReplaceableQuoteRef.current
       : null;
+  const stEthQuoteFingerprint = account
+    ? `originate:${account.toLowerCase()}:${amount}`
+    : null;
+  const stEthReplaceableQuote =
+    replaceableQuote?.fingerprint === stEthQuoteFingerprint
+      ? replaceableQuote
+      : null;
+  const existingClaimReplaceableQuote = (requestId: bigint) => {
+    const fingerprint = account
+      ? `existing:${account.toLowerCase()}:${requestId}`
+      : null;
+    return replaceableQuote?.fingerprint === fingerprint
+      ? replaceableQuote
+      : null;
+  };
 
   const clearReplaceableQuote = useCallback(() => {
     lastReplaceableQuoteRef.current = null;
@@ -2061,15 +2076,15 @@ export default function Home() {
                   <button
                     className="actionButton"
                     onClick={() =>
-                      replaceableQuote
-                        ? requestStEthQuote(replaceableQuote.nonce)
+                      stEthReplaceableQuote
+                        ? requestStEthQuote(stEthReplaceableQuote.nonce)
                         : requestStEthQuote()
                     }
                     disabled={busy || quoteRetryBlocked}
                   >
                     {quoteRetryBlocked
                       ? "Firm offer reserved"
-                      : replaceableQuote
+                      : stEthReplaceableQuote
                         ? "Requote"
                         : "Get firm offer"}
                   </button>
@@ -2272,14 +2287,18 @@ export default function Home() {
                     onClick={() =>
                       requestExistingClaimQuote(
                         selectedClaim,
-                        replaceableQuote?.nonce,
+                        existingClaimReplaceableQuote(
+                          selectedClaim.requestId,
+                        )?.nonce,
                       )
                     }
                     disabled={busy || quoteRetryBlocked}
                   >
                     {quoteRetryBlocked
                       ? "Firm offer reserved"
-                      : replaceableQuote
+                      : existingClaimReplaceableQuote(
+                            selectedClaim.requestId,
+                          )
                         ? "Requote"
                         : "Get firm offer"}
                   </button>
@@ -2705,7 +2724,9 @@ export default function Home() {
                               onClick={() =>
                                 requestExistingClaimQuote(
                                   request,
-                                  replaceableQuote?.nonce,
+                                  existingClaimReplaceableQuote(
+                                    request.requestId,
+                                  )?.nonce,
                                 )
                               }
                               disabled={
@@ -2715,13 +2736,15 @@ export default function Home() {
                             >
                               {quoteRetryBlocked
                                 ? "Firm offer reserved"
-                                : replaceableQuote
+                                : existingClaimReplaceableQuote(
+                                      request.requestId,
+                                    )
                                   ? "Requote"
-                                : marketLive
-                                ? "Get firm offer"
-                                : marketStatus.state === "Retired"
-                                  ? "Deployment retired"
-                                  : "Market unavailable"}
+                                  : marketLive
+                                    ? "Get firm offer"
+                                    : marketStatus.state === "Retired"
+                                      ? "Deployment retired"
+                                      : "Market unavailable"}
                             </button>
                             {request.isFinalized && (
                               <button

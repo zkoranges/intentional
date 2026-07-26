@@ -25,7 +25,7 @@ function error(message: string, status: number) {
 /// @notice Public edge for firm quote issuance. This route holds NO signing
 ///         key: it validates the request and proxies to the operator's quote
 ///         signer, which holds the factor key, enforces a hard per-quote
-///         ceiling, single-flight, and short expiry, and returns a signed
+///         ceiling, aggregate-liability admission, and short expiry, and returns a signed
 ///         envelope the wallet can fill directly.
 /// @dev SIGNER_URL / SIGNER_SECRET are server-only Vercel environment
 ///      variables and must never be prefixed NEXT_PUBLIC — the signer's

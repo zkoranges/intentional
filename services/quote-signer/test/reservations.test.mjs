@@ -5,7 +5,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ReservationStore } from "../reservations.mjs";
+import {
+  maximumLiabilityWei,
+  ReservationStore,
+} from "../reservations.mjs";
 
 function tempDbPath() {
   const dir = mkdtempSync(join(tmpdir(), "quote-reservations-"));
@@ -32,6 +35,12 @@ const RESERVATION = {
   deadlineUnix: NOW + 120n,
   nowUnix: NOW,
 };
+
+test("replacement liability is the maximum of every still-fillable envelope", () => {
+  assert.equal(maximumLiabilityWei(null, 2_000n), 2_000n);
+  assert.equal(maximumLiabilityWei(6_000n, 2_000n), 6_000n);
+  assert.equal(maximumLiabilityWei(2_000n, 6_000n), 6_000n);
+});
 
 test("a reservation survives a restart (reopen the same database file)", (t) => {
   const { dir, path } = tempDbPath();
@@ -86,7 +95,7 @@ test("an identical request recovers the durable signed envelope", (t) => {
   );
 });
 
-test("a deliberate requote replaces the envelope but preserves the nonce", (t) => {
+test("a deliberate requote replaces the envelope but preserves nonce and maximum liability", (t) => {
   const { dir, path } = tempDbPath();
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -119,7 +128,11 @@ test("a deliberate requote replaces the envelope but preserves the nonce", (t) =
   assert.equal(active.length, 1);
   assert.equal(active[0].nonce, RESERVATION.nonce, "the onchain mutual-exclusion nonce is stable");
   assert.equal(active[0].requestId, replacement.requestId);
-  assert.equal(active[0].paymentWei, replacement.paymentWei);
+  assert.equal(
+    active[0].paymentWei,
+    RESERVATION.paymentWei,
+    "the older, higher signed envelope remains fillable until its deadline",
+  );
   assert.equal(active[0].deadlineUnix, replacement.deadlineUnix);
   assert.deepEqual(active[0].envelope, replacement.envelope);
 });
@@ -391,4 +404,61 @@ test("same-nonce replacement excludes its old liability", (t) => {
     store.active(NOW).reduce((total, row) => total + row.paymentWei, 0n),
     10_000n,
   );
+});
+
+test("lower same-nonce replacement cannot free capacity while the older envelope is live", (t) => {
+  const { dir, path } = tempDbPath();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const store = new ReservationStore(path);
+  t.after(() => store.close());
+  store.reserve({ ...RESERVATION, paymentWei: 6_000n });
+
+  const lower = {
+    ...RESERVATION,
+    requestId: 130881n,
+    claimAmountWei: 2_000n,
+    paymentWei: 2_000n,
+    envelope: {
+      ...RESERVATION.envelope,
+      quote: {
+        nonce: RESERVATION.nonce.toString(),
+        paymentAmount: "2000",
+      },
+      factorSignature: "0xlower",
+    },
+    deadlineUnix: NOW + 600n,
+  };
+  const replacement = store.reserveWithinCapacity({
+    reservation: lower,
+    expectedVersion: store.version(),
+    capacityWei: 10_000n,
+    nowUnix: NOW,
+    replaceNonce: RESERVATION.nonce,
+  });
+  assert.equal(replacement.status, "reserved");
+  assert.equal(replacement.totalLiabilityWei, 6_000n);
+  assert.equal(store.active(NOW)[0].paymentWei, 6_000n);
+  assert.deepEqual(
+    store.active(NOW)[0].envelope,
+    lower.envelope,
+    "idempotent recovery still returns the newest envelope",
+  );
+
+  const other = {
+    ...RESERVATION,
+    nonce: RESERVATION.nonce + 1n,
+    seller: "0xC0E4928B05b795E1F9349b25944986A61C8F12A0",
+    requestId: 130882n,
+    paymentWei: 5_000n,
+  };
+  const refused = store.reserveWithinCapacity({
+    reservation: other,
+    expectedVersion: store.version(),
+    capacityWei: 10_000n,
+    nowUnix: NOW,
+  });
+  assert.equal(refused.status, "capacity");
+  assert.equal(refused.activeReservedWei, 6_000n);
+  assert.equal(refused.totalLiabilityWei, 11_000n);
 });

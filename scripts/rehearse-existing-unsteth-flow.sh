@@ -183,7 +183,7 @@ if [[ "${status_a}:${status_b}" == "200:409" ]]; then
 elif [[ "${status_a}:${status_b}" == "409:200" ]]; then
   cp "${QUOTE_B}" "${QUOTE_FILE}"
 else
-  echo "concurrent single-flight expected one 200 and one 409, got ${status_a}:${status_b}" >&2
+  echo "concurrent aggregate-capacity test expected one 200 and one 409, got ${status_a}:${status_b}" >&2
   exit 1
 fi
 node --input-type=module - "${QUOTE_FILE}" "${unsteth_adapter}" "${REQUEST_ID}" <<'NODE'

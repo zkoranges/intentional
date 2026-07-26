@@ -1,15 +1,10 @@
 # Quote desk — operations
 
-> **Status: release candidate ready; fresh activation pending.** The previous
-> mainnet proof contracts are safely retired after reserve recovery and cannot
-> be reactivated because their immutable signer key was exposed. Existing
-> unstETH acquisition and the HTTP firm-quote flow are implemented and pass
-> the canonical mainnet-fork product rehearsal. They are not publicly live
-> until the fresh deployment, funding, activation, DNS and signer gates pass.
->
-> This document remains the operating reference for the desk when it relaunches
-> against a **fresh deployment with a fresh key**. See
-> "Current state — retired, never to be re-armed" below.
+> **Status (2026-07-26): active capped pre-alpha.** The fresh deployment,
+> productive reserve, authenticated quote service, DNS, and Vercel frontend are
+> live. The previous proof deployment remains permanently retired because its
+> immutable signer key was exposed; none of the active addresses below reuse
+> that identity.
 
 The paste box is gone. When the desk runs, the app requests a seller-bound
 firm quote over HTTP and lands directly on Approve.
@@ -17,7 +12,7 @@ firm quote over HTTP and lands directly on Approve.
 ```text
 browser → Vercel /api/quote/lido      (validates; holds NO key)
         → HTTPS at quotes.intentional.so
-        → VPS impatience-signer        (factor key, ceiling, single-flight, audit)
+        → VPS impatience-signer        (factor key, auth, aggregate capacity, audit)
 ```
 
 ## Where things live
@@ -72,51 +67,53 @@ and do not edit another service's site.
 1. Signer binds `127.0.0.1`; Caddy is the only ingress.
 2. Shared secret, constant-time compared; the browser never sees it.
 3. **Hard `MAX_QUOTE_WEI` ceiling** independent of measured capacity.
-4. **Single-flight** — one serialized sweep → sign → reserve sequence, and
-   therefore one outstanding unexpired quote at a time.
-5. 120-second expiry, far inside the kernel's 15-minute bound.
-6. Fails closed on paused settlement, paused/bunker Lido, thin capacity,
+4. **Aggregate-liability admission** — multiple wallets may hold quotes only
+   while the sum of every still-fillable nonce liability fits the
+   chain-observed reserve. SQLite transactions and an optimistic version guard
+   make this restart- and cross-process-safe.
+5. Same-nonce requotes are mutually exclusive onchain, but the store retains
+   the maximum payment ever signed for that nonce until every superseded
+   envelope has expired.
+6. 600-second expiry, inside the kernel's 15-minute bound.
+7. Fails closed on paused settlement, paused/bunker Lido, thin capacity,
    seller balance, signer/kernel mismatch.
-7. Every signature and authenticated quote rejection is appended to a JSONL
+8. Every signature and authenticated quote rejection is appended to a JSONL
    audit log. Unauthenticated scanner traffic is summarized at most once per
    minute to bounded journald rather than persisted request-by-request.
 
-## Key handling — a permanent operating constraint
+## Key handling
 
-The mainnet factor key was exposed in a session transcript and is **burned**.
-`factorSigner` is immutable, so the exposed key can never be rotated out of
-the v2 deployment. Therefore:
+The factor key of the earlier deployment in `deployments/mainnet-v2.json` was
+exposed and is **burned**. Its immutable signer can never be rotated, so:
 
-- the v2 deployment is **permanently retired** — paused, unfunded, and never
+- that deployment is **permanently retired** — paused, unfunded, and never
   to be re-armed;
-- service-side guards (`MAX_QUOTE_WEI`, single-flight, expiry) bound the
+- service-side guards bound the
   *service*, not the key — they are **no protection** against a key holder
   who signs outside the service;
-- any future desk runs against a **fresh deployment with a dedicated key**;
-  for this capped pre-alpha the protected service account on the shared VPS
-  holds that key, so host compromise remains an explicit risk bounded by the
-  `0.006 WETH` first-test reserve and prompt retirement—not eliminated by
-  service guards.
+- the active pre-alpha therefore uses a fresh deployment with a dedicated key
+  held only by the protected VPS service account. Host compromise remains an
+  explicit risk bounded by the capped reserve and prompt pause/recovery, not
+  eliminated by service guards.
 
-## Current state — retired, never to be re-armed
+## Current active state
 
-The v2 mainnet deployment (recorded in `deployments/mainnet-v2.json`)
-completed its settlement proof and is **retired**: settlement and funding are
-paused, the reserve was recovered, and only unstETH #130880 remains, pending
-Lido finalization.
+The active addresses, code hashes, receipts, canonical bindings, and release
+limits are in `deployments/mainnet-pre-alpha-001.json`. Public status is
+available from:
 
-**Do not re-arm this deployment. There is no safe way to do it, and it must
-never be attempted.** The factor key was exposed and `factorSigner` is
-immutable, so unpausing or re-funding would hand control of any restored
-reserve to whoever holds the exposed key. No re-arming runbook exists or will
-exist.
+```sh
+curl -fsS https://www.intentional.so/api/status
+curl -fsS https://quotes.intentional.so/health
+```
 
-The retired desk is stopped, its old key material was shredded, and the Vercel
-`SIGNER_URL`/`SIGNER_SECRET` variables were removed. The fresh candidate key
-and shared secret are staged outside the repository but the service remains
-offline until the new deployment is active. With the desk down, the app has no
-firm-quote path — by design.
+At release, the kernel and funding account are unpaused and sealed, both Lido
+adapters are allowlisted, the signer reports `ready`, and quote admission uses
+the current chain-observed capacity rather than a static claim that the full
+pilot ceiling is always available.
 
-Relaunching the desk means a **fresh deployment with a fresh key**, following
-`docs/LIVE_ACTIVATION.md` from scratch. Never point the desk at the retired
-deployment.
+## Historical retired deployment
+
+The earlier v2 proof recorded in `deployments/mainnet-v2.json` is paused,
+unfunded, and permanently retired. **Never point the desk at it, re-fund it, or
+attempt to re-arm it.**

@@ -30,6 +30,11 @@ modified-SwapVM consideration:
   an atomic Lido factoring settlement
   (`0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611`,
   unstETH #130880); manifests live in `deployments/`; and
+- the fresh `pre-alpha-001` deployment subsequently acquired that existing
+  unstETH NFT in one browser-driven atomic sale
+  (`0x36de5e1d760959462a5c78ea9215b17a67d03666ee4dcb1ecd34c59851ed4aa9`);
+  its five source-verified contracts and productive-reserve receipts are
+  recorded in `deployments/mainnet-pre-alpha-001.json`; and
 - the two proofs are technically independent and are not represented as one
   transaction.
 
@@ -117,16 +122,24 @@ interactive stage demo.
 
 ## Deployment status disclosure
 
-Mainnet settlement proof completed. Demo contracts safely retired after
-reserve recovery, and cannot be reactivated — the immutable signer key was
-exposed. Existing-unstETH acquisition and the browser firm-offer flow are
-implemented and pass the canonical mainnet-fork release rehearsal. Public
-firm offers remain disabled until the fresh `pre-alpha-001` deployment and
-fresh signer are activated.
+**Current state (2026-07-26): `pre-alpha-001` is active on Ethereum
+mainnet.** [Intentional](https://www.intentional.so) serves authenticated,
+seller-bound, short-lived firm quotes for stETH origination and existing
+unstETH acquisition. The quote desk uses disclosed operator pricing (25 bps),
+checks aggregate signed liabilities against the live productive reserve, and
+keeps the signing key off Vercel and out of the browser. This is an unaudited,
+capped hackathon pre-alpha rather than evidence of market price discovery or
+demand.
 
-The factor signer key of the v2 deployment was exposed in a working session
-transcript. Because `AsyncClaimSettlement.factorSigner` is immutable, the
-deployment cannot be rotated to a new key: it is permanently retired —
-paused and unfunded, with re-arming prohibited. Public firm-quote issuance
-is disabled; recovery and the pending unstETH #130880 claim are tracked in
-`docs/MAINNET_MICRO_DEMO.md` G-M.
+The browser-driven existing-claim proof used controlled team wallets. Seller
+`0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99` was also the factor signer of
+the earlier, permanently retired proof deployment, and unstETH #130880 was a
+re-sale of the claim originated in that earlier proof. The transaction proves
+the production machinery, atomicity, real Lido integration, and exact WETH
+payment; it does not prove independent customer demand.
+
+The earlier deployment in `deployments/mainnet-v2.json` remains permanently
+retired, paused, and unfunded because its immutable signer key was exposed.
+It must never be reactivated. The active deployment uses a fresh factor
+identity and the source-verified addresses in
+`deployments/mainnet-pre-alpha-001.json`.

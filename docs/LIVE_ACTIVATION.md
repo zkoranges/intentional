@@ -1,8 +1,10 @@
 # Intentional pre-alpha-001 live activation runbook
 
-> Status: release candidate ready; fresh deployment is not yet broadcast.
+> Status (2026-07-26): completed for `pre-alpha-001`; the fresh deployment is
+> active and recorded in `deployments/mainnet-pre-alpha-001.json`. This
+> remains the reproducible activation procedure for any later deployment.
 > The previous proof deployment is permanently retired because its immutable
-> factor key was exposed. It must never be reactivated.
+> factor key was exposed and must never be reactivated.
 >
 > Deployment, funding, activation, quote-service launch, and frontend cutover
 > are distinct gates. Passing one does not authorize the next.

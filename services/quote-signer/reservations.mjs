@@ -49,6 +49,13 @@ INSERT OR IGNORE INTO reservation_state (singleton, version) VALUES (1, 0);
 
 const MAX_UINT256 = (1n << 256n) - 1n;
 
+export function maximumLiabilityWei(previousPaymentWei, nextPaymentWei) {
+  return previousPaymentWei !== null &&
+    previousPaymentWei > nextPaymentWei
+    ? previousPaymentWei
+    : nextPaymentWei;
+}
+
 function envelopeJson(envelope) {
   return envelope === undefined
     ? null
@@ -211,8 +218,10 @@ export class ReservationStore {
    * another signer process changed the reservation set after the caller's
    * chain reads, this returns `race` and the caller must revalidate.
    *
-   * A replacement excludes its previous payment from the liability sum
-   * because every envelope sharing that nonce is mutually exclusive onchain.
+   * Every envelope sharing a replacement nonce is mutually exclusive onchain,
+   * but every one remains fillable until its deadline. The stored liability
+   * therefore retains the maximum payment ever signed for that nonce rather
+   * than merely tracking the newest envelope.
    */
   reserveWithinCapacity({
     reservation,
@@ -242,20 +251,37 @@ export class ReservationStore {
         return { status: "replacement-mismatch" };
       }
 
+      const liabilityPaymentWei = maximumLiabilityWei(
+        replacement?.paymentWei ?? null,
+        reservation.paymentWei,
+      );
+      const liabilityDeadlineUnix =
+        replacement !== null &&
+        replacement.deadlineUnix > reservation.deadlineUnix
+          ? replacement.deadlineUnix
+          : reservation.deadlineUnix;
+      const storedReservation =
+        replacement === null
+          ? reservation
+          : {
+              ...reservation,
+              paymentWei: liabilityPaymentWei,
+              deadlineUnix: liabilityDeadlineUnix,
+            };
       const activeReservedWei = active.reduce(
         (total, row) =>
           row.nonce === replaceNonce ? total : total + row.paymentWei,
         0n,
       );
-      const totalLiabilityWei = activeReservedWei + reservation.paymentWei;
+      const totalLiabilityWei = activeReservedWei + liabilityPaymentWei;
       if (totalLiabilityWei > capacityWei) {
         this.#db.exec("ROLLBACK;");
         return { status: "capacity", activeReservedWei, totalLiabilityWei };
       }
 
       if (replacement === null) {
-        this.#insert(reservation);
-      } else if (this.#update(reservation).changes !== 1) {
+        this.#insert(storedReservation);
+      } else if (this.#update(storedReservation).changes !== 1) {
         this.#db.exec("ROLLBACK;");
         return { status: "race" };
       }

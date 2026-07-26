@@ -112,6 +112,16 @@ test("only the current seller's unexpired verified nonce is replaceable", async 
     page,
     /fingerprint: string/,
   );
+  assert.match(
+    page,
+    /replaceableQuote\?\.fingerprint === stEthQuoteFingerprint/,
+  );
+  assert.match(
+    page,
+    /replaceableQuote\?\.fingerprint === fingerprint/,
+  );
+  assert.match(page, /existingClaimReplaceableQuote\(\s*selectedClaim\.requestId/);
+  assert.match(page, /existingClaimReplaceableQuote\(\s*request\.requestId/);
   assert.match(page, /rememberReplaceableQuote\(checked, request\.identity\)/g);
   assert.match(page, /clearReplaceableQuote\(\)/g);
 });

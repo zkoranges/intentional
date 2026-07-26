@@ -7,7 +7,8 @@ set -Eeuo pipefail
 #   -> HTTP POST /quote (the exact call the Vercel proxy will make)
 #   -> fill the returned envelope with the seller wallet
 #   -> assert exact seller WETH delta and factor unstETH ownership
-# Also exercises the guards: bad secret, over-ceiling amount, single-flight.
+# Also exercises the guards: bad secret, over-ceiling amount, and aggregate
+# capacity exhaustion.
 #
 # Required env: ETH_RPC_URL, FACTOR_ADDRESS, FACTOR_PRIVATE_KEY, PRIVATE_KEY.
 # Reads live addresses from deployments/mainnet-v2.json.
@@ -149,11 +150,11 @@ curl -s --fail -X POST "${SIGNER_URL}/quote" \
   -d "{\"seller\":\"${seller_address}\",\"requestedStEth\":\"${REQUESTED_STETH_WEI}\"}" >"${QUOTE_FILE}"
 grep -q '"factorSignature"' "${QUOTE_FILE}" || { echo "no signature in envelope" >&2; exit 1; }
 
-echo "==> guard: single-flight — a second request while one is outstanding"
+echo "==> guard: aggregate capacity — a second max request exhausts the reserve"
 status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${SIGNER_URL}/quote" \
   -H 'content-type: application/json' -H "x-signer-secret: ${signer_secret}" \
   -d "{\"seller\":\"${seller_address}\",\"requestedStEth\":\"${REQUESTED_STETH_WEI}\"}")"
-[[ "${status}" == "409" ]] || { echo "expected 409 single-flight, got ${status}" >&2; exit 1; }
+[[ "${status}" == "409" ]] || { echo "expected 409 aggregate-capacity refusal, got ${status}" >&2; exit 1; }
 
 echo "==> filling the fetched envelope with the seller wallet"
 seller_weth_before="$(cast call "${WETH_ADDRESS}" "balanceOf(address)(uint256)" "${seller_address}" --rpc-url "${LOCAL_RPC_URL}" | awk '{print $1}')"
@@ -175,7 +176,7 @@ delta="$((seller_weth_after - seller_weth_before))"
 audit_lines="$(wc -l <"${TEMP_DIR}/quote-audit.jsonl" | tr -d ' ')"
 
 echo "SIGNER REHEARSAL 1 | demo instance re-armed on the fork; capacity exactly ${PAYMENT_WEI} wei"
-echo "SIGNER REHEARSAL 2 | guards enforced: bad secret 401, over-ceiling 400, single-flight 409"
+echo "SIGNER REHEARSAL 2 | guards enforced: bad secret 401, over-ceiling 400, aggregate-capacity 409"
 echo "SIGNER REHEARSAL 3 | firm quote delivered over HTTP with no copy-paste"
 echo "SIGNER REHEARSAL 4 | seller filled the fetched envelope: exactly ${PAYMENT_WEI} wei WETH"
 echo "SIGNER REHEARSAL 5 | factor owns the new canonical unstETH; audit log has ${audit_lines} entries"

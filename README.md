@@ -100,9 +100,11 @@ The browser-driven existing-claim sale is proven on mainnet:
 - Kernel `0x906e0f4583834d44d55f26f0D6Ac842FafdCCcc5`, origination adapter
   `0xe32f43D326a4c104365D8C9ACC657c90C8E03f81`, and existing-unstETH
   adapter `0x645193BC4748109f9A7e582B00ac7D41208BF91F`.
-- After that fill, the factor replenished exactly `0.005 WETH`; the live
-  reserve again supports the full `0.005 stETH` pilot ceiling while the
-  inventory remains in canonical Aave StataWETH between fills.
+- After that fill, the factor replenished exactly `0.005 WETH`. Subsequent
+  browser-driven fills reduced the reserve again; the app and signer now
+  publish current capacity from chain and admit quotes only while aggregate
+  signed payment liabilities fit. Inventory remains in canonical Aave
+  StataWETH between fills.
 
 Quotes use disclosed operator pricing (25 bps), not an oracle or discovered
 market price. The live proof demonstrates custody, atomicity, real protocol

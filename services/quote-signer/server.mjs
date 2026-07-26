@@ -52,7 +52,10 @@ import {
   QuoteRequestReplayGuard,
   verifyQuoteRequestAuthorization,
 } from "./request-authorization.mjs";
-import { ReservationStore } from "./reservations.mjs";
+import {
+  maximumLiabilityWei,
+  ReservationStore,
+} from "./reservations.mjs";
 import { SerialExecutor } from "./serial-executor.mjs";
 
 const STETH = getAddress("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
@@ -695,7 +698,11 @@ async function buildQuote(
         : total + row.paymentWei,
     0n,
   );
-  const totalLiabilityWei = activeReservedWei + paymentAmount;
+  const replacementLiabilityWei = maximumLiabilityWei(
+    replacement?.paymentWei ?? null,
+    paymentAmount,
+  );
+  const totalLiabilityWei = activeReservedWei + replacementLiabilityWei;
   const funding = getAddress(fundingAccount);
   const [paymentAsset, fundingSealed, capacity, queuePaused, bunkerMode, unfinalizedStEth, unfinalizedRequests] =
     await Promise.all([

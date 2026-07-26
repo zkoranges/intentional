@@ -23,14 +23,14 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(origin),
     title: "Intentional — Onchain factoring",
     description:
-      "A mainnet-proven settlement primitive for future withdrawal claims. Public firm quotes are paused while the next deployment is prepared.",
+      "Sell a Lido withdrawal claim for a short-lived, signed WETH offer backed by productive onchain reserves.",
     icons: {
       icon: "/favicon.svg",
     },
     openGraph: {
       title: "Intentional — Onchain factoring",
       description:
-        "Mainnet settlement proof complete. Public firm quotes are currently paused.",
+        "Authenticated firm offers for stETH and existing unstETH claims on Ethereum mainnet.",
       type: "website",
       images: [
         {
@@ -45,7 +45,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Intentional — Onchain factoring",
       description:
-        "Mainnet settlement proof complete. Public firm quotes are currently paused.",
+        "Authenticated firm offers for stETH and existing unstETH claims on Ethereum mainnet.",
       images: [socialImage],
     },
   };
