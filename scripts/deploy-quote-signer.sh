@@ -112,6 +112,9 @@ node --input-type=module -e '
 ' "${FACTOR_KEY_ADDRESS}" "${FACTOR}"
 
 echo "==> verifying the active manifest and live mainnet deployment"
+# A service update must preserve at least one executable pilot quote. Requiring
+# the original maximum would make every successful fill block future software
+# deployments until the operator replenished the reserve.
 ETH_RPC_URL="${RPC}" \
 FACTOR_ADDRESS="${FACTOR}" \
 KERNEL_ADDRESS="${KERNEL}" \
@@ -125,7 +128,7 @@ EXPECTED_KERNEL_CODEHASH="${KERNEL_CODEHASH}" \
 EXPECTED_LIDO_ADAPTER_CODEHASH="${LIDO_ADAPTER_CODEHASH}" \
 EXPECTED_LIDO_UNSTETH_ADAPTER_CODEHASH="${LIDO_UNSTETH_ADAPTER_CODEHASH}" \
 EXPECTED_RELEASE_STATE=active \
-MIN_CAPACITY_WEI="${MAX_QUOTE_WEI}" \
+MIN_CAPACITY_WEI="${MIN_QUOTE_WEI}" \
 node frontend/scripts/verify-live-deployment.mjs >/dev/null
 
 echo "==> preflight: co-tenant safety and disk"
