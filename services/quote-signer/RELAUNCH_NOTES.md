@@ -7,11 +7,12 @@ what lane B4b still does afterward.
 
 ## What changed in the service (B4a)
 
-- **Persistent reservations.** The single-flight guard ("one outstanding
-  unexpired quote at a time") now lives in a SQLite store
+- **Persistent reservations.** Aggregate outstanding payment liabilities now
+  live in a SQLite store
   (`reservations.mjs`, `node:sqlite`, WAL + full sync) keyed by quote nonce
-  with the deadline and amounts alongside. A restart no longer forgets an
-  outstanding quote, so two live quotes can never coexist.
+  with the deadline and amounts alongside. A restart no longer forgets live
+  quotes. Versioned admission lets multiple wallets quote concurrently only
+  while their aggregate payment fits authoritative reserve capacity.
 - **Fill-release.** On every quote request the desk sweeps its open
   reservations against the kernel: a reservation whose nonce the kernel
   reports consumed (`nonceUsed`) is released as `consumed-on-chain` instead
@@ -58,8 +59,8 @@ committed.
 ### Behavior contracts preserved
 
 `scripts/rehearse-quote-signer.sh` semantics are unchanged: 401 on a bad
-secret, 400 over the hard ceiling, 409 while a quote is outstanding (now
-backed by SQLite), and the exact 0.0049875 WETH fill. The rehearsal's fork
+secret, 400 over the hard ceiling, 409 when active reservations exhaust
+capacity (now backed by SQLite), and the exact 0.0049875 WETH fill. The rehearsal's fork
 targets a loopback RPC, which is exactly the carve-out the retired-kernel
 guard allows. `node --test` (or `npm test` in this directory) covers the new
 guarantees: reservation survival across restart, consumed-nonce release,

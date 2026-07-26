@@ -1,4 +1,4 @@
-// Reservation store semantics: durable single-flight with fill-release.
+// Reservation store semantics: durable aggregate capacity with fill-release.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -82,7 +82,7 @@ test("an identical request recovers the durable signed envelope", (t) => {
       claimAmountWei: null,
     }),
     null,
-    "a different claim must remain blocked by single-flight",
+    "a different claim is not an identical retry",
   );
 });
 
@@ -143,7 +143,7 @@ test("requote replacement requires the active nonce and the same seller", (t) =>
   assert.deepEqual(store.active(NOW)[0].envelope, RESERVATION.envelope);
 });
 
-test("an active reservation blocks a second quote (the 409 condition)", async (t) => {
+test("an active reservation remains an aggregate liability until consumed", async (t) => {
   const { dir, path } = tempDbPath();
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -154,7 +154,8 @@ test("an active reservation blocks a second quote (the 409 condition)", async (t
   // The nonce has NOT been consumed on chain — the reservation must hold.
   const swept = await store.sweep({ nowUnix: NOW, isNonceConsumed: async () => false });
   assert.equal(swept.released.length, 0);
-  assert.equal(swept.active.length, 1, "server maps a non-empty active set to HTTP 409");
+  assert.equal(swept.active.length, 1);
+  assert.equal(swept.active[0].paymentWei, RESERVATION.paymentWei);
 });
 
 test("a reservation whose nonce the kernel reports consumed is released", async (t) => {
@@ -210,6 +211,18 @@ test("an expired reservation falls away without a chain read", async (t) => {
   assert.equal(swept.released.length, 1);
   assert.equal(swept.released[0].reason, "expired");
   assert.equal(swept.active.length, 0);
+  assert.equal(
+    store.isReleasedForSeller(RESERVATION.nonce, RESERVATION.seller),
+    true,
+    "a stale replacement token can be recognized after expiry",
+  );
+  assert.equal(
+    store.isReleasedForSeller(
+      RESERVATION.nonce,
+      "0xC0E4928B05b795E1F9349b25944986A61C8F12A0",
+    ),
+    false,
+  );
 
   const fresh = {
     ...RESERVATION,
@@ -232,24 +245,150 @@ test("reserving the same nonce twice throws (primary key)", (t) => {
   assert.throws(() => store.reserve(RESERVATION));
 });
 
-test("two store connections cannot create two open reservations", (t) => {
+test("two small users fit aggregate capacity and a third is refused", (t) => {
   const { dir, path } = tempDbPath();
   t.after(() => rmSync(dir, { recursive: true, force: true }));
 
-  const first = new ReservationStore(path);
-  const second = new ReservationStore(path);
-  t.after(() => first.close());
-  t.after(() => second.close());
+  const store = new ReservationStore(path);
+  t.after(() => store.close());
+  const capacityWei = 10_000n;
+  const first = { ...RESERVATION, paymentWei: 4_000n };
+  const second = {
+    ...RESERVATION,
+    nonce: RESERVATION.nonce + 1n,
+    seller: "0xC0E4928B05b795E1F9349b25944986A61C8F12A0",
+    requestId: 130881n,
+    paymentWei: 5_000n,
+  };
+  const third = {
+    ...RESERVATION,
+    nonce: RESERVATION.nonce + 2n,
+    seller: "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+    requestId: 130882n,
+    paymentWei: 2_000n,
+  };
 
-  first.reserve(RESERVATION);
-  assert.throws(
-    () =>
-      second.reserve({
-        ...RESERVATION,
-        nonce: RESERVATION.nonce + 1n,
-      }),
-    /UNIQUE constraint failed/,
-    "the SQLite constraint backs up the in-process serial executor",
+  assert.equal(
+    store.reserveWithinCapacity({
+      reservation: first,
+      expectedVersion: store.version(),
+      capacityWei,
+      nowUnix: NOW,
+    }).status,
+    "reserved",
   );
-  assert.equal(first.active(NOW).length, 1);
+  assert.equal(
+    store.reserveWithinCapacity({
+      reservation: second,
+      expectedVersion: store.version(),
+      capacityWei,
+      nowUnix: NOW,
+    }).status,
+    "reserved",
+  );
+  const refused = store.reserveWithinCapacity({
+    reservation: third,
+    expectedVersion: store.version(),
+    capacityWei,
+    nowUnix: NOW,
+  });
+  assert.equal(refused.status, "capacity");
+  assert.equal(refused.activeReservedWei, 9_000n);
+  assert.equal(refused.totalLiabilityWei, 11_000n);
+  assert.equal(store.active(NOW).length, 2);
+  assert.deepEqual(
+    store.recover({
+      nowUnix: NOW,
+      seller: second.seller,
+      mode: second.mode,
+      requestId: second.requestId,
+      claimAmountWei: null,
+    }),
+    second.envelope,
+    "an exact retry is recovered even with another wallet active",
+  );
+});
+
+test("cross-process version race retries without overcommitting", (t) => {
+  const { dir, path } = tempDbPath();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const firstStore = new ReservationStore(path);
+  const secondStore = new ReservationStore(path);
+  t.after(() => firstStore.close());
+  t.after(() => secondStore.close());
+  const sharedVersion = firstStore.version();
+  const first = { ...RESERVATION, paymentWei: 4_000n };
+  const second = {
+    ...RESERVATION,
+    nonce: RESERVATION.nonce + 1n,
+    seller: "0xC0E4928B05b795E1F9349b25944986A61C8F12A0",
+    paymentWei: 5_000n,
+  };
+
+  assert.equal(
+    firstStore.reserveWithinCapacity({
+      reservation: first,
+      expectedVersion: sharedVersion,
+      capacityWei: 10_000n,
+      nowUnix: NOW,
+    }).status,
+    "reserved",
+  );
+  assert.equal(
+    secondStore.reserveWithinCapacity({
+      reservation: second,
+      expectedVersion: sharedVersion,
+      capacityWei: 10_000n,
+      nowUnix: NOW,
+    }).status,
+    "race",
+    "a stale capacity snapshot cannot commit",
+  );
+  assert.equal(
+    secondStore.reserveWithinCapacity({
+      reservation: second,
+      expectedVersion: secondStore.version(),
+      capacityWei: 10_000n,
+      nowUnix: NOW,
+    }).status,
+    "reserved",
+  );
+  assert.equal(firstStore.active(NOW).length, 2);
+});
+
+test("same-nonce replacement excludes its old liability", (t) => {
+  const { dir, path } = tempDbPath();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const store = new ReservationStore(path);
+  t.after(() => store.close());
+  const other = {
+    ...RESERVATION,
+    nonce: RESERVATION.nonce + 1n,
+    seller: "0xC0E4928B05b795E1F9349b25944986A61C8F12A0",
+    paymentWei: 3_000n,
+  };
+  store.reserve({ ...RESERVATION, paymentWei: 6_000n });
+  store.reserve(other);
+
+  const replacement = {
+    ...RESERVATION,
+    paymentWei: 7_000n,
+    envelope: { ...RESERVATION.envelope, factorSignature: "0x9876" },
+  };
+  const result = store.reserveWithinCapacity({
+    reservation: replacement,
+    expectedVersion: store.version(),
+    capacityWei: 10_000n,
+    nowUnix: NOW,
+    replaceNonce: RESERVATION.nonce,
+  });
+  assert.equal(result.status, "reserved");
+  assert.equal(result.activeReservedWei, 3_000n);
+  assert.equal(result.totalLiabilityWei, 10_000n);
+  assert.equal(
+    store.active(NOW).reduce((total, row) => total + row.paymentWei, 0n),
+    10_000n,
+  );
 });

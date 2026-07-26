@@ -10,12 +10,12 @@
 //   * shared-secret header, constant-time compared
 //   * HARD ceiling (MAX_QUOTE_WEI) independent of measured reserve capacity —
 //     a signing key can never authorize more than this per quote
-//   * single-flight: one outstanding nonce at a time, so concurrent requests
-//     cannot oversubscribe the reserve and hand a user a quote that reverts at
-//     fill time. A seller can explicitly replace its active envelope while
-//     preserving that nonce: old and new envelopes remain mutually exclusive
-//     onchain. Reservations persist in SQLite across restarts and are released
-//     when the kernel reports the nonce consumed on-chain.
+//   * aggregate reservations: simultaneous wallet quotes are admitted only
+//     while their total payment liability fits authoritative reserve capacity.
+//     A seller can explicitly replace its active envelope while preserving
+//     that nonce: old and new envelopes remain mutually exclusive onchain.
+//     Versioned SQLite admission prevents cross-process overcommit; rows
+//     persist across restarts and release when their nonce is consumed.
 //   * short expiry (default 120s) well inside the kernel's 15-minute bound
 //   * refuses retired / mismatched deployments as a first-class readiness
 //     state; fails closed on paused settlement, paused/bunker Lido, thin
@@ -356,7 +356,25 @@ function requireAmountBounds(amount) {
   }
 }
 
-async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonce }) {
+function retryMetadata(active, nowSeconds) {
+  if (active.length === 0) return {};
+  const earliest = active.reduce((left, right) =>
+    left.deadlineUnix <= right.deadlineUnix ? left : right,
+  );
+  return {
+    retryAfterSeconds: Number(
+      earliest.deadlineUnix > BigInt(nowSeconds)
+        ? earliest.deadlineUnix - BigInt(nowSeconds)
+        : 0n,
+    ),
+    activeDeadlineUnix: earliest.deadlineUnix.toString(),
+  };
+}
+
+async function buildQuote(
+  { seller, mode, requestedStEth, requestId, replaceNonce },
+  reservationAttempt = 0,
+) {
   // First-class refusal: a retired or mismatched deployment never gets as far
   // as pricing, reads, or signing.
   if (configRefusals.length > 0) {
@@ -372,9 +390,9 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
   const latestBlock = await client.getBlock({ blockTag: "latest" });
   const nowSeconds = Number(latestBlock.timestamp);
 
-  // Sweep the reservation store before deciding single-flight: expired
-  // reservations fall away, and a reservation whose nonce the kernel reports
-  // consumed (the fill landed) is released instead of blocking until TTL.
+  // Sweep before capacity accounting: expired rows fall away, and a
+  // reservation whose nonce the kernel reports consumed is no longer a live
+  // liability.
   const swept = await reservations.sweep({
     nowUnix: nowSeconds,
     isNonceConsumed: (nonce) =>
@@ -387,9 +405,10 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
       reason: releasedReservation.reason,
     });
   }
+  let activeReservations = swept.active;
+  let reservationVersion = swept.version;
   let replacement = null;
-  if (swept.active.length > 0) {
-    const active = swept.active[0];
+  if (activeReservations.length > 0) {
     const recovered = reservations.recover({
       nowUnix: nowSeconds,
       seller,
@@ -398,46 +417,36 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
       claimAmountWei: requestedStEth ?? null,
     });
     if (recovered !== null && replaceNonce === undefined) {
+      const recoveredNonce = BigInt(recovered.quote.nonce);
+      const active = activeReservations.find((row) => row.nonce === recoveredNonce);
       await audit({
         event: "quote_reused",
         mode,
         seller,
         requestId: requestId?.toString() ?? null,
-        nonce: active.nonce.toString(),
-        deadline: active.deadlineUnix.toString(),
+        nonce: recoveredNonce.toString(),
+        deadline: active?.deadlineUnix.toString() ?? recovered.quote.deadline.toString(),
       });
       return recovered;
     }
 
-    const retryAfterSeconds = Number(
-      active.deadlineUnix > BigInt(nowSeconds)
-        ? active.deadlineUnix - BigInt(nowSeconds)
-        : 0n,
-    );
-    const retry = {
-      retryAfterSeconds,
-      activeDeadlineUnix: active.deadlineUnix.toString(),
-    };
-    if (replaceNonce === undefined) {
-      throw quoteError(
-        "another quote is currently outstanding; retry after it expires or replace your active quote",
-        409,
-        "SINGLE_FLIGHT",
-        {
-          ...retry,
-          canReplace: active.seller === seller,
-        },
-      );
-    }
-    if (active.nonce !== replaceNonce || active.seller !== seller) {
+  }
+  if (replaceNonce !== undefined) {
+    replacement = activeReservations.find((row) => row.nonce === replaceNonce) ?? null;
+    const staleOwnedReplacement =
+      replacement === null &&
+      reservations.isReleasedForSeller(replaceNonce, seller);
+    if (
+      (replacement !== null && replacement.seller !== seller) ||
+      (replacement === null && !staleOwnedReplacement)
+    ) {
       throw quoteError(
         "the active quote does not match this seller and replacement nonce",
         409,
         "REPLACEMENT_MISMATCH",
-        retry,
+        retryMetadata(activeReservations, nowSeconds),
       );
     }
-    replacement = active;
   }
 
   if (seller === account.address) {
@@ -672,6 +681,14 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
     throw quoteError("computed payment is out of range", 500, "PRICING");
   }
 
+  const activeReservedWei = activeReservations.reduce(
+    (total, row) =>
+      replacement !== null && row.nonce === replacement.nonce
+        ? total
+        : total + row.paymentWei,
+    0n,
+  );
+  const totalLiabilityWei = activeReservedWei + paymentAmount;
   const funding = getAddress(fundingAccount);
   const [paymentAsset, fundingSealed, capacity, queuePaused, bunkerMode, unfinalizedStEth, unfinalizedRequests] =
     await Promise.all([
@@ -681,7 +698,7 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
         address: funding,
         abi: fundingAbi,
         functionName: "availableFor",
-        args: [paymentAmount],
+        args: [totalLiabilityWei],
       }),
       client.readContract({ address: QUEUE, abi: queueAbi, functionName: "isPaused" }),
       client.readContract({ address: QUEUE, abi: queueAbi, functionName: "isBunkerModeActive" }),
@@ -696,11 +713,28 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
       "FUNDING_MISCONFIGURED",
     );
   }
-  if (capacity !== paymentAmount) {
+  if (capacity !== totalLiabilityWei) {
+    const details = {
+      ...retryMetadata(activeReservations, nowSeconds),
+      canReplace: activeReservations.some((row) => row.seller === seller),
+      availableCapacityWei: capacity.toString(),
+      activeReservedWei: activeReservedWei.toString(),
+      requestedPaymentWei: paymentAmount.toString(),
+      totalLiabilityWei: totalLiabilityWei.toString(),
+    };
+    if (capacity >= paymentAmount && activeReservedWei > 0n) {
+      throw quoteError(
+        "productive reserve capacity is reserved by other live quotes",
+        409,
+        "RESERVE_CAPACITY_RESERVED",
+        details,
+      );
+    }
     throw quoteError(
       "the productive reserve cannot currently cover this payment",
       503,
       "INSUFFICIENT_CAPACITY",
+      details,
     );
   }
   if (queuePaused) {
@@ -725,6 +759,10 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
       reason: "below-nonce-floor",
     });
     replacement = null;
+    activeReservations = activeReservations.filter(
+      (row) => row.nonce !== replaceNonce,
+    );
+    reservationVersion = reservations.version();
   }
 
   const deadline = latestBlock.timestamp + QUOTE_TTL_SECONDS;
@@ -809,9 +847,9 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
     },
   };
 
-  // Durable single-flight: the reservation and its signed response must
-  // survive a restart. An identical retry can therefore recover the exact
-  // same quote instead of trapping the user behind a 409 until expiry.
+  // Durable aggregate reservation: the signed response survives a restart,
+  // and the versioned SQLite commit prevents a second signer process from
+  // admitting liability against the same capacity snapshot.
   const reservation = {
     nonce,
     seller,
@@ -823,16 +861,46 @@ async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonc
     deadlineUnix: deadline,
     nowUnix: nowSeconds,
   };
-  if (replacement === null) {
-    reservations.reserve(reservation);
-  } else if (!reservations.replace(reservation)) {
-    // This should be unreachable inside the serialized request path. Failing
-    // closed is preferable to returning a signature the durable store did not
-    // record.
+  const admission = reservations.reserveWithinCapacity({
+    reservation,
+    expectedVersion: reservationVersion,
+    capacityWei: capacity,
+    nowUnix: nowSeconds,
+    replaceNonce: replacement?.nonce ?? null,
+  });
+  if (admission.status === "race" && reservationAttempt < 2) {
+    // A separate signer process changed durable liabilities during our chain
+    // reads. Discard this unreturned signature and recompute from fresh chain
+    // and SQLite state.
+    return buildQuote(
+      { seller, mode, requestedStEth, requestId, replaceNonce },
+      reservationAttempt + 1,
+    );
+  }
+  if (admission.status === "capacity") {
+    throw quoteError(
+      "productive reserve capacity changed while quoting; retry",
+      409,
+      "RESERVE_CAPACITY_RESERVED",
+      {
+        ...retryMetadata(reservations.active(nowSeconds), nowSeconds),
+        canReplace: reservations
+          .active(nowSeconds)
+          .some((row) => row.seller === seller),
+        availableCapacityWei: capacity.toString(),
+        activeReservedWei: admission.activeReservedWei.toString(),
+        requestedPaymentWei: paymentAmount.toString(),
+        totalLiabilityWei: admission.totalLiabilityWei.toString(),
+      },
+    );
+  }
+  if (admission.status !== "reserved") {
     throw quoteError(
       "the active quote changed while it was being replaced; retry",
       409,
-      "REPLACEMENT_RACE",
+      admission.status === "replacement-mismatch"
+        ? "REPLACEMENT_MISMATCH"
+        : "RESERVATION_RACE",
     );
   }
 

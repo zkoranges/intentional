@@ -1,15 +1,17 @@
-// Persistent quote reservations — the single-flight guard, made restart-proof.
+// Persistent quote reservations — aggregate capacity accounting, restart-proof.
 //
-// The desk hands out at most one outstanding unexpired quote at a time so that
-// concurrent requests can never oversubscribe the reserve. The original
-// implementation kept that reservation in process memory, which had two audit
-// findings:
+// The desk can hand independent users simultaneous quotes only while their
+// aggregate payment liability fits the productive reserve. The original
+// implementation kept one global reservation in process memory, which had
+// three audit findings:
 //   1. a restart forgot the outstanding quote, so two valid-looking quotes
 //      could be live at once;
 //   2. a FILLED quote kept blocking new quotes until its TTL expired, because
 //      nothing released the reservation when the kernel consumed the nonce.
+//   3. one user globally blocked every other wallet, even when spare reserve
+//      capacity existed.
 //
-// This store fixes both: reservations are rows in a small SQLite database
+// This store fixes all three: reservations are rows in a small SQLite database
 // (node:sqlite, WAL mode) keyed by the quote nonce, and `sweep()` releases any
 // reservation whose nonce the kernel reports consumed on-chain — the caller
 // supplies the `nonceUsed` read the service already knows how to make.
@@ -37,9 +39,23 @@ CREATE TABLE IF NOT EXISTS reservations (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_reservations_open
   ON reservations (deadline_unix) WHERE released_unix IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_single_open
-  ON reservations ((1)) WHERE released_unix IS NULL;
+DROP INDEX IF EXISTS idx_reservations_single_open;
+CREATE TABLE IF NOT EXISTS reservation_state (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  version   INTEGER NOT NULL
+) STRICT;
+INSERT OR IGNORE INTO reservation_state (singleton, version) VALUES (1, 0);
 `;
+
+const MAX_UINT256 = (1n << 256n) - 1n;
+
+function envelopeJson(envelope) {
+  return envelope === undefined
+    ? null
+    : JSON.stringify(envelope, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value,
+      );
+}
 
 function toRow(record) {
   return {
@@ -64,6 +80,7 @@ export class ReservationStore {
     // WAL + FULL: a signed quote must never outlive the desk's memory of it.
     this.#db.exec("PRAGMA journal_mode = WAL;");
     this.#db.exec("PRAGMA synchronous = FULL;");
+    this.#db.exec("PRAGMA busy_timeout = 5000;");
     this.#db.exec(SCHEMA);
     const columns = new Set(
       this.#db.prepare("PRAGMA table_info(reservations)").all().map((column) => column.name),
@@ -79,7 +96,7 @@ export class ReservationStore {
     }
   }
 
-  /** Open, unexpired reservations — the ones that block a new quote. */
+  /** Open, unexpired reservations — the aggregate outstanding liability. */
   active(nowUnix) {
     const rows = this.#db
       .prepare(
@@ -91,27 +108,38 @@ export class ReservationStore {
 
   /**
    * Return the durable signed response for an identical active request.
-   * Different requests remain blocked by the global single-flight guard.
+   * Other active users do not affect idempotent recovery.
    */
   recover({ nowUnix, seller, mode, requestId, claimAmountWei }) {
     const active = this.active(nowUnix);
-    if (active.length !== 1) return null;
-    const reservation = active[0];
-    const sameClaim =
-      mode === "existing-unsteth"
-        ? reservation.requestId === requestId
-        : reservation.requestId === null &&
-          reservation.claimAmountWei === claimAmountWei;
-    return reservation.envelope !== null &&
-      reservation.seller === seller &&
-      reservation.mode === mode &&
-      sameClaim
-      ? reservation.envelope
-      : null;
+    const reservation = active.find((candidate) => {
+      const sameClaim =
+        mode === "existing-unsteth"
+          ? candidate.requestId === requestId
+          : candidate.requestId === null &&
+            candidate.claimAmountWei === claimAmountWei;
+      return candidate.seller === seller && candidate.mode === mode && sameClaim;
+    });
+    return reservation?.envelope ?? null;
   }
 
-  /** Record a freshly signed quote. Throws on nonce collision (primary key). */
-  reserve({
+  version() {
+    return this.#db
+      .prepare("SELECT version FROM reservation_state WHERE singleton = 1")
+      .get().version;
+  }
+
+  /** True only for a historical nonce already released for this seller. */
+  isReleasedForSeller(nonce, seller) {
+    const row = this.#db
+      .prepare(
+        "SELECT released_unix FROM reservations WHERE nonce = ? AND seller = ?",
+      )
+      .get(nonce.toString(), seller);
+    return row !== undefined && row.released_unix !== null;
+  }
+
+  #insert({
     nonce,
     seller,
     mode,
@@ -122,7 +150,7 @@ export class ReservationStore {
     deadlineUnix,
     nowUnix,
   }) {
-    this.#db
+    return this.#db
       .prepare(
         `INSERT INTO reservations
            (nonce, seller, mode, request_id, requested_steth_wei, payment_wei, envelope_json, deadline_unix, created_unix)
@@ -135,14 +163,128 @@ export class ReservationStore {
         requestId === null ? null : requestId.toString(),
         claimAmountWei.toString(),
         paymentWei.toString(),
-        envelope === undefined
-          ? null
-          : JSON.stringify(envelope, (_, value) =>
-              typeof value === "bigint" ? value.toString() : value,
-            ),
+        envelopeJson(envelope),
         Number(deadlineUnix),
         Number(nowUnix),
       );
+  }
+
+  #update({
+    nonce,
+    seller,
+    mode,
+    requestId,
+    claimAmountWei,
+    paymentWei,
+    envelope,
+    deadlineUnix,
+    nowUnix,
+  }) {
+    return this.#db
+      .prepare(
+        `UPDATE reservations
+            SET mode = ?,
+                request_id = ?,
+                requested_steth_wei = ?,
+                payment_wei = ?,
+                envelope_json = ?,
+                deadline_unix = ?,
+                created_unix = ?
+          WHERE nonce = ? AND seller = ? AND released_unix IS NULL`,
+      )
+      .run(
+        mode,
+        requestId === null ? null : requestId.toString(),
+        claimAmountWei.toString(),
+        paymentWei.toString(),
+        envelopeJson(envelope),
+        Number(deadlineUnix),
+        Number(nowUnix),
+        nonce.toString(),
+        seller,
+      );
+  }
+
+  /**
+   * Atomically admit a new or replacement reservation at a chain-observed
+   * capacity. `expectedVersion` is an optimistic cross-process lock: if
+   * another signer process changed the reservation set after the caller's
+   * chain reads, this returns `race` and the caller must revalidate.
+   *
+   * A replacement excludes its previous payment from the liability sum
+   * because every envelope sharing that nonce is mutually exclusive onchain.
+   */
+  reserveWithinCapacity({
+    reservation,
+    expectedVersion,
+    capacityWei,
+    nowUnix,
+    replaceNonce = null,
+  }) {
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const currentVersion = this.version();
+      if (currentVersion !== expectedVersion) {
+        this.#db.exec("ROLLBACK;");
+        return { status: "race" };
+      }
+
+      const active = this.active(nowUnix);
+      const replacement =
+        replaceNonce === null
+          ? null
+          : active.find((row) => row.nonce === replaceNonce) ?? null;
+      if (
+        replaceNonce !== null &&
+        (replacement === null || replacement.seller !== reservation.seller)
+      ) {
+        this.#db.exec("ROLLBACK;");
+        return { status: "replacement-mismatch" };
+      }
+
+      const activeReservedWei = active.reduce(
+        (total, row) =>
+          row.nonce === replaceNonce ? total : total + row.paymentWei,
+        0n,
+      );
+      const totalLiabilityWei = activeReservedWei + reservation.paymentWei;
+      if (totalLiabilityWei > capacityWei) {
+        this.#db.exec("ROLLBACK;");
+        return { status: "capacity", activeReservedWei, totalLiabilityWei };
+      }
+
+      if (replacement === null) {
+        this.#insert(reservation);
+      } else if (this.#update(reservation).changes !== 1) {
+        this.#db.exec("ROLLBACK;");
+        return { status: "race" };
+      }
+      this.#db
+        .prepare("UPDATE reservation_state SET version = version + 1 WHERE singleton = 1")
+        .run();
+      this.#db.exec("COMMIT;");
+      return { status: "reserved", activeReservedWei, totalLiabilityWei };
+    } catch (error) {
+      try {
+        this.#db.exec("ROLLBACK;");
+      } catch {
+        // Preserve the original storage error.
+      }
+      throw error;
+    }
+  }
+
+  /** Convenience API used by unit tests and migrations. */
+  reserve(reservation) {
+    const result = this.reserveWithinCapacity({
+      reservation,
+      expectedVersion: this.version(),
+      capacityWei: MAX_UINT256,
+      nowUnix: reservation.nowUnix,
+    });
+    if (result.status !== "reserved") {
+      throw new Error(`reservation failed: ${result.status}`);
+    }
   }
 
   /**
@@ -168,42 +310,50 @@ export class ReservationStore {
     deadlineUnix,
     nowUnix,
   }) {
-    const result = this.#db
-      .prepare(
-        `UPDATE reservations
-            SET mode = ?,
-                request_id = ?,
-                requested_steth_wei = ?,
-                payment_wei = ?,
-                envelope_json = ?,
-                deadline_unix = ?,
-                created_unix = ?
-          WHERE nonce = ? AND seller = ? AND released_unix IS NULL`,
-      )
-      .run(
-        mode,
-        requestId === null ? null : requestId.toString(),
-        claimAmountWei.toString(),
-        paymentWei.toString(),
-        JSON.stringify(envelope, (_, value) =>
-          typeof value === "bigint" ? value.toString() : value,
-        ),
-        Number(deadlineUnix),
-        Number(nowUnix),
-        nonce.toString(),
+    const result = this.reserveWithinCapacity({
+      reservation: {
+        nonce,
         seller,
-      );
-    return result.changes === 1;
+        mode,
+        requestId,
+        claimAmountWei,
+        paymentWei,
+        envelope,
+        deadlineUnix,
+        nowUnix,
+      },
+      expectedVersion: this.version(),
+      capacityWei: MAX_UINT256,
+      nowUnix,
+      replaceNonce: nonce,
+    });
+    return result.status === "reserved";
   }
 
   /** Mark a reservation released. Returns true if a row changed. */
   release(nonce, reason, nowUnix) {
-    const result = this.#db
-      .prepare(
-        "UPDATE reservations SET released_unix = ?, release_reason = ? WHERE nonce = ? AND released_unix IS NULL",
-      )
-      .run(Number(nowUnix), reason, nonce.toString());
-    return result.changes > 0;
+    this.#db.exec("BEGIN IMMEDIATE;");
+    try {
+      const result = this.#db
+        .prepare(
+          "UPDATE reservations SET released_unix = ?, release_reason = ? WHERE nonce = ? AND released_unix IS NULL",
+        )
+        .run(Number(nowUnix), reason, nonce.toString());
+      if (result.changes > 0) {
+        this.#db
+          .prepare("UPDATE reservation_state SET version = version + 1 WHERE singleton = 1")
+          .run();
+      }
+      this.#db.exec("COMMIT;");
+      return result.changes > 0;
+    } catch (error) {
+      try {
+        this.#db.exec("ROLLBACK;");
+      } catch {
+        // Preserve the original storage error.
+      }
+      throw error;
+    }
   }
 
   /**
@@ -238,7 +388,7 @@ export class ReservationStore {
       }
     }
 
-    return { released, active: this.active(nowUnix) };
+    return { released, active: this.active(nowUnix), version: this.version() };
   }
 
   close() {

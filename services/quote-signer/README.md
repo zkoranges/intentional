@@ -34,9 +34,11 @@ Retry behavior is explicit:
   `replaceNonce`. The service revalidates chain state and signs the new
   envelope with that **same nonce**. Old and new envelopes are therefore
   mutually exclusive onchain: the first successful fill consumes the nonce.
-- A different request without a valid replacement returns
-  `409 SINGLE_FLIGHT` with `retryAfterSeconds`, `activeDeadlineUnix`, and
-  `canReplace`. It never silently discards an outstanding liability.
+- Independent wallets may hold simultaneous quotes while the sum of their
+  payments fits the reserve's authoritative `availableFor(total)` result.
+  A request that would exceed remaining capacity returns
+  `409 RESERVE_CAPACITY_RESERVED` with the active liability, requested
+  payment, total liability, available capacity, and retry timing.
 
 ## Safety properties
 
@@ -46,11 +48,13 @@ Retry behavior is explicit:
    measured reserve capacity, so a bug elsewhere in the service cannot issue
    an oversized quote. This bounds the **service**, not the key — see "Key
    handling" below.
-3. **Single-flight nonce.** One serialized critical section covers the
-   complete sweep → validate → sign → durable-reserve sequence, backed by a
-   SQLite unique-open-reservation constraint. Concurrent requests cannot
-   oversubscribe the reserve. Requotes preserve the active nonce, so replacing
-   a browser-abandoned envelope does not create a second fillable liability.
+3. **Aggregate reservation accounting.** One serialized critical section
+   covers the complete sweep → validate → sign → durable-reserve sequence.
+   SQLite versioned admission extends the same guarantee across signer
+   processes: a stale capacity snapshot cannot commit. Independent users fit
+   until `sum(active payments) + new payment` exceeds authoritative capacity.
+   Requotes preserve and exclude their old nonce liability, so replacing a
+   browser-abandoned envelope does not double-reserve it.
 4. **Short expiry.** Default 120s, far inside the kernel's 15-minute bound.
 5. **Fails closed** on: paused settlement, unsealed/misconfigured kernel or
    funding account, insufficient measured capacity, paused Lido queue, Lido
