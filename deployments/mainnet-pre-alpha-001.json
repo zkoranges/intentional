@@ -3,7 +3,7 @@
   "network": "ethereum-mainnet",
   "chainId": 1,
   "gitCommit": "178ec3457471b865052172d7ede01aa5fb2475b5",
-  "releaseState": "paused-unfunded",
+  "releaseState": "active",
   "factor": "0x6bC1bf768b65Ee5b27a63eF22eAc48ff10e8E07b",
   "contracts": {
     "fundingAccount": {
@@ -59,5 +59,12 @@
     "minimumClaimWei": "500000000000000",
     "maximumClaimWei": "5000000000000000",
     "spreadBps": 25
-  }
+  },
+  "funding": {
+    "wrapTxHash": "0x1353b566531d09f78c42009098fa8af86003f2e6d667ccccb8650ff075772d2b",
+    "transferTxHash": "0x11a5ccdd60b0e55e0b56833f5b0e94507955f777b788b91e9506b9e57a438f7a",
+    "fundingAccountEnableTxHash": "0x4e292f67010b9e301a1833435017ff891c0ed448164db18a27434e10e84f6e36",
+    "reinvestTxHash": "0xfebbf921bfd30e21b1b1d5f9f515a88f86e209c46051ba6c08453cac904924fb"
+  },
+  "activationTxHash": "0x01d87ef94934e6ddd34e6b000b1f044c15a29b8f036a35f8cd1adbaa02cb8d44"
 }
