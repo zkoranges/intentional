@@ -157,7 +157,7 @@ into a two-sided market.
 
 ### 3.1 What blocks it today
 
-The single-factor assumption is not incidental; it is bound in five places, all
+The single-factor assumption is not incidental; it is bound in seven places, all
 immutable or sealed:
 
 | Binding | Where |
@@ -201,7 +201,8 @@ Viable as a first step precisely because it needs no protocol change.
 Replace `factorSigner` with a mapping from factor to funding account. The wire
 format already survives this: `ClaimTypes.Quote` carries `address factor` as
 field one, so quotes are already factor-addressed. But it rewrites the reviewed
-kernel's trust core in the four places listed above and re-opens the audit.
+kernel's trust core in all five settlement-side bindings above and re-opens the
+audit.
 Highest value, highest cost, and it should not be attempted before (a) or (b)
 has proven there is demand for the second side of the market.
 
