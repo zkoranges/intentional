@@ -137,6 +137,9 @@ the earlier, permanently retired proof deployment, and unstETH #130880 was a
 re-sale of the claim originated in that earlier proof. The transaction proves
 the production machinery, atomicity, real Lido integration, and exact WETH
 payment; it does not prove independent customer demand.
+Four later controlled browser tests exercised both live adapters and are
+listed with complete receipts under `additionalControlledFills` in the active
+deployment manifest.
 
 The earlier deployment in `deployments/mainnet-v2.json` remains permanently
 retired, paused, and unfunded because its immutable signer key was exposed.

@@ -84,6 +84,44 @@
     "quoteNonce": "1211826514102691268302748138119577886",
     "result": "seller received the exact signed WETH payment and the existing unstETH NFT moved to the factor atomically"
   },
+  "additionalControlledFills": [
+    {
+      "mode": "originate-steth",
+      "txHash": "0xacd8dd2f79fe0c2704b36cbed7e41d1f2c9046ddc905a5bb634f764b4051130e",
+      "blockNumber": 25613610,
+      "adapter": "0xe32f43D326a4c104365D8C9ACC657c90C8E03f81",
+      "seller": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+      "paymentWethWei": "997500000000000",
+      "createdUnstETHRequestId": "130887"
+    },
+    {
+      "mode": "originate-steth",
+      "txHash": "0xa6e488ad692761d480de1898a9292a4eb986cc7c25bb64b28f2153dece2eeb42",
+      "blockNumber": 25613653,
+      "adapter": "0xe32f43D326a4c104365D8C9ACC657c90C8E03f81",
+      "seller": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+      "paymentWethWei": "1246875000000000",
+      "createdUnstETHRequestId": "130888"
+    },
+    {
+      "mode": "existing-unsteth",
+      "txHash": "0xfff7fa96f38846a50c3d8301942774c079f9e8e7441904ddd94f4942fbd5a3ed",
+      "blockNumber": 25613666,
+      "adapter": "0x645193BC4748109f9A7e582B00ac7D41208BF91F",
+      "seller": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+      "paymentWethWei": "1925042139771230",
+      "unstETHRequestId": "130889"
+    },
+    {
+      "mode": "existing-unsteth",
+      "txHash": "0xeea1d21eb94656c6ba3809c8050d4334e05f3f8b1c8ec74fc67203b82e4e13da",
+      "blockNumber": 25613834,
+      "adapter": "0x645193BC4748109f9A7e582B00ac7D41208BF91F",
+      "seller": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+      "paymentWethWei": "1443781604828423",
+      "unstETHRequestId": "130890"
+    }
+  ],
   "replenishment": {
     "amountWethWei": "5000000000000000",
     "wrapTxHash": "0xf92bb41c4b22f064bbdd10800e7bb27956680a2c8c6fefcfeac35ea07ee763c2",
@@ -107,8 +145,8 @@
     "postReinvestAvailableAssetsObservedWei": "1399308938940375"
   },
   "runtimeRelease": {
-    "gitCommit": "152072df9e62c9c843435f161b92f1777205eaf2",
     "quoteSigner": {
+      "gitCommit": "152072df9e62c9c843435f161b92f1777205eaf2",
       "url": "https://quotes.intentional.so",
       "readiness": "ready",
       "minimumPaymentWei": "498750000000000",
@@ -126,11 +164,17 @@
       "independentResult": "409 RESERVE_CAPACITY_RESERVED",
       "sameNonce": true,
       "assetsMoved": false,
-      "deadlineUnix": 1785032399
-    }
+      "deadlineUnix": 1785032399,
+      "cleanup": {
+        "nonceCancelled": true,
+        "transactionHash": "0xe3483d2535122b745727830f7f92a2ac483a1094c5a24c3f6550c0235a4d8d2e",
+        "blockNumber": 25613902
+      }
+    },
+    "frontendGitCommit": "514e72e7489feea09c681fe51fe983972437cf18"
   },
   "frontend": {
     "productionUrl": "https://www.intentional.so",
-    "vercelDeploymentId": "dpl_FjnsmKCaqy6DArqY5DNP6UanoExw"
+    "vercelDeploymentId": "dpl_Aa5WFPjPZrSMGEtuceBGPFTYK59t"
   }
 }

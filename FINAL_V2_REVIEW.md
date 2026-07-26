@@ -248,3 +248,49 @@ The only residual procedural property is unavoidable for contracts with
 constructor immutables: the reviewed source-to-runtime-hash link is established
 through the committed public deployment manifest and explorer source
 verification after deployment and before funding.
+
+## Pre-alpha quote-race closure — 2026-07-26
+
+Claude Opus 5 performed a final read-only production review through agent
+`598f391f-84b1-4036-b0a9-717c0b27cf1c`. The closure pass inspected exact code
+commit `514e72e7489feea09c681fe51fe983972437cf18`, the deployed frontend bundle,
+the live signer health response, the active mainnet contracts and receipts,
+and the authenticated existing-unstETH fork rehearsal.
+
+The reviewer first confirmed one release blocker in the preceding candidate:
+a lower same-nonce requote replaced the recorded payment liability even though
+the older, higher signed envelope remained fillable. It also confirmed that
+the frontend stored a request fingerprint without using it to gate replacement
+and that the judge-facing submission record still described the retired
+deployment.
+
+Closure evidence:
+
+- `maximumLiabilityWei` is used by both the chain capacity probe and the
+  transactional SQLite admission path;
+- the durable row retains the maximum payment and deadline ever signed for a
+  nonce while exact recovery returns the newest envelope;
+- the frontend passes a replacement nonce only when seller, mode, and exact
+  amount or request ID match the stored fingerprint;
+- 57 signer tests and 34 frontend tests pass with no skips;
+- the reviewer independently ran the real-signature, real-canonical-state
+  existing-unstETH fork rehearsal and observed two concurrent requests recover
+  one envelope before the atomic sale;
+- the public submission record now discloses the active deployment, controlled
+  wallets, operator pricing, and the #130880 re-sale;
+- the signer and frontend fail closed when productive capacity cannot cover
+  the minimum payment; and
+- the non-settling production smoke proved higher-to-lower replacement retains
+  the higher liability, then cancelled its nonce onchain without moving assets.
+
+The review rejected false positives around the smoke nonce: `nonceUsed` is
+true because factor transaction
+`0xe3483d2535122b745727830f7f92a2ac483a1094c5a24c3f6550c0235a4d8d2e`
+emitted `NonceCancelled`; no matching `ClaimSettled` exists.
+
+The final reviewer verdict was:
+
+> **RELEASE VERDICT: APPROVE**
+
+The contracts were unchanged during this closure. Later release-record commits
+only add public receipts, deployment identifiers, and this review record.
