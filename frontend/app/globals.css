@@ -954,6 +954,7 @@ main {
 
 .stethIcon,
 .wethIcon,
+.ethIcon,
 .nftIcon,
 .etherfiIcon,
 .vaultIcon {
@@ -1686,6 +1687,52 @@ main {
   font-size: 12px;
   font-weight: 650;
   text-align: right;
+}
+
+.successTransfers {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.successTransfer {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+
+.successTransferCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.successTransferCopy small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.successTransferCopy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 690;
+  letter-spacing: -0.025em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.successTransferAsset {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .successActions {

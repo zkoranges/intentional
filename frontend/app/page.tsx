@@ -95,12 +95,21 @@ type ReplaceableQuote = {
   fingerprint: string;
 };
 
+type SuccessTransfer = {
+  amount: string;
+  asset: string;
+  icon: string;
+  iconClass: string;
+};
+
 type SuccessAction = {
   eyebrow: string;
   title: string;
   amount: string;
   body: string;
   facts: { label: string; value: string }[];
+  sent: SuccessTransfer;
+  received: SuccessTransfer;
   hash: Hash;
 };
 
@@ -547,6 +556,24 @@ function SuccessModal({
             </div>
           ))}
         </dl>
+
+        <div className="successTransfers" aria-label="Confirmed transfer summary">
+          {[
+            { label: "You sent", transfer: success.sent },
+            { label: "You received", transfer: success.received },
+          ].map(({ label, transfer }) => (
+            <div className="successTransfer" key={label}>
+              <span className={`tokenIcon ${transfer.iconClass}`} aria-hidden="true">
+                <img src={transfer.icon} alt="" width={29} height={29} />
+              </span>
+              <span className="successTransferCopy">
+                <small>{label}</small>
+                <strong>{transfer.amount}</strong>
+              </span>
+              <span className="successTransferAsset">{transfer.asset}</span>
+            </div>
+          ))}
+        </div>
 
         <div className="successActions">
           <a
@@ -1219,10 +1246,20 @@ export default function Home() {
         amount: `unstETH #${result.requestId}`,
         body: "Your withdrawal claim is in your wallet. Claim the ETH once Lido finalizes the request, or sell the claim now and let a buyer take the wait.",
         facts: [
-          { label: "Amount queued", value: `${formatMainnetAmount(amount)} stETH` },
-          { label: "Claim", value: `unstETH #${result.requestId}` },
           { label: "Holder", value: "Your wallet" },
         ],
+        sent: {
+          amount: formatMainnetAmount(amount, 6),
+          asset: "stETH",
+          icon: "/icons/steth.png",
+          iconClass: "stethIcon",
+        },
+        received: {
+          amount: `#${result.requestId}`,
+          asset: "unstETH",
+          icon: "/icons/unsteth.svg",
+          iconClass: "nftIcon",
+        },
         hash: result.hash,
       });
       await refresh(account);
@@ -1266,13 +1303,20 @@ export default function Home() {
         amount: `${formatMainnetAmount(result.amountOfEth, 6)} ETH`,
         body: `unstETH #${requestId} was redeemed and the ETH is now in your wallet.`,
         facts: [
-          { label: "Claim", value: `unstETH #${requestId}` },
-          {
-            label: "Received",
-            value: `${formatMainnetAmount(result.amountOfEth, 6)} ETH`,
-          },
           { label: "Paid to", value: short(account) },
         ],
+        sent: {
+          amount: `#${requestId}`,
+          asset: "unstETH",
+          icon: "/icons/unsteth.svg",
+          iconClass: "nftIcon",
+        },
+        received: {
+          amount: formatMainnetAmount(result.amountOfEth, 6),
+          asset: "ETH",
+          icon: "/icons/eth.svg",
+          iconClass: "ethIcon",
+        },
         hash: result.hash,
       });
       await refresh(account);
@@ -1654,19 +1698,26 @@ export default function Home() {
         body: isExistingClaim
           ? `unstETH #${result.requestId} moved to the buyer and the payment reached your wallet in the same transaction.`
           : "Your withdrawal claim went to the buyer and the payment reached your wallet in the same transaction. The buyer takes the Lido wait.",
-        facts: [
-          {
-            label: "You received",
-            value: `${formatMainnetAmount(result.paymentAmount, 6)} WETH`,
-          },
-          {
-            label: "You sold",
-            value: isExistingClaim
-              ? `unstETH #${result.requestId}`
-              : `${formatMainnetAmount(selectedCheck.requestedStEth, 6)} stETH`,
-          },
-          { label: "Paid to", value: short(account) },
-        ],
+        facts: [{ label: "Paid to", value: short(account) }],
+        sent: isExistingClaim
+          ? {
+              amount: `#${result.requestId}`,
+              asset: "unstETH",
+              icon: "/icons/unsteth.svg",
+              iconClass: "nftIcon",
+            }
+          : {
+              amount: formatMainnetAmount(selectedCheck.requestedStEth, 6),
+              asset: "stETH",
+              icon: "/icons/steth.png",
+              iconClass: "stethIcon",
+            },
+        received: {
+          amount: formatMainnetAmount(result.paymentAmount, 6),
+          asset: "WETH",
+          icon: "/icons/weth.svg",
+          iconClass: "wethIcon",
+        },
         hash: result.hash,
       });
       setClaimQuoteCheck(null);

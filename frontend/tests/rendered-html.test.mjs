@@ -416,6 +416,13 @@ test("every wallet action shows a pending state and settlement opens a success m
   assert.match(page, /className="successModal"/);
   assert.match(page, /WETH received/);
   assert.match(page, /ETH received/);
+  assert.match(page, /aria-label="Confirmed transfer summary"/);
+  assert.match(page, /\{ label: "You sent", transfer: success\.sent \}/);
+  assert.match(page, /\{ label: "You received", transfer: success\.received \}/);
+  assert.match(page, /icon: "\/icons\/steth\.png"/);
+  assert.match(page, /icon: "\/icons\/unsteth\.svg"/);
+  assert.match(page, /icon: "\/icons\/weth\.svg"/);
+  assert.match(page, /icon: "\/icons\/eth\.svg"/);
   assert.match(page, /View on Etherscan/);
   assert.ok(
     page.indexOf("setSuccess({") > 0,
@@ -436,6 +443,8 @@ test("every wallet action shows a pending state and settlement opens a success m
     ".successBadge",
     ".successAmount",
     ".successFacts",
+    ".successTransfers",
+    ".successTransfer",
     ".buttonSpinner",
     ".positionPending",
   ]) {
