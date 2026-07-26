@@ -179,9 +179,7 @@ export default function Home() {
   const [account, setAccount] = useState<Address | null>(null);
   const [snapshot, setSnapshot] = useState<LiveWalletSnapshot | null>(null);
   const [action, setAction] = useState<ActionState>("idle");
-  const [status, setStatus] = useState(
-    "Connect your wallet to start an exit.",
-  );
+  const [status, setStatus] = useState<string | null>(null);
   const [mode, setMode] = useState<ExitMode>("claim");
   const [selectedClaimId, setSelectedClaimId] = useState<bigint | null>(null);
   const [amountInput, setAmountInput] = useState("0.00");
@@ -205,6 +203,7 @@ export default function Home() {
     observedAt: "",
   });
   const walletMenuRef = useRef<HTMLDivElement>(null);
+  const walletRefreshIdRef = useRef(0);
 
   const busy = action !== "idle";
   const marketLive = marketStatus.firmQuotesEnabled;
@@ -251,50 +250,94 @@ export default function Home() {
             ? "Insufficient stETH balance"
             : null;
 
-  const refresh = useCallback(
-    async (connectedAccount = account) => {
+  const refreshWallet = useCallback(
+    async (connectedAccount: Address) => {
       const injected = getInjectedProvider();
-      if (!injected || !connectedAccount) return;
+      if (!injected) return;
+      const refreshId = ++walletRefreshIdRef.current;
       setAction("reading");
       try {
         const next = await readLiveWallet(injected, connectedAccount);
+        if (refreshId !== walletRefreshIdRef.current) return;
         setSnapshot(next);
         setStatus(
           next.productionCodeVerified
-            ? "Ethereum contracts verified. Choose an exit route."
+            ? null
             : "A required Ethereum contract could not be verified.",
         );
       } catch (error) {
+        if (refreshId !== walletRefreshIdRef.current) return;
         setSnapshot(null);
         setStatus(errorMessage(error));
       } finally {
-        setAction("idle");
+        if (refreshId === walletRefreshIdRef.current) {
+          setAction("idle");
+        }
       }
     },
-    [account],
+    [],
+  );
+
+  const refresh = useCallback(
+    async (connectedAccount = account) => {
+      if (!connectedAccount) return;
+      await refreshWallet(connectedAccount);
+    },
+    [account, refreshWallet],
+  );
+
+  const clearWalletState = useCallback((nextStatus: string | null = null) => {
+    walletRefreshIdRef.current += 1;
+    setAccount(null);
+    setSnapshot(null);
+    setSelectedClaimId(null);
+    setClaimQuoteCheck(null);
+    setWalletMenuOpen(false);
+    setActions([]);
+    setLastMintedRequest(null);
+    setStatus(nextStatus);
+    setAction("idle");
+  }, []);
+
+  const loadWalletAccount = useCallback(
+    async (next: Address) => {
+      walletRefreshIdRef.current += 1;
+      setAccount(next);
+      setSnapshot(null);
+      setSelectedClaimId(null);
+      setClaimQuoteCheck(null);
+      setWalletMenuOpen(false);
+      setActions([]);
+      setLastMintedRequest(null);
+      setStatus(null);
+      await refreshWallet(next);
+    },
+    [refreshWallet],
   );
 
   useEffect(() => {
     const injected = getInjectedProvider();
     if (!injected) return;
 
-    const onAccounts = (...args: unknown[]) => {
-      const values = args[0] as string[] | undefined;
+    const syncAccounts = (values: string[] | undefined) => {
+      if (sessionStorage.getItem(WALLET_DISCONNECTED_KEY) === "1") return;
       if (!values?.[0]) {
-        setAccount(null);
-        setSnapshot(null);
-        setWalletMenuOpen(false);
-        setStatus("Wallet disconnected.");
+        clearWalletState();
         return;
       }
-      if (sessionStorage.getItem(WALLET_DISCONNECTED_KEY) === "1") return;
       const next = getAddress(values[0]);
-      setAccount(next);
-      void refresh(next);
+      void loadWalletAccount(next);
+    };
+    const onAccounts = (...args: unknown[]) => {
+      syncAccounts(args[0] as string[] | undefined);
     };
     const onChain = () => {
+      walletRefreshIdRef.current += 1;
       setSnapshot(null);
-      if (account) void refresh(account);
+      void injected
+        .request({ method: "eth_accounts" })
+        .then((values) => syncAccounts(values as string[]))
+        .catch((error) => setStatus(errorMessage(error)));
     };
 
     injected.on?.("accountsChanged", onAccounts);
@@ -307,21 +350,14 @@ export default function Home() {
     }
     void injected
       .request({ method: "eth_accounts" })
-      .then((values) => {
-        const accounts = values as string[];
-        if (accounts[0]) {
-          const next = getAddress(accounts[0]);
-          setAccount(next);
-          void refresh(next);
-        }
-      })
+      .then((values) => syncAccounts(values as string[]))
       .catch(() => undefined);
 
     return () => {
       injected.removeListener?.("accountsChanged", onAccounts);
       injected.removeListener?.("chainChanged", onChain);
     };
-  }, [account, refresh]);
+  }, [clearWalletState, loadWalletAccount]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -425,8 +461,7 @@ export default function Home() {
     try {
       sessionStorage.removeItem(WALLET_DISCONNECTED_KEY);
       const next = await connectInjectedWallet(injected);
-      setAccount(next);
-      await refresh(next);
+      await loadWalletAccount(next);
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {
@@ -437,13 +472,7 @@ export default function Home() {
   async function disconnect() {
     const injected = getInjectedProvider();
     sessionStorage.setItem(WALLET_DISCONNECTED_KEY, "1");
-    setWalletMenuOpen(false);
-    setAccount(null);
-    setSnapshot(null);
-    setClaimQuoteCheck(null);
-    setActions([]);
-    setLastMintedRequest(null);
-    setStatus("Wallet disconnected. Your funds remain in your wallet.");
+    clearWalletState();
 
     if (!injected) return;
     try {
@@ -1254,23 +1283,17 @@ export default function Home() {
             </>
           )}
 
-          <div className="statusBar" aria-live="polite">
-            <span
-              className={
-                busy
-                  ? "statusSpinner"
-                  : snapshot?.productionCodeVerified
-                    ? "statusDot ready"
-                    : "statusDot"
-              }
-            />
-            <p>{status}</p>
-            {account && (
-              <button onClick={() => refresh()} disabled={busy}>
-                Refresh
-              </button>
-            )}
-          </div>
+          {(status || busy) && (
+            <div className="statusBar" aria-live="polite">
+              {busy && <span className="statusSpinner" />}
+              <p>{status ?? "Updating wallet…"}</p>
+              {account && (
+                <button onClick={() => refresh()} disabled={busy}>
+                  Refresh
+                </button>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="marketsSection" id="markets" aria-label="Factoring markets">

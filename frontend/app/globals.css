@@ -923,14 +923,14 @@ main {
 }
 
 .statusBar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   gap: 9px;
   align-items: center;
   padding: 12px 7px 2px;
 }
 
 .statusBar p {
+  flex: 1;
   margin: 0;
   color: var(--muted);
   font-size: 11px;
@@ -946,20 +946,10 @@ main {
   font-weight: 680;
 }
 
-.statusDot,
 .statusSpinner {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-}
-
-.statusDot {
-  background: var(--subtle);
-}
-
-.statusDot.ready {
-  background: var(--green);
-  box-shadow: 0 0 0 3px var(--green-soft);
 }
 
 .statusSpinner {
