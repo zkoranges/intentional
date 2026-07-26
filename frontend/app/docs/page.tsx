@@ -413,7 +413,7 @@ export default function DocsPage() {
 
       <div className="docsLayout">
         <aside className="docsSidebar">
-          <p>Reservoir protocol</p>
+          <p>Intentional protocol</p>
           <nav aria-label="Documentation">
             {SECTIONS.map(([id, label], index) => (
               <a key={id} href={`#${id}`}>
@@ -426,7 +426,7 @@ export default function DocsPage() {
 
         <main className="docsContent">
           <section id="overview" className="docsHero">
-            <p className="docsEyebrow">Reservoir protocol</p>
+            <p className="docsEyebrow">Intentional protocol</p>
             <h1>Factoring for onchain claims.</h1>
             <p className="docsLead">
               Sell a future payment. Get paid today.
@@ -469,7 +469,7 @@ export default function DocsPage() {
               Fungible-token orders name an ERC-20 <code>sellToken</code>. A
               withdrawal claim may instead be an NFT or an entry in vault
               storage, so ordinary ERC-20 execution cannot express every
-              route. Reservoir provides claim-specific acquisition and
+              route. Intentional provides claim-specific acquisition and
               settlement postconditions.
             </p>
             <p>
@@ -742,7 +742,7 @@ complete value    → measured`}</pre>
 
             <h3>Where 1inch Aqua and SwapVM fit</h3>
             <p>
-              Reservoir ships a working Aqua / SwapVM strategy: a custom VM
+              Intentional ships a working Aqua / SwapVM strategy: a custom VM
               instruction (<code>0x92</code>) clamps swap output to what the
               maker&apos;s ERC-4626 reserve can currently deliver, proven
               against production Aqua contracts on a mainnet fork. A

@@ -1,4 +1,4 @@
-- [What is Reservoir](README.md)
+- [What is Intentional](README.md)
 - [How it works](how-it-works.md)
 - [The factor](factor.md)
 - [Architecture](architecture.md)

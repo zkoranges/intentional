@@ -36,7 +36,7 @@ The seller transfers all of these risks to the factor.
 
 ## Why the funding account earns yield
 
-Factoring demand is episodic stress liquidity: in externally produced sample data (reported, not reproduced in this repository — see [`docs/V2_ECONOMICS.md`](https://github.com/zkoranges/reservoir-v2-eth-lisbon/blob/main/docs/V2_ECONOMICS.md)), opportunities clustered on a minority of days and the factor sat idle most of the time. Keeping the reserve in an ERC-4626 vault means the same capital earns lending yield on idle days and the factoring spread when a deal appears. Without that yield, holding standby capital would rarely be worth it.
+Factoring demand is episodic stress liquidity: in externally produced sample data (reported, not reproduced in this repository — see [`docs/V2_ECONOMICS.md`](https://github.com/zkoranges/intentional/blob/main/docs/V2_ECONOMICS.md)), opportunities clustered on a minority of days and the factor sat idle most of the time. Keeping the reserve in an ERC-4626 vault means the same capital earns lending yield on idle days and the factoring spread when a deal appears. Without that yield, holding standby capital would rarely be worth it.
 
 ## One factor today
 

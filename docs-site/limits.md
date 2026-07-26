@@ -6,7 +6,7 @@ An externally produced sample suggested that economically attractive factoring
 opportunities were episodic rather than continuous. The raw dataset and
 analysis pipeline are not in this repository, so the public product does not
 present those reported figures as reproduced evidence. The appendix in
-[`docs/V2_ECONOMICS.md`](https://github.com/zkoranges/reservoir-v2-eth-lisbon/blob/main/docs/V2_ECONOMICS.md)
+[`docs/V2_ECONOMICS.md`](https://github.com/zkoranges/intentional/blob/main/docs/V2_ECONOMICS.md)
 records the assumptions and reported results with that limitation.
 
 For liquid stETH, a direct market sale will often be the better route because

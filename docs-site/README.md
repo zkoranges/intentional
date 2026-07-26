@@ -1,4 +1,4 @@
-# Reservoir
+# Intentional
 
 > **Factoring for onchain claims.** Sell a future payment, get paid today.
 
@@ -11,7 +11,7 @@ Many DeFi positions are claims on future payments:
 
 While a claim waits in a queue it cannot be spent, and it cannot be sold on a normal exchange. Uniswap and CoW orders name an ERC-20 `sellToken`; a withdrawal claim is an NFT or an entry in vault storage, so the order cannot even be expressed.
 
-## What Reservoir does
+## What Intentional does
 
 A factor — a buyer with capital — signs a priced offer for the claim. The seller accepts it, and in a single transaction the claim moves to the factor and payment moves to the seller. The factor waits out the queue and collects the eventual payout — subject to finalization timing and impairment risk, which stay with the factor; the discount is its return.
 

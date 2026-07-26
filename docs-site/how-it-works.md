@@ -57,7 +57,7 @@ When the queue finalizes, the factor collects what the queue actually pays — n
 
 ## Two kinds of claim
 
-Reservoir ships two adapters.
+Intentional ships two adapters.
 
 **Originate — the claim does not exist yet.** The seller holds stETH and wants ETH now. During settlement, the adapter converts the seller's stETH into a new Lido withdrawal request owned by the factor, while WETH is paid to the seller. The claim is created inside the settlement transaction, which a token exchange cannot do.
 

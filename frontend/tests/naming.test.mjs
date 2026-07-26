@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-// The decision this file enforces is written up in docs/NAMING.md:
-// Intentional is the product, Reservoir is the protocol.
+// The decision this file enforces is written up in docs/NAMING.md: Intentional
+// is the name in all prose. Reservoir survives only inside signed wire formats
+// and pinned identifiers, which cannot change without breaking deployments.
 
 const projectRoot = new URL("../", import.meta.url);
 const repoRoot = new URL("../../", import.meta.url);
@@ -67,6 +68,36 @@ test("user-facing failure text does not name the protocol", async () => {
     [],
     "name what the person controls, not the settlement engine — see docs/NAMING.md",
   );
+});
+
+test("documentation prose says Intentional, never the old protocol name", async () => {
+  const docsPage = await read("app/docs/page.tsx");
+
+  assert.match(docsPage, /Intentional protocol/);
+  assert.doesNotMatch(
+    docsPage,
+    /Reservoir/,
+    "the /docs page is prose a reader sees — one name for one system",
+  );
+
+  // The standalone docsify site is the same audience by another route.
+  const site = ["README.md", "_sidebar.md", "index.html", "architecture.md", "how-it-works.md", "factor.md", "limits.md"];
+  const pages = await Promise.all(
+    site.map((name) => read(`docs-site/${name}`, repoRoot)),
+  );
+  for (const [index, contents] of pages.entries()) {
+    assert.doesNotMatch(
+      contents,
+      /Reservoir/i,
+      `docs-site/${site[index]} still names the protocol`,
+    );
+    // The repository was renamed; deep links under the old name 404.
+    assert.doesNotMatch(
+      contents,
+      /reservoir-v2-eth-lisbon/,
+      `docs-site/${site[index]} links to the old repository name`,
+    );
+  }
 });
 
 test("public footers use the product identity without protocol attribution", async () => {

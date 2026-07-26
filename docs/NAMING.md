@@ -1,19 +1,18 @@
-# Naming: Intentional and Reservoir
+# Naming: Intentional, and the frozen Reservoir strings
 
-Two names, on purpose.
+One name in prose. **Intentional** is the product and the protocol — what a
+visitor sees, what the domain says, and the voice every written surface uses,
+including the protocol documentation that explains the settlement kernel, its
+adapters, and the funding account.
 
-**Intentional** is the product. It is what a visitor sees, what the domain says,
-and the voice everything user-facing is written in.
+This supersedes the earlier split, which kept Reservoir as a separate protocol
+identity in technical writing. Readers had to learn two names for one system to
+follow a single page, and the second name was never something they could act on.
 
-**Reservoir** is the protocol — the settlement kernel, its adapters, and the
-funding account. It is a technical term. It belongs in code, in contract and
-protocol documentation, in wire formats, and in attribution.
-
-Neither name is a rename of the other. A person selling a withdrawal claim is
-using Intentional; the thing that settles it is Reservoir. Keeping them separate
-lets the app be marketed freely while the protocol keeps a neutral identity that
-another front end could build on — the same shape as the SwapVM and Aqua
-attribution this repository already carries.
+**Reservoir survives only where it is load-bearing** — inside signed wire
+formats and pinned identifiers that cannot change without breaking deployed
+signatures. Those are listed below. They are not a brand; treat them as
+constants that happen to be words.
 
 ## The rule
 
@@ -22,10 +21,12 @@ attribution this repository already carries.
 | Page titles, meta descriptions, social cards | **Intentional** | This is the product a visitor found |
 | Headings, body copy, button labels | **Intentional** | Product voice |
 | Status messages and errors shown in the app | **neither, by default** | Errors should name what the person controls, not the system underneath |
-| Public footer | **Intentional** | Product identity only; technical attribution lives in protocol documentation |
-| Protocol documentation (`/docs`) | **Reservoir** | It genuinely documents the protocol |
-| Contracts, specs, threat model, this repository | **Reservoir** | Technical register throughout |
-| Code identifiers, env vars, API enums, wire formats | **Reservoir** | Internal; renaming buys nothing and breaks things |
+| Public footer | **Intentional** | Product identity |
+| Published documentation (`/docs`, `docs-site/`) | **Intentional** | One name for one system |
+| New writing in specs, threat model, this repository | **Intentional** | Technical register, same name |
+| Existing internal specs and dated review records | **not yet swept** | ~150 mentions remain; historical reviews record what was true when written |
+| `THIRD_PARTY_NOTICES.md`, `LICENSE` | **do not touch casually** | Attribution and licence text, not brand copy |
+| Code identifiers, env vars, API enums, wire formats | **leave as they are** | Renaming buys nothing and breaks things — see the frozen table |
 
 The rule for user-facing failure text is worth stating on its own, because it is
 the one most easily broken: **a person who hits an error should not have to learn
@@ -36,7 +37,7 @@ that sentence adds nothing they can act on.
 ## Frozen — never rebrand these
 
 Some Reservoir strings are load-bearing. Changing them is not a rename; it is a
-breaking change.
+breaking change. Renaming prose does not reach them, and must not.
 
 | String | Where | What breaks if changed |
 |---|---|---|
@@ -58,8 +59,10 @@ The split is enforced in source and rendered-output tests. Marketing metadata in
 wordmark is Intentional, and in-app copy that addresses the user by name already
 says things like "Intentional verifies its amount, signature, contracts, expiry".
 
-Technical pages may name Reservoir when they explain the settlement protocol.
-The public app and its footer use the Intentional product identity.
+The protocol documentation used to name Reservoir when it explained settlement.
+It no longer does: `/docs` and `docs-site/` now say Intentional throughout, and
+the stale `zkoranges/reservoir-v2-eth-lisbon` deep links they carried — dead
+since the repository became `zkoranges/intentional` — were repointed with them.
 
 ### What violated the rule
 
@@ -82,6 +85,6 @@ system tells the reader nothing they can act on.
 
 [`frontend/tests/naming.test.mjs`](../frontend/tests/naming.test.mjs) runs with
 `npm test` and holds the line in both directions: it fails if the frozen strings
-drift, and it fails if the protocol name reappears in marketing metadata or in
-user-facing failure text. A test rather than a convention, because this is the
-kind of rule that erodes quietly.
+drift, and it fails if Reservoir reappears in marketing metadata, in user-facing
+failure text, or in the documentation prose. A test rather than a convention,
+because this is the kind of rule that erodes quietly.

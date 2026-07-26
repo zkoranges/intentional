@@ -44,7 +44,7 @@ Adapters confirm every acquisition by measuring balances before and after rather
 
 ## 1inch Aqua and SwapVM
 
-**The Aqua application.** Reservoir ships a working Aqua / SwapVM strategy: a custom VM instruction (`0x92`) clamps swap output to what the maker's ERC-4626 reserve can currently deliver, so a maker can quote from yield-vault inventory instead of idle tokens. This path is proven against production Aqua contracts on a mainnet fork.
+**The Aqua application.** Intentional ships a working Aqua / SwapVM strategy: a custom VM instruction (`0x92`) clamps swap output to what the maker's ERC-4626 reserve can currently deliver, so a maker can quote from yield-vault inventory instead of idle tokens. This path is proven against production Aqua contracts on a mainnet fork.
 
 **The factoring path.** A factoring fill does not execute through SwapVM. The settlement kernel reuses the reserve engine built for the Aqua application: the same adapter holds the factor's WETH in an Aave vault, withdraws the exact payment inside the fill, and reports zero capacity on any uncertainty.
 
@@ -59,7 +59,7 @@ Adapters confirm every acquisition by measuring balances before and after rather
 Every token movement, every validation gate and the error it reverts with, the
 factor's capital cycle, and the live mainnet settlement decoded wei by wei are
 documented with diagrams in
-[`docs/FUNDS_FLOW.md`](https://github.com/zkoranges/reservoir-v2-eth-lisbon/blob/main/docs/FUNDS_FLOW.md).
+[`docs/FUNDS_FLOW.md`](https://github.com/zkoranges/intentional/blob/main/docs/FUNDS_FLOW.md).
 
 ---
 
