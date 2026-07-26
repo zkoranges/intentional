@@ -739,8 +739,10 @@ main {
 
 .tokenRow input,
 .tokenRow output {
-  width: 100%;
+  width: 0;
   min-width: 0;
+  flex: 1 1 0;
+  overflow: hidden;
   border: 0;
   background: transparent;
   color: var(--ink);
@@ -748,6 +750,8 @@ main {
   font-weight: 470;
   letter-spacing: -0.05em;
   line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .claimSelect {
