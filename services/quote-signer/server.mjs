@@ -45,6 +45,7 @@ import { mainnet } from "viem/chains";
 import { assertBindSafe, assertNoSecretMaterial, verifyDeploymentConfig } from "./guards.mjs";
 import { buildHealthPayload } from "./health.mjs";
 import { ReservationStore } from "./reservations.mjs";
+import { SerialExecutor } from "./serial-executor.mjs";
 
 const STETH = getAddress("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
 const WETH = getAddress("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
@@ -119,6 +120,7 @@ const { refusals: configRefusals } = verifyDeploymentConfig({
 });
 
 const reservations = new ReservationStore(RESERVATIONS_DB);
+const quoteExecutor = new SerialExecutor();
 
 const kernelAbi = parseAbi([
   "function factorSigner() view returns (address)",
@@ -283,6 +285,32 @@ async function audit(event) {
     console.error("audit log write failed", error.message);
   }
   console.log(line);
+}
+
+// Authentication failures originate at the public edge and are untrusted
+// volume. Never append one durable audit record per rejected request: doing so
+// would let an unauthenticated scanner consume the service disk. Summarize at
+// most once per minute to journald, whose own retention is bounded. Signed
+// quotes and authenticated quote refusals remain durably audited.
+const AUTH_REJECTION_WINDOW_MS = 60_000;
+let authRejectionWindowStartedAt = Date.now();
+let authRejectionCount = 0;
+
+function recordAuthRejection() {
+  authRejectionCount += 1;
+  const now = Date.now();
+  if (now - authRejectionWindowStartedAt < AUTH_REJECTION_WINDOW_MS) return;
+
+  console.warn(
+    JSON.stringify({
+      at: new Date(now).toISOString(),
+      event: "auth_rejected_summary",
+      count: authRejectionCount,
+      windowMs: now - authRejectionWindowStartedAt,
+    }),
+  );
+  authRejectionWindowStartedAt = now;
+  authRejectionCount = 0;
 }
 
 function stringifyBody(body) {
@@ -771,7 +799,7 @@ const server = createServer(async (request, response) => {
   }
 
   if (!secretMatches(request.headers["x-signer-secret"])) {
-    await audit({ event: "auth_rejected", path: url.pathname });
+    recordAuthRejection();
     return json(response, 401, { error: "unauthorized" });
   }
 
@@ -802,12 +830,18 @@ const server = createServer(async (request, response) => {
   }
 
   try {
-    const envelope = await buildQuote({
-      seller: getAddress(body.seller),
-      mode: body.mode,
-      requestedStEth: body.mode === "originate" ? BigInt(body.requestedStEth) : undefined,
-      requestId: body.mode === "existing-unsteth" ? BigInt(body.requestId) : undefined,
-    });
+    // Serialize the complete sweep -> validate -> sign -> durable-reserve
+    // sequence. Node may accept several requests concurrently; without this
+    // critical section, two requests could both observe an empty reservation
+    // set before either inserted its row.
+    const envelope = await quoteExecutor.run(() =>
+      buildQuote({
+        seller: getAddress(body.seller),
+        mode: body.mode,
+        requestedStEth: body.mode === "originate" ? BigInt(body.requestedStEth) : undefined,
+        requestId: body.mode === "existing-unsteth" ? BigInt(body.requestId) : undefined,
+      }),
+    );
     return json(response, 200, envelope);
   } catch (error) {
     const status = error.status ?? 500;

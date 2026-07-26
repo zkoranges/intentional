@@ -279,7 +279,7 @@ Release record on 2026-07-25:
 | Production-contract fork suites | 21 passed against canonical contracts; fail loudly if misconfigured |
 | Exact deploy/sign/approve/fill rehearsal | passed |
 | Frontend rendered/source tests | 18 passed |
-| Quote-desk tests | 29 passed |
+| Quote-desk tests | 32 passed |
 | Existing-unstETH deploy/sign/approve/fill rehearsal | passed |
 | Native Next.js/Vercel build | passed |
 

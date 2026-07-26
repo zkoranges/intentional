@@ -11,7 +11,9 @@ import {
 
 import {
   ADDRESSES,
+  MAX_LIVE_LIDO_QUOTE,
   MAX_LIDO_REQUEST,
+  MIN_LIVE_LIDO_QUOTE,
   MIN_LIDO_REQUEST,
   MinedTransactionVerificationError,
   RESERVOIR_DEPLOYMENT,
@@ -218,6 +220,11 @@ export default function Home() {
     claimQuoteCheck?.requestId === selectedClaim?.requestId
       ? claimQuoteCheck
       : null;
+  const selectedClaimWithinFirmLimits = Boolean(
+    selectedClaim &&
+      selectedClaim.amountOfStETH >= MIN_LIVE_LIDO_QUOTE &&
+      selectedClaim.amountOfStETH <= MAX_LIVE_LIDO_QUOTE,
+  );
   const amount = useMemo(() => {
     try {
       return parseEther(amountInput || "0");
@@ -903,7 +910,7 @@ export default function Home() {
 
           <p className="modeNote">
             {mode === "claim"
-              ? "Choose an unstETH NFT you own. The claim and WETH payment move atomically."
+              ? "Choose an unstETH NFT you own. The claim and WETH payment move atomically. Pre-alpha firm offers are capped to claims from 0.0005 to 0.0015 stETH."
               : "Join the official Lido queue and claim ETH after finalization."}
           </p>
 
@@ -1061,6 +1068,10 @@ export default function Home() {
                     disabled={busy}
                   >
                     Create a Lido claim first
+                  </button>
+                ) : !selectedClaimWithinFirmLimits ? (
+                  <button className="actionButton" disabled>
+                    Claim outside 0.0005–0.0015 stETH pilot
                   </button>
                 ) : !selectedClaimOffer ? (
                   <button

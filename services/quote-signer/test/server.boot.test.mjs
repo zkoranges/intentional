@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -162,6 +162,27 @@ test("/health exposes readiness, chain id, and addresses — and no secret mater
   assert.equal(haystack.includes(privateKey.toLowerCase()), false, "private key leaked");
   assert.equal(haystack.includes(privateKey.slice(2).toLowerCase()), false, "raw key hex leaked");
   assert.equal(haystack.includes(FAKE_RPC_KEY.toLowerCase()), false, "rpc url leaked");
+});
+
+test("unauthenticated quote floods do not grow the durable audit log", async (t) => {
+  const dir = tempDir(t);
+  const env = baseEnv(dir, throwawayPrivateKey());
+  const server = startServer(env);
+  t.after(() => server.stop());
+
+  const { port } = await server.waitForListening();
+  const requests = Array.from({ length: 50 }, () =>
+    fetch(`http://127.0.0.1:${port}/quote`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }),
+  );
+  const responses = await Promise.all(requests);
+  assert.ok(responses.every((response) => response.status === 401));
+
+  const audit = existsSync(env.AUDIT_LOG) ? readFileSync(env.AUDIT_LOG, "utf8") : "";
+  assert.doesNotMatch(audit, /auth_rejected/);
 });
 
 test("a retired manifest is a first-class refusal: /health says so and /quote is 503", async (t) => {

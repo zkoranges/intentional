@@ -10,14 +10,35 @@ const outputPath =
   process.env.DEPLOYMENT_MANIFEST_PATH ??
   "deployments/mainnet-pre-alpha-001.json";
 const rpcUrl = required("ETH_RPC_URL");
+const etherscanApiKey = required("ETHERSCAN_API_KEY");
 const factor = checksum(required("FACTOR_ADDRESS"));
 
 const contracts = [
-  ["fundingAccount", "ProductiveFundingAccount"],
-  ["reserveAdapter", "ERC4626ReserveAdapter"],
-  ["kernel", "AsyncClaimSettlement"],
-  ["lidoAdapter", "LidoWithdrawalClaimAdapter"],
-  ["lidoUnstETHExitAdapter", "LidoUnstETHExitAdapter"],
+  [
+    "fundingAccount",
+    "ProductiveFundingAccount",
+    "out/ProductiveFundingAccount.sol/ProductiveFundingAccount.json",
+  ],
+  [
+    "reserveAdapter",
+    "ERC4626ReserveAdapter",
+    "out/ERC4626ReserveAdapter.sol/ERC4626ReserveAdapter.json",
+  ],
+  [
+    "kernel",
+    "AsyncClaimSettlement",
+    "out/AsyncClaimSettlement.sol/AsyncClaimSettlement.json",
+  ],
+  [
+    "lidoAdapter",
+    "LidoWithdrawalClaimAdapter",
+    "out/LidoWithdrawalClaimAdapter.sol/LidoWithdrawalClaimAdapter.json",
+  ],
+  [
+    "lidoUnstETHExitAdapter",
+    "LidoUnstETHExitAdapter",
+    "out/LidoUnstETHExitAdapter.sol/LidoUnstETHExitAdapter.json",
+  ],
 ];
 
 if (!existsSync(broadcastPath)) {
@@ -39,9 +60,20 @@ const broadcast = JSON.parse(readFileSync(broadcastPath, "utf8"));
 if (Number(broadcast.chain) !== 1) {
   fail(`broadcast chain is ${broadcast.chain}; expected Ethereum mainnet`);
 }
+const gitCommit = run("git", ["rev-parse", "HEAD"]).trim();
+if (
+  typeof broadcast.commit !== "string" ||
+  broadcast.commit.length < 7 ||
+  !gitCommit.toLowerCase().startsWith(broadcast.commit.toLowerCase())
+) {
+  fail(
+    `broadcast commit ${String(broadcast.commit)} does not match reviewed commit ${gitCommit}`,
+  );
+}
 
 const manifestContracts = {};
-for (const [manifestName, contractName] of contracts) {
+const creationsByName = {};
+for (const [manifestName, contractName, artifactPath] of contracts) {
   const creations = broadcast.transactions.filter(
     (transaction) =>
       transaction.transactionType === "CREATE" &&
@@ -54,6 +86,7 @@ for (const [manifestName, contractName] of contracts) {
   }
 
   const creation = creations[0];
+  creationsByName[contractName] = creation;
   if (
     checksum(creation.transaction.from).toLowerCase() !== factor.toLowerCase()
   ) {
@@ -82,6 +115,37 @@ for (const [manifestName, contractName] of contracts) {
     fail(`${contractName} receipt sender does not match the reviewed factor`);
   }
 
+  const chainTransaction = JSON.parse(
+    run("cast", ["tx", creation.hash, "--rpc-url", rpcUrl, "--json"]),
+  );
+  if (
+    checksum(chainTransaction.from).toLowerCase() !== factor.toLowerCase() ||
+    chainTransaction.to !== null
+  ) {
+    fail(`${contractName} mainnet transaction is not a creation by the reviewed factor`);
+  }
+  const broadcastInput = creation.transaction?.input?.toLowerCase();
+  const chainInput = chainTransaction.input?.toLowerCase();
+  if (
+    typeof broadcastInput !== "string" ||
+    typeof chainInput !== "string" ||
+    broadcastInput !== chainInput
+  ) {
+    fail(`${contractName} broadcast creation input does not match mainnet`);
+  }
+  if (!existsSync(artifactPath)) {
+    fail(`${contractName} local artifact is missing: ${artifactPath}`);
+  }
+  const artifact = JSON.parse(readFileSync(artifactPath, "utf8"));
+  const localInitCode = artifact.bytecode?.object?.toLowerCase();
+  if (
+    typeof localInitCode !== "string" ||
+    localInitCode === "0x" ||
+    !chainInput.startsWith(localInitCode)
+  ) {
+    fail(`${contractName} mainnet creation bytecode does not match the reviewed local artifact`);
+  }
+
   const address = checksum(receipt.contractAddress);
   const runtimeCode = run("cast", ["code", address, "--rpc-url", rpcUrl]).trim();
   if (runtimeCode === "0x") {
@@ -91,34 +155,45 @@ for (const [manifestName, contractName] of contracts) {
   if (!/^0x[0-9a-fA-F]{64}$/.test(runtimeCodeHash)) {
     fail(`${contractName} runtime code hash is malformed`);
   }
+  await requireVerifiedSource(address, contractName);
 
   manifestContracts[manifestName] = {
     address,
     runtimeCodeHash,
     deploymentTxHash: creation.hash,
     blockNumber: Number(BigInt(receipt.blockNumber)),
+    sourceVerified: true,
     sourceVerificationUrl: `https://etherscan.io/address/${address}#code`,
   };
 }
 
-const fundingCreation = broadcast.transactions.find(
-  (transaction) =>
-    transaction.transactionType === "CREATE" &&
-    transaction.contractName === "ProductiveFundingAccount",
-);
-if (
-  !Array.isArray(fundingCreation.arguments) ||
-  fundingCreation.arguments.length !== 1 ||
-  checksum(fundingCreation.arguments[0]).toLowerCase() !== factor.toLowerCase()
-) {
-  fail("ProductiveFundingAccount constructor is not bound to the reviewed factor");
-}
+assertArguments("ProductiveFundingAccount", [factor]);
+assertArguments("ERC4626ReserveAdapter", [
+  manifestContracts.fundingAccount.address,
+  "0x0bfc9d54Fc184518A81162F8fB99c2eACa081202",
+  "0",
+  "0",
+]);
+assertArguments("AsyncClaimSettlement", [
+  factor,
+  manifestContracts.fundingAccount.address,
+]);
+assertArguments("LidoWithdrawalClaimAdapter", [
+  manifestContracts.kernel.address,
+  "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+  "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1",
+]);
+assertArguments("LidoUnstETHExitAdapter", [
+  manifestContracts.kernel.address,
+  "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+  "0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1",
+]);
 
 const manifest = {
   schemaVersion: 2,
   network: "ethereum-mainnet",
   chainId: 1,
-  gitCommit: run("git", ["rev-parse", "HEAD"]).trim(),
+  gitCommit,
   releaseState: "paused-unfunded",
   factor,
   contracts: manifestContracts,
@@ -161,6 +236,65 @@ function checksum(address) {
     return run("cast", ["to-check-sum-address", address]).trim();
   } catch {
     fail(`encountered an invalid address: ${address}`);
+  }
+}
+
+function assertArguments(contractName, expected) {
+  const creation = creationsByName[contractName];
+  if (
+    !creation ||
+    !Array.isArray(creation.arguments) ||
+    creation.arguments.length !== expected.length
+  ) {
+    fail(`${contractName} constructor arguments are missing or malformed`);
+  }
+  for (let index = 0; index < expected.length; index += 1) {
+    const actualValue = String(creation.arguments[index]);
+    const expectedValue = String(expected[index]);
+    const actual = /^0x[0-9a-fA-F]{40}$/.test(actualValue)
+      ? checksum(actualValue).toLowerCase()
+      : actualValue;
+    const wanted = /^0x[0-9a-fA-F]{40}$/.test(expectedValue)
+      ? checksum(expectedValue).toLowerCase()
+      : expectedValue;
+    if (actual !== wanted) {
+      fail(`${contractName} constructor argument ${index} does not match the reviewed topology`);
+    }
+  }
+}
+
+async function requireVerifiedSource(address, contractName) {
+  const url = new URL("https://api.etherscan.io/v2/api");
+  url.searchParams.set("chainid", "1");
+  url.searchParams.set("module", "contract");
+  url.searchParams.set("action", "getsourcecode");
+  url.searchParams.set("address", address);
+  url.searchParams.set("apikey", etherscanApiKey);
+
+  let response;
+  try {
+    response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  } catch {
+    fail(`Etherscan source verification lookup failed for ${contractName}`);
+  }
+  if (!response.ok) {
+    fail(`Etherscan source verification lookup returned HTTP ${response.status} for ${contractName}`);
+  }
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    fail(`Etherscan returned unreadable source metadata for ${contractName}`);
+  }
+  const source = payload?.result?.[0];
+  if (
+    payload?.status !== "1" ||
+    typeof source?.SourceCode !== "string" ||
+    source.SourceCode.trim() === "" ||
+    typeof source?.ContractName !== "string" ||
+    !source.ContractName.endsWith(contractName)
+  ) {
+    fail(`${contractName} is not source-verified on Etherscan`);
   }
 }
 

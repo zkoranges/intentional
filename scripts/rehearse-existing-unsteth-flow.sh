@@ -11,7 +11,12 @@ UPSTREAM_RPC_URL="${ETH_RPC_URL:?ETH_RPC_URL with archive access is required}"
 LOCAL_RPC_URL="http://127.0.0.1:8551"
 SIGNER_URL="http://127.0.0.1:8791"
 FORK_BLOCK="25612678"
-REQUEST_ID="130880"
+# A real canonical pending request at the pinned block whose notional is
+# exactly the pre-alpha cap: 0.0015 stETH.
+REQUEST_ID="130871"
+FUNDING_WEI="2000000000000000"
+MIN_QUOTE_WEI="500000000000000"
+MAX_QUOTE_WEI="1500000000000000"
 QUEUE="0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/intentional-unsteth-e2e.XXXXXX")"
 ANVIL_LOG="${TEMP_DIR}/anvil.log"
@@ -19,6 +24,10 @@ DEPLOYMENT_LOG="${TEMP_DIR}/deployment.log"
 DEPLOYMENT_JSON="${TEMP_DIR}/deployment.json"
 MANIFEST="${TEMP_DIR}/active-manifest.json"
 QUOTE_FILE="${TEMP_DIR}/quote.json"
+QUOTE_A="${TEMP_DIR}/quote-a.json"
+QUOTE_B="${TEMP_DIR}/quote-b.json"
+QUOTE_STATUS_A="${TEMP_DIR}/quote-a.status"
+QUOTE_STATUS_B="${TEMP_DIR}/quote-b.status"
 SIGNER_LOG="${TEMP_DIR}/signer.log"
 ANVIL_PID=""
 SIGNER_PID=""
@@ -75,6 +84,7 @@ seller_address="$(cast wallet address --private-key "${seller_key}")"
 
 echo "==> deploy fresh settlement, both Lido adapters, and productive Aave reserve"
 FACTOR_PRIVATE_KEY="${factor_key}" SELLER_PRIVATE_KEY="${seller_key}" \
+REHEARSAL_FUNDING_WEI="${FUNDING_WEI}" \
 forge script script/DeployV2MainnetFork.s.sol:DeployV2MainnetFork \
   --rpc-url "${LOCAL_RPC_URL}" --broadcast --slow -vv >"${DEPLOYMENT_LOG}" 2>&1 || {
     sed -n '1,260p' "${DEPLOYMENT_LOG}" >&2
@@ -129,7 +139,7 @@ HOST=127.0.0.1 PORT=8791 ETH_RPC_URL="${LOCAL_RPC_URL}" \
 FACTOR_PRIVATE_KEY="${factor_key}" KERNEL_ADDRESS="${kernel}" \
 LIDO_ADAPTER_ADDRESS="${lido_adapter}" LIDO_UNSTETH_ADAPTER_ADDRESS="${unsteth_adapter}" \
 DEPLOYMENT_MANIFEST="${MANIFEST}" SIGNER_SECRET="${signer_secret}" \
-MAX_QUOTE_WEI="6000000000000000" MIN_QUOTE_WEI="1000000000000000" \
+MAX_QUOTE_WEI="${MAX_QUOTE_WEI}" MIN_QUOTE_WEI="${MIN_QUOTE_WEI}" \
 SPREAD_BPS=25 QUOTE_TTL_SECONDS=600 \
 AUDIT_LOG="${TEMP_DIR}/audit.jsonl" RESERVATIONS_DB="${TEMP_DIR}/reservations.sqlite" \
 node services/quote-signer/server.mjs >"${SIGNER_LOG}" 2>&1 &
@@ -149,11 +159,32 @@ if [[ "${ready}" != "true" ]]; then
   exit 1
 fi
 
-echo "==> request a real seller-bound quote for the existing claim"
-curl --silent --fail -X POST "${SIGNER_URL}/quote" \
-  -H 'content-type: application/json' -H "x-signer-secret: ${signer_secret}" \
-  -d "{\"mode\":\"existing-unsteth\",\"seller\":\"${seller_address}\",\"requestId\":\"${REQUEST_ID}\"}" \
-  >"${QUOTE_FILE}"
+echo "==> race two real quote requests; exactly one may reserve and sign"
+quote_request() {
+  local output_file="$1"
+  local status_file="$2"
+  curl --silent --output "${output_file}" --write-out '%{http_code}' \
+    -X POST "${SIGNER_URL}/quote" \
+    -H 'content-type: application/json' -H "x-signer-secret: ${signer_secret}" \
+    -d "{\"mode\":\"existing-unsteth\",\"seller\":\"${seller_address}\",\"requestId\":\"${REQUEST_ID}\"}" \
+    >"${status_file}"
+}
+quote_request "${QUOTE_A}" "${QUOTE_STATUS_A}" &
+quote_pid_a="$!"
+quote_request "${QUOTE_B}" "${QUOTE_STATUS_B}" &
+quote_pid_b="$!"
+wait "${quote_pid_a}"
+wait "${quote_pid_b}"
+status_a="$(cat "${QUOTE_STATUS_A}")"
+status_b="$(cat "${QUOTE_STATUS_B}")"
+if [[ "${status_a}:${status_b}" == "200:409" ]]; then
+  cp "${QUOTE_A}" "${QUOTE_FILE}"
+elif [[ "${status_a}:${status_b}" == "409:200" ]]; then
+  cp "${QUOTE_B}" "${QUOTE_FILE}"
+else
+  echo "concurrent single-flight expected one 200 and one 409, got ${status_a}:${status_b}" >&2
+  exit 1
+fi
 node --input-type=module - "${QUOTE_FILE}" "${unsteth_adapter}" "${REQUEST_ID}" <<'NODE'
 import { readFileSync } from "node:fs";
 const quote = JSON.parse(readFileSync(process.argv[2], "utf8"));
@@ -165,11 +196,6 @@ if (
   !quote.factorSignature
 ) throw new Error("quote envelope did not bind the existing claim");
 NODE
-
-status="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${SIGNER_URL}/quote" \
-  -H 'content-type: application/json' -H "x-signer-secret: ${signer_secret}" \
-  -d "{\"mode\":\"existing-unsteth\",\"seller\":\"${seller_address}\",\"requestId\":\"${REQUEST_ID}\"}")"
-[[ "${status}" == "409" ]] || { echo "single-flight expected 409, got ${status}" >&2; exit 1; }
 
 echo "==> approve and settle through the same envelope shape used by the frontend"
 ETH_RPC_URL="${LOCAL_RPC_URL}" SELLER_PRIVATE_KEY="${seller_key}" QUOTE_FILE="${QUOTE_FILE}" \
@@ -184,4 +210,4 @@ factor_address_lower="$(printf '%s' "${factor_address}" | tr '[:upper:]' '[:lowe
 capacity="$(cast call "${funding}" "availableFor(uint256)(uint256)" 1 --rpc-url "${LOCAL_RPC_URL}" | awk '{print $1}')"
 [[ "${capacity}" == "1" ]] || { echo "productive reserve unavailable after fill" >&2; exit 1; }
 
-echo "EXISTING UNSTETH REHEARSAL PASS | canonical claim, canonical Aave reserve, real HTTP quote, exact approval, atomic fill"
+echo "EXISTING UNSTETH REHEARSAL PASS | 0.0015 stETH production-cap claim, 0.002 WETH canonical Aave reserve, real HTTP quote, exact approval, atomic fill"

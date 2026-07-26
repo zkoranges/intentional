@@ -101,7 +101,13 @@ required_balance="$(
     "${gas_price}" \
     "${DEPLOYMENT_GAS_HEADROOM_BPS}"
 )"
-if (( factor_balance < required_balance )); then
+balance_sufficient="$(
+  node -e \
+    'process.stdout.write(BigInt(process.argv[1]) >= BigInt(process.argv[2]) ? "1" : "0")' \
+    "${factor_balance}" \
+    "${required_balance}"
+)"
+if [[ "${balance_sufficient}" != "1" ]]; then
   echo "PREFLIGHT FAIL | factor balance is below the configured deployment gas headroom" >&2
   echo "  balance:  $(cast from-wei "${factor_balance}") ETH" >&2
   echo "  required: $(cast from-wei "${required_balance}") ETH" >&2

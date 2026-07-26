@@ -45,6 +45,8 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Get firm offer",
     "Getting firm offer…",
     "Signed firm offer",
+    "Pre-alpha firm offers are capped to claims from 0.0005 to 0.0015 stETH.",
+    "Claim outside 0.0005–0.0015 stETH pilot",
     "Approve unstETH",
     "Sell for",
     "not pinned in this app build",
@@ -245,6 +247,8 @@ test("owned unstETH firm offers are independently verified before exact approval
   );
   assert.match(ethereum, /functionName: "getApproved"/);
   assert.match(ethereum, /!approvalCleared/);
+  assert.match(ethereum, /MAX_LIVE_LIDO_DISCOUNT_BPS/);
+  assert.match(ethereum, /signed payment exceeds the pre-alpha discount limit/i);
   assert.match(page, /error instanceof MinedTransactionVerificationError/);
   assert.match(page, /Instant exit confirmed with a verification warning/);
   assert.match(ethereum, /event WithdrawalClaimed/);
@@ -271,6 +275,8 @@ test("the quote proxy route is keyless, validating, and fails closed", async () 
   assert.match(route, /force-dynamic/);
   assert.match(route, /no-store, max-age=0/);
   assert.match(route, /MIN_LIVE_LIDO_QUOTE/);
+  assert.match(route, /MAX_LIVE_LIDO_QUOTE/);
+  assert.match(route, /Pre-alpha firm quotes support/);
   assert.match(route, /mode: "existing-unsteth"/);
   assert.match(route, /requestId: body\.requestId/);
   assert.ok(route.includes("!/^[1-9]\\d*$/.test(body.requestId)"));

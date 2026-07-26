@@ -34,15 +34,17 @@ contracts and the executor script are unchanged.
    measured reserve capacity, so a bug elsewhere in the service cannot issue
    an oversized quote. This bounds the **service**, not the key — see "Key
    handling" below.
-3. **Single-flight.** One outstanding unexpired quote at a time. Concurrent
-   requests cannot oversubscribe the reserve and hand a user a valid-looking
-   quote that reverts at fill time (`409 SINGLE_FLIGHT`).
+3. **Single-flight.** One serialized critical section covers the complete
+   sweep → validate → sign → durable-reserve sequence. Concurrent requests
+   cannot oversubscribe the reserve and hand a user a valid-looking quote that
+   reverts at fill time (`409 SINGLE_FLIGHT`).
 4. **Short expiry.** Default 120s, far inside the kernel's 15-minute bound.
 5. **Fails closed** on: paused settlement, unsealed/misconfigured kernel or
    funding account, insufficient measured capacity, paused Lido queue, Lido
    bunker mode, seller balance below the request, signer-key/kernel mismatch.
-6. **Audit trail.** Every signature and every rejection is appended to
-   `AUDIT_LOG` as JSONL and echoed to the journal.
+6. **Audit trail.** Every signature and authenticated quote rejection is
+   appended to `AUDIT_LOG` as JSONL. Unauthenticated scanner traffic is
+   summarized at most once per minute to bounded journald.
 7. **Internal errors do not leak.** 5xx responses return a generic message;
    the detail goes to the audit log only.
 

@@ -1,10 +1,13 @@
-import { isAddress, parseEther } from "viem";
+import { isAddress } from "viem";
 
-import { MAX_LIDO_REQUEST } from "../../../../lib/ethereum";
+import {
+  MAX_LIVE_LIDO_QUOTE,
+  MIN_LIVE_LIDO_QUOTE,
+} from "../../../../lib/ethereum";
 
 export const dynamic = "force-dynamic";
 
-const MIN_LIVE_LIDO_QUOTE = parseEther("0.001");
+const LIVE_QUOTE_RANGE = "0.0005 to 0.0015 stETH";
 
 function json(body: unknown, status: number) {
   return Response.json(body, {
@@ -53,8 +56,8 @@ export async function POST(request: Request) {
         return error("Enter a valid stETH amount", 400);
       }
       const amount = BigInt(body.requestedStEth);
-      if (amount < MIN_LIVE_LIDO_QUOTE || amount > MAX_LIDO_REQUEST) {
-        return error("Firm quotes support 0.001 to 1,000 stETH", 400);
+      if (amount < MIN_LIVE_LIDO_QUOTE || amount > MAX_LIVE_LIDO_QUOTE) {
+        return error(`Pre-alpha firm quotes support ${LIVE_QUOTE_RANGE}`, 400);
       }
       upstreamBody = {
         mode: "originate",
@@ -115,12 +118,20 @@ export async function POST(request: Request) {
   if (!upstream.ok) {
     // Surface the desk's own reason (capacity, paused Lido, single-flight)
     // without leaking transport details.
-    const reason =
+    const upstreamCode =
       typeof payload === "object" &&
       payload !== null &&
-      typeof (payload as { error?: unknown }).error === "string"
-        ? (payload as { error: string }).error
-        : "Firm quotes are unavailable right now";
+      typeof (payload as { code?: unknown }).code === "string"
+        ? (payload as { code: string }).code
+        : "";
+    const reason =
+      upstreamCode === "AMOUNT_OUT_OF_BOUNDS"
+        ? `Pre-alpha firm quotes support ${LIVE_QUOTE_RANGE}`
+        : typeof payload === "object" &&
+            payload !== null &&
+            typeof (payload as { error?: unknown }).error === "string"
+          ? (payload as { error: string }).error
+          : "Firm quotes are unavailable right now";
     return error(reason, upstream.status === 401 ? 503 : upstream.status);
   }
 

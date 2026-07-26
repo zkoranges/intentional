@@ -72,11 +72,14 @@ and do not edit another service's site.
 1. Signer binds `127.0.0.1`; Caddy is the only ingress.
 2. Shared secret, constant-time compared; the browser never sees it.
 3. **Hard `MAX_QUOTE_WEI` ceiling** independent of measured capacity.
-4. **Single-flight** — one outstanding unexpired quote at a time.
+4. **Single-flight** — one serialized sweep → sign → reserve sequence, and
+   therefore one outstanding unexpired quote at a time.
 5. 120-second expiry, far inside the kernel's 15-minute bound.
 6. Fails closed on paused settlement, paused/bunker Lido, thin capacity,
    seller balance, signer/kernel mismatch.
-7. Every signature and rejection is appended to a JSONL audit log.
+7. Every signature and authenticated quote rejection is appended to a JSONL
+   audit log. Unauthenticated scanner traffic is summarized at most once per
+   minute to bounded journald rather than persisted request-by-request.
 
 ## Key handling — a permanent operating constraint
 

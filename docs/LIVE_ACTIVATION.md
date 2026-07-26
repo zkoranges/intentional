@@ -112,6 +112,12 @@ simulation output, then require an explicit human authorization before adding:
 If verification is delayed, resume verification for the same broadcast. Never
 redeploy merely to obtain explorer verification.
 
+The deploy script emits thirteen transactions and is intentionally not
+resumable: several configuration calls are single-assignment. If broadcasting
+stops partway through, do not rerun the script against the half-configured
+addresses. Record the landed receipts, leave that stack paused and unfunded,
+and restart from nonce `0` with a fresh code-free factor address after review.
+
 ## 4. Publish and verify the paused deployment
 
 Copy the JSON emitted between
@@ -124,6 +130,7 @@ independently checks every receipt and runtime code hash against mainnet:
 ```sh
 FACTOR_ADDRESS="0x..." \
 ETH_RPC_URL="$ETH_RPC_URL" \
+ETHERSCAN_API_KEY="$ETHERSCAN_API_KEY" \
 make create-pre-alpha-manifest
 ```
 
@@ -133,8 +140,16 @@ Record:
 - factor, funding account, reserve adapter, kernel, origination adapter, and
   existing-unstETH adapter addresses;
 - all five runtime code hashes;
+- proof that each mainnet creation input starts with the matching bytecode from
+  the reviewed local artifact and that every constructor argument matches the
+  reviewed five-contract topology;
 - deployment receipts, blocks, and source-verification links; and
 - canonical WETH, StataWETH, stETH, and queue bindings.
+
+Manifest generation fails unless all five contracts are already source
+verified on Etherscan. It also fetches each real mainnet transaction and
+receipt independently; the local broadcast file is never accepted as sole
+evidence.
 
 Commit and review the public manifest before funding. Then run:
 
@@ -161,9 +176,22 @@ shares, and zero capacity.
 
 ## 5. Fund while settlement remains paused
 
-The factor must hold `0.002 WETH` in addition to ETH for gas. Use the manifest
-values below, simulate first, and add `--broadcast --slow` only after separate
-funding authorization:
+The factor must hold `0.002 WETH` in addition to ETH for gas. After deployment
+has completed and its nonce-derived addresses are final, wrap exactly the pilot
+funding amount from the factor:
+
+```sh
+cast send 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 \
+  "deposit()" \
+  --value 2000000000000000 \
+  --rpc-url "$ETH_RPC_URL" \
+  --private-key "$FACTOR_PRIVATE_KEY"
+```
+
+Do not perform this wrap before deployment: it would consume nonce `0` and
+change every predicted contract address. Verify the factor now holds exactly
+`0.002 WETH`. Then use the manifest values below, simulate first, and add
+`--broadcast --slow` only after separate funding authorization:
 
 ```sh
 RESERVOIR_MAINNET_ACK=FUND_PAUSED_RESERVOIR_V2 \
@@ -268,6 +296,12 @@ QUOTE_TTL_SECONDS=120 \
 The deployment script verifies the active mainnet identity before touching the
 VPS, stages atomically with rollback, runs under the legacy isolated system
 user, and requires a ready health response containing both adapters.
+
+The deploy gate requires live capacity at least equal to `MAX_QUOTE_WEI`.
+After a successful fill reduces capacity, either replenish the reserve before
+redeploying the signer or deliberately lower `MAX_QUOTE_WEI` to the remaining
+reviewed capacity. A post-fill signer redeploy with the original cap is
+expected to fail closed.
 
 Public checks:
 

@@ -26,7 +26,7 @@ interface IMainnetStETH is IERC20 {
 ///      disposable production rehearsal and never writes a secret to output.
 contract DeployV2MainnetFork is Script {
     uint256 private constant PINNED_BLOCK = 25_612_678;
-    uint256 private constant FUNDING_WETH = 5 ether;
+    uint256 private constant DEFAULT_FUNDING_WETH = 5 ether;
     uint256 private constant SELLER_STAKE_ETH = 1 ether;
 
     address private constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
@@ -46,6 +46,8 @@ contract DeployV2MainnetFork is Script {
 
         uint256 factorKey = vm.envUint("FACTOR_PRIVATE_KEY");
         uint256 sellerKey = vm.envUint("SELLER_PRIVATE_KEY");
+        uint256 fundingWeth = vm.envOr("REHEARSAL_FUNDING_WEI", DEFAULT_FUNDING_WETH);
+        require(fundingWeth != 0, "rehearsal funding required");
         address factor = vm.addr(factorKey);
         address seller = vm.addr(sellerKey);
         IMainnetWETH weth = IMainnetWETH(WETH);
@@ -62,8 +64,8 @@ contract DeployV2MainnetFork is Script {
         LidoUnstETHExitAdapter lidoUnstETHExitAdapter =
             new LidoUnstETHExitAdapter(address(settlement), IERC20(STETH), ILidoWithdrawalQueue(QUEUE));
 
-        weth.deposit{ value: FUNDING_WETH }();
-        require(weth.transfer(address(fundingAccount), FUNDING_WETH), "WETH funding transfer failed");
+        weth.deposit{ value: fundingWeth }();
+        require(weth.transfer(address(fundingAccount), fundingWeth), "WETH funding transfer failed");
         fundingAccount.prepareInventory();
         fundingAccount.configureSettlement(address(settlement));
         fundingAccount.seal();
@@ -78,7 +80,7 @@ contract DeployV2MainnetFork is Script {
 
         require(weth.balanceOf(address(fundingAccount)) == 0, "funding account retained idle WETH");
         require(IERC4626(STATA_WETH).balanceOf(address(fundingAccount)) != 0, "funding account received no shares");
-        require(fundingAccount.availableFor(FUNDING_WETH - 1) == FUNDING_WETH - 1, "reserve unavailable");
+        require(fundingAccount.availableFor(fundingWeth - 1) == fundingWeth - 1, "reserve unavailable");
         require(stETH.balanceOf(seller) > 0.9 ether, "seller received insufficient stETH");
         require(settlement.factorSigner() == factor, "factor binding mismatch");
         require(settlement.isAdapterAllowed(address(lidoAdapter)), "adapter not allowed");
@@ -122,7 +124,7 @@ contract DeployV2MainnetFork is Script {
                 '","aqua":"',
                 vm.toString(AQUA),
                 '","fundingWei":"',
-                vm.toString(FUNDING_WETH),
+                vm.toString(fundingWeth),
                 '","sellerStETHWei":"',
                 vm.toString(stETH.balanceOf(seller)),
                 '"}'

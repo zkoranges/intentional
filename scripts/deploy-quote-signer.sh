@@ -29,7 +29,7 @@ SPREAD_BPS="${SPREAD_BPS:-25}"
 MAX_SPREAD_BPS="${MAX_SPREAD_BPS:-100}"
 QUOTE_TTL_SECONDS="${QUOTE_TTL_SECONDS:-120}"
 MAX_STETH_SHORTFALL_WEI="${MAX_STETH_SHORTFALL_WEI:-2}"
-NODE_VERSION="${NODE_VERSION:-22.13.0}"
+NODE_VERSION="${NODE_VERSION:-22.18.0}"
 MANIFEST_PATH="${DEPLOYMENT_MANIFEST_PATH:-deployments/mainnet-pre-alpha-001.json}"
 SVC_USER=impatience
 SVC_HOME="/home/${SVC_USER}"
@@ -161,7 +161,7 @@ PROVISION
 echo "==> ensuring user-local Node ${NODE_VERSION} (no system packages)"
 "${SSH[@]}" bash -s <<NODEINSTALL
 set -euo pipefail
-if [ ! -x ${SVC_HOME}/node/bin/node ] || ! ${SVC_HOME}/node/bin/node -v | grep -q "${NODE_VERSION}"; then
+if [ ! -x ${SVC_HOME}/node/bin/node ] || [ "\$(${SVC_HOME}/node/bin/node -v)" != "v${NODE_VERSION}" ]; then
   tmp=\$(mktemp -d)
   curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o "\$tmp/node.tar.xz"
   rm -rf ${SVC_HOME}/node
@@ -170,7 +170,14 @@ if [ ! -x ${SVC_HOME}/node/bin/node ] || ! ${SVC_HOME}/node/bin/node -v | grep -
   rm -rf "\$tmp"
   chown -R ${SVC_USER}:${SVC_USER} ${SVC_HOME}/node
 fi
-${SVC_HOME}/node/bin/node -v
+observed_node="\$(${SVC_HOME}/node/bin/node -v)"
+[ "\$observed_node" = "v${NODE_VERSION}" ] || {
+  echo "ABORT: expected Node v${NODE_VERSION}, observed \$observed_node" >&2
+  exit 1
+}
+sudo -u ${SVC_USER} -H ${SVC_HOME}/node/bin/node --input-type=module -e \
+  'import("node:sqlite").then(({ DatabaseSync }) => { const db = new DatabaseSync(":memory:"); db.close(); })'
+echo "\$observed_node with node:sqlite ready"
 NODEINSTALL
 
 echo "==> staging the service source without touching the running release"
