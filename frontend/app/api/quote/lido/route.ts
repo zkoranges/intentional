@@ -34,8 +34,18 @@ function error(message: string, status: number) {
 export async function POST(request: Request) {
   let seller: string;
   let upstreamBody:
-    | { mode: "originate"; seller: string; requestedStEth: string }
-    | { mode: "existing-unsteth"; seller: string; requestId: string };
+    | {
+        mode: "originate";
+        seller: string;
+        requestedStEth: string;
+        replaceNonce?: string;
+      }
+    | {
+        mode: "existing-unsteth";
+        seller: string;
+        requestId: string;
+        replaceNonce?: string;
+      };
 
   try {
     const body = (await request.json()) as {
@@ -43,11 +53,19 @@ export async function POST(request: Request) {
       seller?: unknown;
       requestedStEth?: unknown;
       requestId?: unknown;
+      replaceNonce?: unknown;
     };
     if (typeof body.seller !== "string" || !isAddress(body.seller)) {
       return error("Connect a valid Ethereum wallet", 400);
     }
     seller = body.seller;
+    if (
+      body.replaceNonce !== undefined &&
+      (typeof body.replaceNonce !== "string" ||
+        !/^\d+$/.test(body.replaceNonce))
+    ) {
+      return error("Choose a valid active quote to replace", 400);
+    }
     if (body.mode === "originate") {
       if (
         typeof body.requestedStEth !== "string" ||
@@ -63,6 +81,9 @@ export async function POST(request: Request) {
         mode: "originate",
         seller,
         requestedStEth: body.requestedStEth,
+        ...(body.replaceNonce === undefined
+          ? {}
+          : { replaceNonce: body.replaceNonce }),
       };
     } else if (body.mode === "existing-unsteth") {
       if (
@@ -75,6 +96,9 @@ export async function POST(request: Request) {
         mode: "existing-unsteth",
         seller,
         requestId: body.requestId,
+        ...(body.replaceNonce === undefined
+          ? {}
+          : { replaceNonce: body.replaceNonce }),
       };
     } else {
       return error("Choose a supported Lido exit mode", 400);
@@ -132,7 +156,43 @@ export async function POST(request: Request) {
             typeof (payload as { error?: unknown }).error === "string"
           ? (payload as { error: string }).error
           : "Firm quotes are unavailable right now";
-    return error(reason, upstream.status === 401 ? 503 : upstream.status);
+    const retryAfterSeconds =
+      typeof payload === "object" &&
+      payload !== null &&
+      typeof (payload as { retryAfterSeconds?: unknown })
+        .retryAfterSeconds === "number" &&
+      Number.isSafeInteger(
+        (payload as { retryAfterSeconds: number }).retryAfterSeconds,
+      ) &&
+      (payload as { retryAfterSeconds: number }).retryAfterSeconds >= 0
+        ? (payload as { retryAfterSeconds: number }).retryAfterSeconds
+        : undefined;
+    const activeDeadlineUnix =
+      typeof payload === "object" &&
+      payload !== null &&
+      typeof (payload as { activeDeadlineUnix?: unknown })
+        .activeDeadlineUnix === "string" &&
+      /^\d+$/.test(
+        (payload as { activeDeadlineUnix: string }).activeDeadlineUnix,
+      )
+        ? (payload as { activeDeadlineUnix: string }).activeDeadlineUnix
+        : undefined;
+    const canReplace =
+      typeof payload === "object" &&
+      payload !== null &&
+      typeof (payload as { canReplace?: unknown }).canReplace === "boolean"
+        ? (payload as { canReplace: boolean }).canReplace
+        : undefined;
+    return json(
+      {
+        error: reason,
+        ...(upstreamCode ? { code: upstreamCode } : {}),
+        ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+        ...(activeDeadlineUnix === undefined ? {} : { activeDeadlineUnix }),
+        ...(canReplace === undefined ? {} : { canReplace }),
+      },
+      upstream.status === 401 ? 503 : upstream.status,
+    );
   }
 
   return json(payload, 200);

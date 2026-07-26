@@ -61,20 +61,59 @@ test("quote identity changes invalidate offers and seller binding is rechecked",
 });
 
 test("Requote is explicit, loading is visible, and blocked quotes show a countdown", async () => {
-  const [page, styles] = await Promise.all([
+  const [page, route, styles] = await Promise.all([
     readFile(new URL("app/page.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/api/quote/lido/route.ts", projectRoot), "utf8"),
     readFile(new URL("app/globals.css", projectRoot), "utf8"),
   ]);
 
   assert.match(page, /Refreshing firm offer…/);
   assert.match(page, />\s*Requote\s*</g);
-  assert.match(page, /requestStEthQuote\(true\)/);
-  assert.match(page, /requestExistingClaimQuote\(selectedClaim, true\)/);
-  assert.match(page, /replace,\s*\}\),/g);
+  assert.match(
+    page,
+    /requestStEthQuote\(stEthOffer\.envelope\.quote\.nonce\)/,
+  );
+  assert.match(
+    page,
+    /selectedClaimOffer\.envelope\.quote\.nonce/,
+  );
+  assert.match(
+    page,
+    /\.\.\.\(replaceNonce === undefined \? \{\} : \{ replaceNonce \}\)/g,
+  );
+  assert.doesNotMatch(page, /replace:\s*true|replace = true/);
+  assert.match(route, /replaceNonce\?: unknown/);
+  assert.match(route, /\{ replaceNonce: body\.replaceNonce \}/g);
   assert.match(page, /retryAtFromResponse/);
+  assert.match(page, /retryAfterSeconds/);
+  assert.match(page, /activeDeadlineUnix/);
+  assert.match(page, /canReplace/);
+  assert.match(route, /\{ retryAfterSeconds \}/);
+  assert.match(route, /\{ activeDeadlineUnix \}/);
+  assert.match(route, /\{ canReplace \}/);
   assert.match(page, /Try again in \$\{wait\}/);
   assert.match(page, /quoteRetryBlocked/);
   assert.match(styles, /\.requoteButton/);
+});
+
+test("only the current seller's unexpired verified nonce is replaceable", async () => {
+  const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+
+  assert.match(page, /lastReplaceableQuoteRef = useRef<ReplaceableQuote/);
+  assert.match(
+    page,
+    /lastReplaceableQuoteRef\.current\?\.seller\.toLowerCase\(\) ===\s*account\.toLowerCase\(\)/,
+  );
+  assert.match(
+    page,
+    /BigInt\(lastReplaceableQuoteRef\.current\.deadlineUnix\) >/,
+  );
+  assert.match(
+    page,
+    /fingerprint: string/,
+  );
+  assert.match(page, /rememberReplaceableQuote\(checked, request\.identity\)/g);
+  assert.match(page, /clearReplaceableQuote\(\)/g);
 });
 
 test("wallet rejection preserves the verified offer for retry", async () => {

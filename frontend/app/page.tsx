@@ -79,6 +79,16 @@ type QuoteRequest = {
 type QuoteIssue = {
   message: string;
   retryAt: number | null;
+  retryAfterSeconds: number | null;
+  activeDeadlineUnix: string | null;
+  canReplace: boolean | null;
+};
+
+type ReplaceableQuote = {
+  seller: Address;
+  nonce: string;
+  deadlineUnix: string;
+  fingerprint: string;
 };
 
 type SuccessAction = {
@@ -245,9 +255,12 @@ function retryAtFromResponse(
     typeof payload === "object" && payload !== null
       ? (payload as Record<string, unknown>)
       : null;
-  if (typeof record?.retryAt === "string") {
-    const parsed = Date.parse(record.retryAt);
-    if (Number.isFinite(parsed)) return parsed;
+  if (
+    typeof record?.activeDeadlineUnix === "string" &&
+    /^\d+$/.test(record.activeDeadlineUnix)
+  ) {
+    const deadline = Number(BigInt(record.activeDeadlineUnix)) * 1_000;
+    if (Number.isSafeInteger(deadline)) return deadline;
   }
   if (
     typeof record?.retryAfterSeconds === "number" &&
@@ -261,6 +274,38 @@ function retryAtFromResponse(
     return Date.now() + Number(retryAfter) * 1_000;
   }
   return fallback && fallback > Date.now() ? fallback : null;
+}
+
+function quoteIssueFromResponse(
+  response: Response,
+  payload: unknown,
+  message: string,
+  fallback: number | null,
+): QuoteIssue {
+  const record =
+    typeof payload === "object" && payload !== null
+      ? (payload as Record<string, unknown>)
+      : null;
+  const retryAfterSeconds =
+    typeof record?.retryAfterSeconds === "number" &&
+    Number.isSafeInteger(record.retryAfterSeconds) &&
+    record.retryAfterSeconds >= 0
+      ? record.retryAfterSeconds
+      : null;
+  const activeDeadlineUnix =
+    typeof record?.activeDeadlineUnix === "string" &&
+    /^\d+$/.test(record.activeDeadlineUnix)
+      ? record.activeDeadlineUnix
+      : null;
+  const canReplace =
+    typeof record?.canReplace === "boolean" ? record.canReplace : null;
+  return {
+    message,
+    retryAt: retryAtFromResponse(response, payload, fallback),
+    retryAfterSeconds,
+    activeDeadlineUnix,
+    canReplace,
+  };
 }
 
 function retryLabel(issue: QuoteIssue | null, now: number) {
@@ -559,7 +604,8 @@ export default function Home() {
   const quoteGenerationRef = useRef(0);
   const quoteRequestRef = useRef<QuoteRequest | null>(null);
   const lastQuoteDeadlineRef = useRef<number | null>(null);
-  const hasIssuedQuoteRef = useRef(false);
+  const lastReplaceableQuoteRef = useRef<ReplaceableQuote | null>(null);
+  const replaceableExpiryTimerRef = useRef<number | null>(null);
 
   const busy = action !== "idle";
   const marketLive = marketStatus.firmQuotesEnabled;
@@ -639,6 +685,48 @@ export default function Home() {
   const quoteIssueLabel = retryLabel(quoteIssue, quoteClock);
   const quoteRetryBlocked = Boolean(
     quoteIssue?.retryAt && quoteIssue.retryAt > quoteClock,
+  );
+  const replaceableQuote =
+    account &&
+    lastReplaceableQuoteRef.current?.seller.toLowerCase() ===
+      account.toLowerCase() &&
+    BigInt(lastReplaceableQuoteRef.current.deadlineUnix) >
+      BigInt(Math.floor(Date.now() / 1_000))
+      ? lastReplaceableQuoteRef.current
+      : null;
+
+  const clearReplaceableQuote = useCallback(() => {
+    lastReplaceableQuoteRef.current = null;
+    lastQuoteDeadlineRef.current = null;
+    if (replaceableExpiryTimerRef.current !== null) {
+      window.clearTimeout(replaceableExpiryTimerRef.current);
+      replaceableExpiryTimerRef.current = null;
+    }
+  }, []);
+
+  const rememberReplaceableQuote = useCallback(
+    (check: ReservoirQuoteCheck, fingerprint: string) => {
+      clearReplaceableQuote();
+      const replaceable: ReplaceableQuote = {
+        seller: check.envelope.quote.seller,
+        nonce: check.envelope.quote.nonce,
+        deadlineUnix: check.envelope.quote.deadline,
+        fingerprint,
+      };
+      lastReplaceableQuoteRef.current = replaceable;
+      lastQuoteDeadlineRef.current = Number(replaceable.deadlineUnix) * 1_000;
+      const remaining =
+        Number(replaceable.deadlineUnix) * 1_000 - Date.now() + 250;
+      replaceableExpiryTimerRef.current = window.setTimeout(() => {
+        if (lastReplaceableQuoteRef.current?.nonce === replaceable.nonce) {
+          lastReplaceableQuoteRef.current = null;
+          lastQuoteDeadlineRef.current = null;
+          replaceableExpiryTimerRef.current = null;
+          setQuoteClock(Date.now());
+        }
+      }, Math.max(0, remaining));
+    },
+    [clearReplaceableQuote],
   );
 
   const invalidateQuoteRequest = useCallback(
@@ -732,8 +820,7 @@ export default function Home() {
 
   const clearWalletState = useCallback((nextStatus: string | null = null) => {
     invalidateQuoteRequest();
-    hasIssuedQuoteRef.current = false;
-    lastQuoteDeadlineRef.current = null;
+    clearReplaceableQuote();
     walletRefreshIdRef.current += 1;
     setAccount(null);
     setSnapshot(null);
@@ -746,13 +833,12 @@ export default function Home() {
     setPending(null);
     setSuccess(null);
     setAction("idle");
-  }, [invalidateQuoteRequest]);
+  }, [clearReplaceableQuote, invalidateQuoteRequest]);
 
   const loadWalletAccount = useCallback(
     async (next: Address) => {
       invalidateQuoteRequest();
-      hasIssuedQuoteRef.current = false;
-      lastQuoteDeadlineRef.current = null;
+      clearReplaceableQuote();
       walletRefreshIdRef.current += 1;
       setAccount(next);
       setSnapshot(null);
@@ -766,7 +852,7 @@ export default function Home() {
       setSuccess(null);
       await refreshWallet(next);
     },
-    [invalidateQuoteRequest, refreshWallet],
+    [clearReplaceableQuote, invalidateQuoteRequest, refreshWallet],
   );
 
   useEffect(() => {
@@ -787,8 +873,7 @@ export default function Home() {
     };
     const onChain = () => {
       invalidateQuoteRequest();
-      hasIssuedQuoteRef.current = false;
-      lastQuoteDeadlineRef.current = null;
+      clearReplaceableQuote();
       walletRefreshIdRef.current += 1;
       setSnapshot(null);
       void injected
@@ -814,13 +899,22 @@ export default function Home() {
       injected.removeListener?.("accountsChanged", onAccounts);
       injected.removeListener?.("chainChanged", onChain);
     };
-  }, [clearWalletState, invalidateQuoteRequest, loadWalletAccount]);
+  }, [
+    clearReplaceableQuote,
+    clearWalletState,
+    invalidateQuoteRequest,
+    loadWalletAccount,
+  ]);
 
   useEffect(
     () => () => {
       quoteGenerationRef.current += 1;
       quoteRequestRef.current?.controller.abort();
       quoteRequestRef.current = null;
+      if (replaceableExpiryTimerRef.current !== null) {
+        window.clearTimeout(replaceableExpiryTimerRef.current);
+        replaceableExpiryTimerRef.current = null;
+      }
     },
     [],
   );
@@ -846,6 +940,9 @@ export default function Home() {
     const nonce = claimQuoteCheck.envelope.quote.nonce;
     const expiresAt = Number(claimQuoteCheck.envelope.quote.deadline) * 1_000;
     const expire = () => {
+      if (lastReplaceableQuoteRef.current?.nonce === nonce) {
+        clearReplaceableQuote();
+      }
       setClaimQuoteCheck((current) =>
         current?.envelope.quote.nonce === nonce ? null : current,
       );
@@ -858,7 +955,7 @@ export default function Home() {
     }
     const timer = window.setTimeout(expire, remaining + 250);
     return () => window.clearTimeout(timer);
-  }, [claimQuoteCheck]);
+  }, [claimQuoteCheck, clearReplaceableQuote]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1237,7 +1334,7 @@ export default function Home() {
     }
   }
 
-  async function requestStEthQuote(replace = hasIssuedQuoteRef.current) {
+  async function requestStEthQuote(replaceNonce?: string) {
     const injected = getInjectedProvider();
     if (
       !injected ||
@@ -1259,11 +1356,12 @@ export default function Home() {
 
     const requestedAccount = account;
     const requestedAmount = amount;
+    const replacing = replaceNonce !== undefined;
     const request = beginQuoteRequest(
       `originate:${requestedAccount.toLowerCase()}:${requestedAmount}`,
       {
-        label: replace ? "Refreshing firm offer…" : "Getting firm offer…",
-        detail: `${replace ? "Refreshing" : "Requesting"} a firm offer for ${formatMainnetAmount(requestedAmount)} stETH.`,
+        label: replacing ? "Refreshing firm offer…" : "Getting firm offer…",
+        detail: `${replacing ? "Refreshing" : "Requesting"} a firm offer for ${formatMainnetAmount(requestedAmount)} stETH.`,
         hash: null,
         scope: null,
       },
@@ -1276,7 +1374,7 @@ export default function Home() {
           mode: "originate",
           seller: requestedAccount,
           requestedStEth: requestedAmount.toString(),
-          replace,
+          ...(replaceNonce === undefined ? {} : { replaceNonce }),
         }),
         signal: request.controller.signal,
       });
@@ -1290,14 +1388,14 @@ export default function Home() {
             ? (payload as { error: string }).error
             : "Firm offers are unavailable right now";
         if (response.status === 409) {
-          setQuoteIssue({
-            message,
-            retryAt: retryAtFromResponse(
+          setQuoteIssue(
+            quoteIssueFromResponse(
               response,
               payload,
+              message,
               lastQuoteDeadlineRef.current,
             ),
-          });
+          );
           setQuoteClock(Date.now());
         }
         throw new Error(message);
@@ -1317,9 +1415,7 @@ export default function Home() {
       ) {
         throw new Error("The firm offer does not match this stETH exit");
       }
-      hasIssuedQuoteRef.current = true;
-      lastQuoteDeadlineRef.current =
-        Number(checked.envelope.quote.deadline) * 1_000;
+      rememberReplaceableQuote(checked, request.identity);
       setClaimQuoteCheck(checked);
       setQuoteIssue(null);
       setStatus(
@@ -1339,7 +1435,7 @@ export default function Home() {
 
   async function requestExistingClaimQuote(
     position: WithdrawalStatus,
-    replace = hasIssuedQuoteRef.current,
+    replaceNonce?: string,
   ) {
     const injected = getInjectedProvider();
     if (
@@ -1362,12 +1458,13 @@ export default function Home() {
     }
 
     const requestedAccount = account;
+    const replacing = replaceNonce !== undefined;
     setSelectedClaimId(position.requestId);
     const request = beginQuoteRequest(
       `existing:${requestedAccount.toLowerCase()}:${position.requestId}`,
       {
-        label: replace ? "Refreshing firm offer…" : "Getting firm offer…",
-        detail: `${replace ? "Refreshing" : "Requesting"} a firm offer for unstETH #${position.requestId}.`,
+        label: replacing ? "Refreshing firm offer…" : "Getting firm offer…",
+        detail: `${replacing ? "Refreshing" : "Requesting"} a firm offer for unstETH #${position.requestId}.`,
         hash: null,
         scope: claimScope(position.requestId),
       },
@@ -1380,7 +1477,7 @@ export default function Home() {
           mode: "existing-unsteth",
           seller: requestedAccount,
           requestId: position.requestId.toString(),
-          replace,
+          ...(replaceNonce === undefined ? {} : { replaceNonce }),
         }),
         signal: request.controller.signal,
       });
@@ -1394,14 +1491,14 @@ export default function Home() {
             ? (payload as { error: string }).error
             : "Firm offers are unavailable right now";
         if (response.status === 409) {
-          setQuoteIssue({
-            message,
-            retryAt: retryAtFromResponse(
+          setQuoteIssue(
+            quoteIssueFromResponse(
               response,
               payload,
+              message,
               lastQuoteDeadlineRef.current,
             ),
-          });
+          );
           setQuoteClock(Date.now());
         }
         throw new Error(message);
@@ -1422,9 +1519,7 @@ export default function Home() {
       ) {
         throw new Error("The firm offer does not match this unstETH position");
       }
-      hasIssuedQuoteRef.current = true;
-      lastQuoteDeadlineRef.current =
-        Number(checked.envelope.quote.deadline) * 1_000;
+      rememberReplaceableQuote(checked, request.identity);
       setClaimQuoteCheck(checked);
       setQuoteIssue(null);
       setStatus(
@@ -1473,6 +1568,7 @@ export default function Home() {
       if (!isExistingClaim) {
         setLastMintedRequest(result.requestId);
       }
+      clearReplaceableQuote();
       setPending(null);
       setStatus(
         isExistingClaim
@@ -1504,6 +1600,9 @@ export default function Home() {
       setClaimQuoteCheck(null);
       await refresh(account);
     } catch (error) {
+      if (error instanceof MinedTransactionVerificationError) {
+        clearReplaceableQuote();
+      }
       await handleMinedActionError(
         error,
         "Instant exit confirmed with a verification warning",
@@ -1904,10 +2003,18 @@ export default function Home() {
                 ) : !stEthOffer ? (
                   <button
                     className="actionButton"
-                    onClick={() => requestStEthQuote()}
+                    onClick={() =>
+                      replaceableQuote
+                        ? requestStEthQuote(replaceableQuote.nonce)
+                        : requestStEthQuote()
+                    }
                     disabled={busy || quoteRetryBlocked}
                   >
-                    {quoteRetryBlocked ? "Firm offer reserved" : "Get firm offer"}
+                    {quoteRetryBlocked
+                      ? "Firm offer reserved"
+                      : replaceableQuote
+                        ? "Requote"
+                        : "Get firm offer"}
                   </button>
                 ) : !stEthOffer.approvalSatisfied ? (
                   <button
@@ -1935,7 +2042,9 @@ export default function Home() {
                   <button
                     className="requoteButton"
                     type="button"
-                    onClick={() => requestStEthQuote(true)}
+                    onClick={() =>
+                      requestStEthQuote(stEthOffer.envelope.quote.nonce)
+                    }
                     disabled={busy}
                   >
                     Requote
@@ -2103,10 +2212,19 @@ export default function Home() {
                 ) : !selectedClaimOffer ? (
                   <button
                     className="actionButton"
-                    onClick={() => requestExistingClaimQuote(selectedClaim)}
+                    onClick={() =>
+                      requestExistingClaimQuote(
+                        selectedClaim,
+                        replaceableQuote?.nonce,
+                      )
+                    }
                     disabled={busy || quoteRetryBlocked}
                   >
-                    {quoteRetryBlocked ? "Firm offer reserved" : "Get firm offer"}
+                    {quoteRetryBlocked
+                      ? "Firm offer reserved"
+                      : replaceableQuote
+                        ? "Requote"
+                        : "Get firm offer"}
                   </button>
                 ) : !selectedClaimOffer.approvalSatisfied ? (
                   <button
@@ -2135,7 +2253,10 @@ export default function Home() {
                     className="requoteButton"
                     type="button"
                     onClick={() =>
-                      requestExistingClaimQuote(selectedClaim, true)
+                      requestExistingClaimQuote(
+                        selectedClaim,
+                        selectedClaimOffer.envelope.quote.nonce,
+                      )
                     }
                     disabled={busy}
                   >
@@ -2511,7 +2632,10 @@ export default function Home() {
                           }
                           <button
                             onClick={() =>
-                              requestExistingClaimQuote(request, true)
+                              requestExistingClaimQuote(
+                                request,
+                                activeOffer.envelope.quote.nonce,
+                              )
                             }
                             disabled={busy}
                           >
@@ -2521,7 +2645,12 @@ export default function Home() {
                         ) : (
                           <>
                             <button
-                              onClick={() => requestExistingClaimQuote(request)}
+                              onClick={() =>
+                                requestExistingClaimQuote(
+                                  request,
+                                  replaceableQuote?.nonce,
+                                )
+                              }
                               disabled={
                                 busy || !marketLive || quoteRetryBlocked
                               }
@@ -2529,6 +2658,8 @@ export default function Home() {
                             >
                               {quoteRetryBlocked
                                 ? "Firm offer reserved"
+                                : replaceableQuote
+                                  ? "Requote"
                                 : marketLive
                                 ? "Get firm offer"
                                 : marketStatus.state === "Retired"

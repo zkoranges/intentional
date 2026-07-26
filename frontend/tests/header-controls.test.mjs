@@ -35,7 +35,7 @@ test("wallet account and chain events refresh the active account in place", asyn
   assert.match(page, /walletRefreshIdRef/);
   assert.match(
     page,
-    /\[clearWalletState, invalidateQuoteRequest, loadWalletAccount\]/,
+    /\[\s*clearReplaceableQuote,\s*clearWalletState,\s*invalidateQuoteRequest,\s*loadWalletAccount,\s*\]/,
   );
   assert.doesNotMatch(
     page,
