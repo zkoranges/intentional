@@ -58,7 +58,8 @@
     "minimumCapacityWei": "5000000000000000",
     "minimumClaimWei": "500000000000000",
     "maximumClaimWei": "5000000000000000",
-    "spreadBps": 25
+    "spreadBps": 25,
+    "quoteTtlSeconds": 600
   },
   "funding": {
     "wrapTxHash": "0x1353b566531d09f78c42009098fa8af86003f2e6d667ccccb8650ff075772d2b",
@@ -66,5 +67,34 @@
     "fundingAccountEnableTxHash": "0x4e292f67010b9e301a1833435017ff891c0ed448164db18a27434e10e84f6e36",
     "reinvestTxHash": "0xfebbf921bfd30e21b1b1d5f9f515a88f86e209c46051ba6c08453cac904924fb"
   },
-  "activationTxHash": "0x01d87ef94934e6ddd34e6b000b1f044c15a29b8f036a35f8cd1adbaa02cb8d44"
+  "activationTxHash": "0x01d87ef94934e6ddd34e6b000b1f044c15a29b8f036a35f8cd1adbaa02cb8d44",
+  "factoringFill": {
+    "txHash": "0x36de5e1d760959462a5c78ea9215b17a67d03666ee4dcb1ecd34c59851ed4aa9",
+    "blockNumber": 25613522,
+    "seller": "0x894E65c06722162A98bd7ed2A2aBDe1Aa6F1fc99",
+    "factor": "0x6bC1bf768b65Ee5b27a63eF22eAc48ff10e8E07b",
+    "adapter": "0x645193BC4748109f9A7e582B00ac7D41208BF91F",
+    "unstETHRequestId": "130880",
+    "claimAmountOfStETHWei": "4999999999999999",
+    "claimAmountOfShares": "4031706521408338",
+    "paymentWethWei": "4987500000000000",
+    "grossSpreadBps": 25,
+    "quoteHash": "0x532f66bdee860c6fde68f861416a9aca0fddfa55cc9efa6ef7e952e8ac63140e",
+    "quoteNonce": "1211826514102691268302748138119577886",
+    "result": "seller received the exact signed WETH payment and the existing unstETH NFT moved to the factor atomically"
+  },
+  "replenishment": {
+    "amountWethWei": "5000000000000000",
+    "wrapTxHash": "0xf92bb41c4b22f064bbdd10800e7bb27956680a2c8c6fefcfeac35ea07ee763c2",
+    "wrapBlockNumber": 25613559,
+    "transferTxHash": "0x2a8fe681d218a8f1e725a4226a96dc87fbd0b32e615ba4440111590d6c86c53b",
+    "transferBlockNumber": 25613560,
+    "reinvestTxHash": "0x4980a76c11ae5ac88b8493a9df3d1f3faa852d33e5feccc7f50147bb584ea917",
+    "reinvestBlockNumber": 25613564,
+    "postReinvestReserveNavWei": "6012502562579901"
+  },
+  "frontend": {
+    "productionUrl": "https://www.intentional.so",
+    "vercelDeploymentId": "dpl_4RQgPn3WpoktYTUtHUzUWZAQH8ok"
+  }
 }

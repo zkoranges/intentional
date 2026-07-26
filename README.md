@@ -84,35 +84,31 @@ This is an unaudited hackathon beta. Mainnet funding is deliberately separate
 from deployment and occurs only after the exact chain-1 rehearsal, full test
 matrix, frontend checks, and AI-assisted release review.
 
-**Current deployment status (2026-07-25):** Mainnet settlement proof
-completed. Demo contracts safely retired after reserve recovery, and cannot
-be reactivated — the immutable signer key was exposed. Existing-unstETH
-acquisition and the real firm-offer browser flow are implemented and pass the
-canonical mainnet-fork release rehearsal. A fresh active deployment and fresh
-signer are still required before the public CTA can be enabled. The historical
-proof record is in
-[`docs/MAINNET_MICRO_DEMO.md`](docs/MAINNET_MICRO_DEMO.md) and the manifests
-in [`deployments/`](deployments/):
+**Current deployment status (2026-07-26): live pre-alpha.**
+[Intentional](https://www.intentional.so) serves real, short-lived firm quotes
+for stETH origination and existing unstETH claims. The active deployment uses
+a fresh factor key, five source-verified contracts, canonical Lido, and a
+productive Aave StataWETH reserve. Its independently checked addresses,
+receipts, and runtime hashes are in
+[`deployments/mainnet-pre-alpha-001.json`](deployments/mainnet-pre-alpha-001.json).
 
-- Aqua intent fill through canonical Aqua:
-  [`0xdfb6b280…f64d37`](https://etherscan.io/tx/0xdfb6b280dfe8255ee3d0c4c74243ab9d9d4637b412926f1a9731654340f64d37)
-  — exact-input wstETH → WETH, output exactly equal to the router's quote.
-- Factoring settlement:
-  [`0x6c7dfd20…71d611`](https://etherscan.io/tx/0x6c7dfd20a40584cf2cb40baa27e98472599dbca62da470bab6bfd2b42071d611)
-  — canonical unstETH #130880 minted to the factor, seller paid exactly
-  0.0049875 WETH atomically.
-- Kernel `0x50b619295e00990feB28E79fA939B5f42aF6AF53`, Lido adapter
-  `0xfC2c5bcAeFF85E72f13ecf78101C4D4262eBd027` (both Etherscan-verified,
-  compiled into the frontend build), Aqua router
-  `0x15a82271F280D4D1485CCE1980AC3C3799b483D9`, maker
-  `0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6`.
+The browser-driven existing-claim sale is proven on mainnet:
 
-During the proof, firm quotes were served by an operator-run quote service
-([`docs/QUOTE_DESK_OPS.md`](docs/QUOTE_DESK_OPS.md)); that desk is now
-stopped, and firm quotes stay unavailable until a fresh deployment with a
-fresh key. The demo used controlled team wallets and operator pricing — it
-proves machinery, atomicity, and real protocol integration, not market
-demand.
+- [`0x36de5e1d…4aa9`](https://etherscan.io/tx/0x36de5e1d760959462a5c78ea9215b17a67d03666ee4dcb1ecd34c59851ed4aa9),
+  block 25,613,522 — `unstETH #130880` moved from the seller to the
+  factor and exactly `0.0049875 WETH` reached the seller atomically.
+- Kernel `0x906e0f4583834d44d55f26f0D6Ac842FafdCCcc5`, origination adapter
+  `0xe32f43D326a4c104365D8C9ACC657c90C8E03f81`, and existing-unstETH
+  adapter `0x645193BC4748109f9A7e582B00ac7D41208BF91F`.
+- After that fill, the factor replenished exactly `0.005 WETH`; the live
+  reserve again supports the full `0.005 stETH` pilot ceiling while the
+  inventory remains in canonical Aave StataWETH between fills.
+
+Quotes use disclosed operator pricing (25 bps), not an oracle or discovered
+market price. The live proof demonstrates custody, atomicity, real protocol
+integration, and a working public flow; it does not establish market demand.
+The older Aqua and origination receipts remain historical companion evidence
+in [`docs/MAINNET_MICRO_DEMO.md`](docs/MAINNET_MICRO_DEMO.md).
 
 **Bytecode attestation for the two explorer-unverified contracts** (Etherscan
 source verification remains pending despite byte-exact local creation and
@@ -127,21 +123,13 @@ cast keccak "$(cast code 0x9B0B0b6a9fb88Dc556795fe02BE7A73c25b781F6 --rpc-url "$
 # plus the constructor args recorded in deployments/mainnet-aqua.json.
 ```
 
-The paused deployment, separately capped funding, Etherscan source
-verification, one-operation activation, and read-only binding-verification
-procedure is frozen in
-[`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). That procedure has now
-been executed on Ethereum mainnet (receipts above), **and the demo instance has
-since been retired**: settlement and funding are paused, the
-StataWETH reserve was withdrawn to the factor
-([`0xffcce6…4747`](https://etherscan.io/tx/0xffcce68f46bee5857a3b68219210a4c88a0f72e56a5c1954fdec9de7cdfb4747),
-[`0x434023…45cd`](https://etherscan.io/tx/0x43402367b7416ae16d042f68e9a3472f62e3bf6d199e6bb53ad9d68ad4f545cd))
-returning 0.005012537 WETH — the arithmetic remainder **plus Aave yield earned
-while the reserve stood ready**. The only open item is claiming unstETH #130880
-after Lido finalization. The retired instance cannot be reactivated — the
-immutable factor signer key was exposed, so it stays paused and unfunded
-permanently, and any future demo uses a fresh deployment with a fresh key.
-This remains unaudited hackathon software.
+The paused deployment, capped funding, Etherscan verification,
+single-operation activation, and read-only binding-verification procedure is
+frozen in [`docs/LIVE_ACTIVATION.md`](docs/LIVE_ACTIVATION.md). The active
+pre-alpha followed that procedure with the fresh addresses in the release
+manifest. A separate earlier proof deployment was retired after recovery and
+remains permanently paused; its receipts are retained only as historical
+evidence. This remains unaudited hackathon software.
 
 ## Uniswap payouts — be paid in the asset you choose
 

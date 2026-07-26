@@ -1,6 +1,14 @@
 # Mainnet micro-demo — locked objective
 
-> Status (2026-07-25, past-tense proof record): **Mainnet settlement proof
+> **Pre-alpha update (2026-07-26):** the fresh deployment in
+> [`deployments/mainnet-pre-alpha-001.json`](../deployments/mainnet-pre-alpha-001.json)
+> is active at [intentional.so](https://www.intentional.so). A browser-driven
+> sale transferred existing `unstETH #130880` to the fresh factor and paid the
+> seller exactly `0.0049875 WETH` in
+> [`0x36de5e1d…4aa9`](https://etherscan.io/tx/0x36de5e1d760959462a5c78ea9215b17a67d03666ee4dcb1ecd34c59851ed4aa9).
+> The productive reserve was then replenished to the original pilot capacity.
+>
+> Historical status (2026-07-25, past-tense proof record): **Mainnet settlement proof
 > completed. Demo contracts safely retired after reserve recovery, and cannot
 > be reactivated — the immutable signer key was exposed. Existing-unstETH
 > acquisition and the real HTTP firm-quote path are now implemented and
