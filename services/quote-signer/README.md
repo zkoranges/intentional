@@ -20,11 +20,23 @@ browser → Vercel /api/quote/lido (validation, secret header, no key)
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | liveness + effective config (no secrets) |
-| `POST` | `/quote` | `{seller, requestedStEth}` → signed envelope |
+| `POST` | `/quote` | `{seller, mode, requestedStEth? , requestId?, replaceNonce?}` → signed envelope |
 
 `POST /quote` requires the `x-signer-secret` header (constant-time compared).
 The response is the same envelope shape the fill path already consumes, so the
 contracts and the executor script are unchanged.
+
+Retry behavior is explicit:
+
+- An identical request returns the exact durable envelope (same nonce and
+  signature), including after a service restart.
+- A deliberate requote sends the active envelope's decimal nonce as
+  `replaceNonce`. The service revalidates chain state and signs the new
+  envelope with that **same nonce**. Old and new envelopes are therefore
+  mutually exclusive onchain: the first successful fill consumes the nonce.
+- A different request without a valid replacement returns
+  `409 SINGLE_FLIGHT` with `retryAfterSeconds`, `activeDeadlineUnix`, and
+  `canReplace`. It never silently discards an outstanding liability.
 
 ## Safety properties
 
@@ -34,10 +46,11 @@ contracts and the executor script are unchanged.
    measured reserve capacity, so a bug elsewhere in the service cannot issue
    an oversized quote. This bounds the **service**, not the key — see "Key
    handling" below.
-3. **Single-flight.** One serialized critical section covers the complete
-   sweep → validate → sign → durable-reserve sequence. Concurrent requests
-   cannot oversubscribe the reserve and hand a user a valid-looking quote that
-   reverts at fill time (`409 SINGLE_FLIGHT`).
+3. **Single-flight nonce.** One serialized critical section covers the
+   complete sweep → validate → sign → durable-reserve sequence, backed by a
+   SQLite unique-open-reservation constraint. Concurrent requests cannot
+   oversubscribe the reserve. Requotes preserve the active nonce, so replacing
+   a browser-abandoned envelope does not create a second fillable liability.
 4. **Short expiry.** Default 120s, far inside the kernel's 15-minute bound.
 5. **Fails closed** on: paused settlement, unsealed/misconfigured kernel or
    funding account, insufficient measured capacity, paused Lido queue, Lido
@@ -78,7 +91,7 @@ env $(grep -v '^#' services/quote-signer/.env | xargs) node services/quote-signe
 curl -s localhost:8791/health | jq
 curl -s -X POST localhost:8791/quote \
   -H 'content-type: application/json' -H "x-signer-secret: $SIGNER_SECRET" \
-  -d '{"seller":"0x…","requestedStEth":"5000000000000000"}' | jq
+  -d '{"seller":"0x…","mode":"originate","requestedStEth":"5000000000000000"}' | jq
 ```
 
 ## Deployment (shared VPS)

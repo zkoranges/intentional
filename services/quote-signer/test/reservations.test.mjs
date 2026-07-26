@@ -86,6 +86,63 @@ test("an identical request recovers the durable signed envelope", (t) => {
   );
 });
 
+test("a deliberate requote replaces the envelope but preserves the nonce", (t) => {
+  const { dir, path } = tempDbPath();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const first = new ReservationStore(path);
+  first.reserve(RESERVATION);
+  const replacement = {
+    ...RESERVATION,
+    requestId: 130881n,
+    claimAmountWei: 4_000_000_000_000_000n,
+    paymentWei: 3_990_000_000_000_000n,
+    envelope: {
+      ...RESERVATION.envelope,
+      quote: {
+        nonce: RESERVATION.nonce.toString(),
+        paymentAmount: "3990000000000000",
+      },
+      factorSignature: "0x5678",
+    },
+    deadlineUnix: NOW + 600n,
+    nowUnix: NOW + 3n,
+  };
+
+  assert.equal(first.replace(replacement), true);
+  assert.equal(first.active(NOW + 3n).length, 1, "replacement does not reserve twice");
+  first.close();
+
+  const restarted = new ReservationStore(path);
+  t.after(() => restarted.close());
+  const active = restarted.active(NOW + 3n);
+  assert.equal(active.length, 1);
+  assert.equal(active[0].nonce, RESERVATION.nonce, "the onchain mutual-exclusion nonce is stable");
+  assert.equal(active[0].requestId, replacement.requestId);
+  assert.equal(active[0].paymentWei, replacement.paymentWei);
+  assert.equal(active[0].deadlineUnix, replacement.deadlineUnix);
+  assert.deepEqual(active[0].envelope, replacement.envelope);
+});
+
+test("requote replacement requires the active nonce and the same seller", (t) => {
+  const { dir, path } = tempDbPath();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const store = new ReservationStore(path);
+  t.after(() => store.close());
+  store.reserve(RESERVATION);
+
+  assert.equal(store.replace({ ...RESERVATION, nonce: RESERVATION.nonce + 1n }), false);
+  assert.equal(
+    store.replace({
+      ...RESERVATION,
+      seller: "0xC0E4928B05b795E1F9349b25944986A61C8F12A0",
+    }),
+    false,
+  );
+  assert.deepEqual(store.active(NOW)[0].envelope, RESERVATION.envelope);
+});
+
 test("an active reservation blocks a second quote (the 409 condition)", async (t) => {
   const { dir, path } = tempDbPath();
   t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -153,6 +210,16 @@ test("an expired reservation falls away without a chain read", async (t) => {
   assert.equal(swept.released.length, 1);
   assert.equal(swept.released[0].reason, "expired");
   assert.equal(swept.active.length, 0);
+
+  const fresh = {
+    ...RESERVATION,
+    nonce: RESERVATION.nonce + 1n,
+    deadlineUnix: afterDeadline + 120n,
+    nowUnix: afterDeadline,
+  };
+  store.reserve(fresh);
+  assert.equal(store.active(afterDeadline).length, 1, "expiration admits an independent fresh quote");
+  assert.equal(store.active(afterDeadline)[0].nonce, fresh.nonce);
 });
 
 test("reserving the same nonce twice throws (primary key)", (t) => {
@@ -163,4 +230,26 @@ test("reserving the same nonce twice throws (primary key)", (t) => {
   t.after(() => store.close());
   store.reserve(RESERVATION);
   assert.throws(() => store.reserve(RESERVATION));
+});
+
+test("two store connections cannot create two open reservations", (t) => {
+  const { dir, path } = tempDbPath();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const first = new ReservationStore(path);
+  const second = new ReservationStore(path);
+  t.after(() => first.close());
+  t.after(() => second.close());
+
+  first.reserve(RESERVATION);
+  assert.throws(
+    () =>
+      second.reserve({
+        ...RESERVATION,
+        nonce: RESERVATION.nonce + 1n,
+      }),
+    /UNIQUE constraint failed/,
+    "the SQLite constraint backs up the in-process serial executor",
+  );
+  assert.equal(first.active(NOW).length, 1);
 });

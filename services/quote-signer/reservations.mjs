@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS reservations (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_reservations_open
   ON reservations (deadline_unix) WHERE released_unix IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reservations_single_open
+  ON reservations ((1)) WHERE released_unix IS NULL;
 `;
 
 function toRow(record) {
@@ -141,6 +143,57 @@ export class ReservationStore {
         Number(deadlineUnix),
         Number(nowUnix),
       );
+  }
+
+  /**
+   * Replace an open reservation in place while preserving its nonce.
+   *
+   * Every envelope ever signed with this nonce is mutually exclusive onchain:
+   * the first successful fill consumes the nonce. This lets a seller
+   * deliberately refresh or change an abandoned quote without creating two
+   * independently fillable claims against the same reserve capacity.
+   *
+   * The caller must prove knowledge of the current nonce and bind the
+   * replacement to the same seller. Returns false if the row is no longer
+   * open or either binding does not match.
+   */
+  replace({
+    nonce,
+    seller,
+    mode,
+    requestId,
+    claimAmountWei,
+    paymentWei,
+    envelope,
+    deadlineUnix,
+    nowUnix,
+  }) {
+    const result = this.#db
+      .prepare(
+        `UPDATE reservations
+            SET mode = ?,
+                request_id = ?,
+                requested_steth_wei = ?,
+                payment_wei = ?,
+                envelope_json = ?,
+                deadline_unix = ?,
+                created_unix = ?
+          WHERE nonce = ? AND seller = ? AND released_unix IS NULL`,
+      )
+      .run(
+        mode,
+        requestId === null ? null : requestId.toString(),
+        claimAmountWei.toString(),
+        paymentWei.toString(),
+        JSON.stringify(envelope, (_, value) =>
+          typeof value === "bigint" ? value.toString() : value,
+        ),
+        Number(deadlineUnix),
+        Number(nowUnix),
+        nonce.toString(),
+        seller,
+      );
+    return result.changes === 1;
   }
 
   /** Mark a reservation released. Returns true if a row changed. */

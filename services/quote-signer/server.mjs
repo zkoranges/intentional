@@ -10,10 +10,12 @@
 //   * shared-secret header, constant-time compared
 //   * HARD ceiling (MAX_QUOTE_WEI) independent of measured reserve capacity —
 //     a signing key can never authorize more than this per quote
-//   * single-flight: one outstanding unexpired quote at a time, so concurrent
-//     requests cannot oversubscribe the reserve and hand a user a quote that
-//     reverts at fill time. Reservations persist in SQLite across restarts
-//     and are released when the kernel reports the nonce consumed on-chain.
+//   * single-flight: one outstanding nonce at a time, so concurrent requests
+//     cannot oversubscribe the reserve and hand a user a quote that reverts at
+//     fill time. A seller can explicitly replace its active envelope while
+//     preserving that nonce: old and new envelopes remain mutually exclusive
+//     onchain. Reservations persist in SQLite across restarts and are released
+//     when the kernel reports the nonce consumed on-chain.
 //   * short expiry (default 120s) well inside the kernel's 15-minute bound
 //   * refuses retired / mismatched deployments as a first-class readiness
 //     state; fails closed on paused settlement, paused/bunker Lido, thin
@@ -336,10 +338,11 @@ async function readJsonBody(request, limitBytes = 8192) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
 }
 
-function quoteError(message, status, code) {
+function quoteError(message, status, code, details = {}) {
   const error = new Error(message);
   error.status = status;
   error.code = code;
+  error.details = details;
   return error;
 }
 
@@ -353,7 +356,7 @@ function requireAmountBounds(amount) {
   }
 }
 
-async function buildQuote({ seller, mode, requestedStEth, requestId }) {
+async function buildQuote({ seller, mode, requestedStEth, requestId, replaceNonce }) {
   // First-class refusal: a retired or mismatched deployment never gets as far
   // as pricing, reads, or signing.
   if (configRefusals.length > 0) {
@@ -384,6 +387,7 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
       reason: releasedReservation.reason,
     });
   }
+  let replacement = null;
   if (swept.active.length > 0) {
     const active = swept.active[0];
     const recovered = reservations.recover({
@@ -393,7 +397,7 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
       requestId: requestId ?? null,
       claimAmountWei: requestedStEth ?? null,
     });
-    if (recovered !== null) {
+    if (recovered !== null && replaceNonce === undefined) {
       await audit({
         event: "quote_reused",
         mode,
@@ -404,7 +408,36 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
       });
       return recovered;
     }
-    throw quoteError("another quote is currently outstanding; retry shortly", 409, "SINGLE_FLIGHT");
+
+    const retryAfterSeconds = Number(
+      active.deadlineUnix > BigInt(nowSeconds)
+        ? active.deadlineUnix - BigInt(nowSeconds)
+        : 0n,
+    );
+    const retry = {
+      retryAfterSeconds,
+      activeDeadlineUnix: active.deadlineUnix.toString(),
+    };
+    if (replaceNonce === undefined) {
+      throw quoteError(
+        "another quote is currently outstanding; retry after it expires or replace your active quote",
+        409,
+        "SINGLE_FLIGHT",
+        {
+          ...retry,
+          canReplace: active.seller === seller,
+        },
+      );
+    }
+    if (active.nonce !== replaceNonce || active.seller !== seller) {
+      throw quoteError(
+        "the active quote does not match this seller and replacement nonce",
+        409,
+        "REPLACEMENT_MISMATCH",
+        retry,
+      );
+    }
+    replacement = active;
   }
 
   if (seller === account.address) {
@@ -681,17 +714,35 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
     );
   }
 
+  if (replacement !== null && replacement.nonce < nonceFloor) {
+    // Raising the factor's nonce floor already invalidated every old envelope
+    // sharing this nonce. Release the stale row and create an independent
+    // fresh nonce instead of preserving a nonce the kernel will reject.
+    reservations.release(replacement.nonce, "below-nonce-floor", nowSeconds);
+    await audit({
+      event: "reservation_released",
+      nonce: replacement.nonce.toString(),
+      reason: "below-nonce-floor",
+    });
+    replacement = null;
+  }
+
   const deadline = latestBlock.timestamp + QUOTE_TTL_SECONDS;
-  let nonce = BigInt(`0x${randomBytes(16).toString("hex")}`);
-  if (nonce < nonceFloor) nonce += nonceFloor;
-  const nonceConsumed = await client.readContract({
-    address: KERNEL,
-    abi: kernelAbi,
-    functionName: "nonceUsed",
-    args: [nonce],
-  });
-  if (nonceConsumed) {
-    throw quoteError("nonce collision; retry", 503, "NONCE_COLLISION");
+  let nonce;
+  if (replacement !== null) {
+    nonce = replacement.nonce;
+  } else {
+    nonce = BigInt(`0x${randomBytes(16).toString("hex")}`);
+    if (nonce < nonceFloor) nonce += nonceFloor;
+    const nonceConsumed = await client.readContract({
+      address: KERNEL,
+      abi: kernelAbi,
+      functionName: "nonceUsed",
+      args: [nonce],
+    });
+    if (nonceConsumed) {
+      throw quoteError("nonce collision; retry", 503, "NONCE_COLLISION");
+    }
   }
 
   const quote = {
@@ -761,7 +812,7 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
   // Durable single-flight: the reservation and its signed response must
   // survive a restart. An identical retry can therefore recover the exact
   // same quote instead of trapping the user behind a 409 until expiry.
-  reservations.reserve({
+  const reservation = {
     nonce,
     seller,
     mode,
@@ -771,10 +822,22 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
     envelope,
     deadlineUnix: deadline,
     nowUnix: nowSeconds,
-  });
+  };
+  if (replacement === null) {
+    reservations.reserve(reservation);
+  } else if (!reservations.replace(reservation)) {
+    // This should be unreachable inside the serialized request path. Failing
+    // closed is preferable to returning a signature the durable store did not
+    // record.
+    throw quoteError(
+      "the active quote changed while it was being replaced; retry",
+      409,
+      "REPLACEMENT_RACE",
+    );
+  }
 
   await audit({
-    event: "quote_signed",
+    event: replacement === null ? "quote_signed" : "quote_replaced",
     mode,
     seller,
     requestId: requestId?.toString() ?? null,
@@ -783,6 +846,7 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
     spreadBps: SPREAD_BPS.toString(),
     nonce: nonce.toString(),
     deadline: deadline.toString(),
+    previousDeadline: replacement?.deadlineUnix.toString() ?? null,
     queueUnfinalizedStEthWei: unfinalizedStEth.toString(),
     queueUnfinalizedRequests: unfinalizedRequests.toString(),
   });
@@ -851,6 +915,15 @@ const server = createServer(async (request, response) => {
   ) {
     return json(response, 400, { error: "requestId must be a non-zero unsigned integer string" });
   }
+  if (
+    body.replaceNonce !== undefined
+    && (typeof body.replaceNonce !== "string" || !/^\d+$/.test(body.replaceNonce))
+  ) {
+    return json(response, 400, {
+      error: "replaceNonce must be an unsigned integer string",
+      code: "INVALID_REPLACEMENT_NONCE",
+    });
+  }
 
   try {
     // Serialize the complete sweep -> validate -> sign -> durable-reserve
@@ -863,6 +936,7 @@ const server = createServer(async (request, response) => {
         mode: body.mode,
         requestedStEth: body.mode === "originate" ? BigInt(body.requestedStEth) : undefined,
         requestId: body.mode === "existing-unsteth" ? BigInt(body.requestId) : undefined,
+        replaceNonce: body.replaceNonce === undefined ? undefined : BigInt(body.replaceNonce),
       }),
     );
     return json(response, 200, envelope);
@@ -882,6 +956,7 @@ const server = createServer(async (request, response) => {
     return json(response, status, {
       error: status === 500 ? "quote service error" : error.message,
       code: error.code ?? "INTERNAL",
+      ...(status === 500 ? {} : error.details),
     });
   }
 });
