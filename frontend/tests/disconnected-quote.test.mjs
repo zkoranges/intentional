@@ -5,19 +5,26 @@ import test from "node:test";
 
 const projectRoot = new URL("../", import.meta.url);
 
-test("the hero makes the stETH, unstETH, and direct-Lido source choices explicit", async () => {
+test("the hero has two routes and an explicit asset selector inside Sell now", async () => {
   const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+  const tabsStart = page.indexOf('<div className="modeTabs"');
+  const tabsEnd = page.indexOf("</div>", tabsStart);
+  const routeTabs = page.slice(tabsStart, tabsEnd);
 
-  assert.match(
-    page,
-    /type ExitMode = (?=[^;]*"instant")(?=[^;]*"claim")(?=[^;]*"queue")[^;]+;/,
+  assert.ok(tabsStart >= 0 && tabsEnd > tabsStart, "route tabs are missing");
+  assert.equal(
+    [...routeTabs.matchAll(/role="tab"(?!list)/g)].length,
+    2,
+    "the top level must contain exactly Sell now and Wait & claim",
   );
-  assert.match(page, /onClick=\{\(\) => selectMode\("instant"\)\}/);
-  assert.match(page, /onClick=\{\(\) => selectMode\("claim"\)\}/);
-  assert.match(page, /onClick=\{\(\) => selectMode\("queue"\)\}/);
-  assert.match(page, />\s*Sell stETH\s*</);
-  assert.match(page, />\s*Sell unstETH\s*</);
-  assert.match(page, />\s*Wait & claim\s*</);
+  assert.match(routeTabs, />\s*Sell now\s*</);
+  assert.match(routeTabs, />\s*Wait & claim\s*</);
+  assert.doesNotMatch(routeTabs, />\s*Sell stETH\s*</);
+  assert.doesNotMatch(routeTabs, />\s*Sell unstETH\s*</);
+
+  assert.match(page, /<select[\s\S]{0,300}aria-label="Asset to sell"/);
+  assert.match(page, /<option value="steth">\s*stETH\s*<\/option>/i);
+  assert.match(page, /<option value="unsteth">\s*unstETH\s*<\/option>/i);
   assert.match(
     page,
     /snapshot\?\.requests\.filter\(\(request\) => !request\.isClaimed\)/,
@@ -54,8 +61,8 @@ test("the built product surface contains the owned-claim flow and no synthetic q
   for (const expected of [
     "Owned unstETH claim",
     "Sell an unstETH claim",
-    "Sell stETH",
-    "Sell unstETH",
+    "Sell now",
+    "Asset to sell",
     "Wait & claim",
     "0.0005 to 0.005 stETH",
     "Get firm offer",

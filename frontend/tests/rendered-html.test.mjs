@@ -31,9 +31,9 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Lido",
     "Ether.fi",
     "ERC-7540",
-    "Sell stETH",
-    "Sell unstETH",
+    "Sell now",
     "Wait & claim",
+    "Asset to sell",
     "Owned unstETH claim",
     "No unstETH claim found",
     "No estimate shown",
@@ -70,29 +70,30 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
   assert.doesNotMatch(page, /SkeletonPreview|codex-preview/);
   assert.doesNotMatch(
     page,
-    /Sell now|Finding your quote|Indicative · no wallet needed|requestLidoQuote/,
+    /Finding your quote|Indicative · no wallet needed|requestLidoQuote/,
   );
 });
 
-test("the three Lido routes have distinct source assets and settlement semantics", async () => {
+test("Sell now selects a source asset while Wait & claim remains a separate route", async () => {
   const page = await readFile(new URL("app/page.tsx", projectRoot), "utf8");
+  const tabsStart = page.indexOf('<div className="modeTabs"');
+  const tabsEnd = page.indexOf("</div>", tabsStart);
+  const routeTabs = page.slice(tabsStart, tabsEnd);
 
-  assert.match(
-    page,
-    /type ExitMode = (?=[^;]*"instant")(?=[^;]*"claim")(?=[^;]*"queue")[^;]+;/,
+  assert.ok(tabsStart >= 0 && tabsEnd > tabsStart, "route tabs are missing");
+  assert.equal(
+    [...routeTabs.matchAll(/role="tab"(?!list)/g)].length,
+    2,
+    "source assets belong in the Sell now selector, not top-level tabs",
   );
-  assert.match(
-    page,
-    /onClick=\{\(\) => selectMode\("instant"\)\}[\s\S]{0,180}>\s*Sell stETH\s*</,
-  );
-  assert.match(
-    page,
-    /onClick=\{\(\) => selectMode\("claim"\)\}[\s\S]{0,180}>\s*Sell unstETH\s*</,
-  );
-  assert.match(
-    page,
-    /onClick=\{\(\) => selectMode\("queue"\)\}[\s\S]{0,180}>\s*Wait & claim\s*</,
-  );
+  assert.match(routeTabs, />\s*Sell now\s*</);
+  assert.match(routeTabs, />\s*Wait & claim\s*</);
+  assert.doesNotMatch(routeTabs, />\s*Sell stETH\s*</);
+  assert.doesNotMatch(routeTabs, />\s*Sell unstETH\s*</);
+
+  assert.match(page, /aria-label="Asset to sell"/);
+  assert.match(page, /<option value="steth">\s*stETH\s*<\/option>/i);
+  assert.match(page, /<option value="unsteth">\s*unstETH\s*<\/option>/i);
 
   assert.match(page, /Lido · stETH → WETH/);
   assert.match(page, /Lido · unstETH → WETH/);
@@ -461,9 +462,9 @@ test("the production build contains the dark responsive withdrawal interface", a
   assert.match(pageBundle, /Connect wallet/);
   assert.match(pageBundle, /eth_requestAccounts/);
   assert.match(pageBundle, /Request withdrawal/);
-  assert.match(pageBundle, /Sell stETH/);
-  assert.match(pageBundle, /Sell unstETH/);
+  assert.match(pageBundle, /Sell now/);
   assert.match(pageBundle, /Wait & claim/);
+  assert.match(pageBundle, /Asset to sell/);
   assert.match(pageBundle, /Owned unstETH claim/);
   assert.match(pageBundle, /Get firm offer/);
   assert.match(pageBundle, /Approve unstETH/);

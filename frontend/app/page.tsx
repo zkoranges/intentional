@@ -35,7 +35,8 @@ import {
   type WithdrawalStatus,
 } from "../lib/ethereum";
 type ActionState = "idle" | "connecting" | "reading" | "signing" | "mining";
-type ExitMode = "instant" | "claim" | "queue";
+type ExitMode = "sell" | "queue";
+type SourceAsset = "steth" | "unsteth";
 type NavSection = "markets" | "positions" | "faq";
 
 type CompletedAction = {
@@ -180,7 +181,8 @@ export default function Home() {
   const [snapshot, setSnapshot] = useState<LiveWalletSnapshot | null>(null);
   const [action, setAction] = useState<ActionState>("idle");
   const [status, setStatus] = useState<string | null>(null);
-  const [mode, setMode] = useState<ExitMode>("claim");
+  const [mode, setMode] = useState<ExitMode>("sell");
+  const [sourceAsset, setSourceAsset] = useState<SourceAsset>("unsteth");
   const [selectedClaimId, setSelectedClaimId] = useState<bigint | null>(null);
   const [amountInput, setAmountInput] = useState("0.00");
   const [actions, setActions] = useState<CompletedAction[]>([]);
@@ -818,15 +820,25 @@ export default function Home() {
     setMode(nextMode);
     setClaimQuoteCheck(null);
     setStatus(
-      nextMode === "instant"
+      nextMode === "sell"
         ? marketLive
-          ? "Enter stETH to request a signed firm offer."
-          : marketStatus.detail
-        : nextMode === "claim"
-        ? marketLive
-          ? "Choose an owned unstETH claim to request a firm offer."
+          ? sourceAsset === "steth"
+            ? "Enter stETH to request a signed firm offer."
+            : "Choose an owned unstETH claim to request a firm offer."
           : marketStatus.detail
         : "Use Lido directly and keep the withdrawal claim in your wallet.",
+    );
+  }
+
+  function selectSourceAsset(nextAsset: SourceAsset) {
+    setSourceAsset(nextAsset);
+    setClaimQuoteCheck(null);
+    setStatus(
+      marketLive
+        ? nextAsset === "steth"
+          ? "Enter stETH to request a signed firm offer."
+          : "Choose an owned unstETH claim to request a firm offer."
+        : marketStatus.detail,
     );
   }
 
@@ -970,25 +982,25 @@ export default function Home() {
           <div className="cardHeader">
             <div>
               <span className="cardEyebrow">
-                {mode === "instant"
-                  ? "Lido · stETH → WETH"
-                  : mode === "claim"
-                    ? "Lido · unstETH → WETH"
-                    : "Lido · stETH → unstETH"}
+                {mode === "sell"
+                  ? sourceAsset === "steth"
+                    ? "Lido · stETH → WETH"
+                    : "Lido · unstETH → WETH"
+                  : "Lido · stETH → unstETH"}
               </span>
               <h2>
-                {mode === "instant"
-                  ? "Sell stETH now"
-                  : mode === "claim"
-                    ? "Sell an unstETH claim"
-                    : "Withdraw through Lido"}
+                {mode === "sell"
+                  ? sourceAsset === "steth"
+                    ? "Sell stETH now"
+                    : "Sell an unstETH claim"
+                  : "Withdraw through Lido"}
               </h2>
               <p>
-                {mode === "instant"
-                  ? "Turn stETH into WETH while the buyer takes the Lido wait."
-                  : mode === "claim"
-                    ? "Transfer an owned withdrawal NFT and get paid now."
-                    : "Keep the withdrawal claim in your wallet."}
+                {mode === "sell"
+                  ? sourceAsset === "steth"
+                    ? "Turn stETH into WETH while the buyer takes the Lido wait."
+                    : "Transfer an owned withdrawal NFT and get paid now."
+                  : "Keep the withdrawal claim in your wallet."}
               </p>
             </div>
             <a className="helpLink" href="#faq" aria-label="Learn about exits">
@@ -999,19 +1011,11 @@ export default function Home() {
           <div className="modeTabs" role="tablist" aria-label="Exit route">
             <button
               role="tab"
-              aria-selected={mode === "instant"}
-              className={mode === "instant" ? "selected" : ""}
-              onClick={() => selectMode("instant")}
+              aria-selected={mode === "sell"}
+              className={mode === "sell" ? "selected" : ""}
+              onClick={() => selectMode("sell")}
             >
-              Sell stETH
-            </button>
-            <button
-              role="tab"
-              aria-selected={mode === "claim"}
-              className={mode === "claim" ? "selected" : ""}
-              onClick={() => selectMode("claim")}
-            >
-              Sell unstETH
+              Sell now
             </button>
             <button
               role="tab"
@@ -1024,15 +1028,16 @@ export default function Home() {
           </div>
 
           <p className="modeNote">
-            {mode === "instant"
-              ? "Sell stETH for a signed WETH amount. Intentional creates the canonical withdrawal claim directly for the liquidity provider."
-              : mode === "claim"
-                ? "Choose an unstETH NFT you own. The claim and WETH payment move atomically. Pre-alpha firm offers are capped to claims from 0.0005 to 0.005 stETH."
-                : "Join the official Lido queue and claim ETH after finalization."}
+            {mode === "sell"
+              ? sourceAsset === "steth"
+                ? "Sell stETH for a signed WETH amount. Intentional creates the canonical withdrawal claim directly for the liquidity provider."
+                : "Choose an unstETH NFT you own. The claim and WETH payment move atomically. Pre-alpha firm offers are capped to claims from 0.0005 to 0.005 stETH."
+              : "Join the official Lido queue and claim ETH after finalization."}
           </p>
 
-          {mode === "instant" ? (
-            <>
+          {mode === "sell" ? (
+            sourceAsset === "steth" ? (
+              <>
               <div className="tokenPanel inputPanel">
                 <div className="tokenPanelLabel">
                   <span>You sell</span>
@@ -1054,7 +1059,7 @@ export default function Home() {
                     aria-label="stETH amount"
                     placeholder="0.00"
                   />
-                  <div className="tokenSelect static">
+                  <label className="tokenSelect assetSelect">
                     <span className="tokenIcon stethIcon">
                       <img
                         src="/icons/steth.png"
@@ -1063,8 +1068,18 @@ export default function Home() {
                         height={18}
                       />
                     </span>
-                    stETH
-                  </div>
+                    <select
+                      aria-label="Asset to sell"
+                      value={sourceAsset}
+                      onChange={(event) =>
+                        selectSourceAsset(event.target.value as SourceAsset)
+                      }
+                      disabled={busy}
+                    >
+                      <option value="steth">stETH</option>
+                      <option value="unsteth">unstETH</option>
+                    </select>
+                  </label>
                 </div>
                 <div className="amountActions" aria-label="Amount shortcuts">
                   <button
@@ -1209,9 +1224,9 @@ export default function Home() {
                   </button>
                 )}
               </div>
-            </>
-          ) : mode === "claim" ? (
-            <>
+              </>
+            ) : (
+              <>
               <div className="tokenPanel inputPanel">
                 <div className="tokenPanelLabel">
                   <span>You sell</span>
@@ -1248,7 +1263,7 @@ export default function Home() {
                       <option value="">No unstETH claim found</option>
                     )}
                   </select>
-                  <div className="tokenSelect static">
+                  <label className="tokenSelect assetSelect">
                     <span className="tokenIcon nftIcon">
                       <img
                         src="/icons/unsteth.svg"
@@ -1257,8 +1272,18 @@ export default function Home() {
                         height={18}
                       />
                     </span>
-                    unstETH
-                  </div>
+                    <select
+                      aria-label="Asset to sell"
+                      value={sourceAsset}
+                      onChange={(event) =>
+                        selectSourceAsset(event.target.value as SourceAsset)
+                      }
+                      disabled={busy}
+                    >
+                      <option value="steth">stETH</option>
+                      <option value="unsteth">unstETH</option>
+                    </select>
+                  </label>
                 </div>
               </div>
 
@@ -1398,7 +1423,8 @@ export default function Home() {
                   </button>
                 )}
               </div>
-            </>
+              </>
+            )
           ) : (
             <>
               <div className="tokenPanel inputPanel">

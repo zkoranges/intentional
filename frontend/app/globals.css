@@ -603,7 +603,7 @@ main {
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -737,6 +737,20 @@ main {
 
 .tokenSelect.static {
   cursor: default;
+}
+
+.tokenSelect.assetSelect {
+  cursor: pointer;
+}
+
+.tokenSelect.assetSelect select {
+  max-width: 98px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
 }
 
 .tokenIcon {
