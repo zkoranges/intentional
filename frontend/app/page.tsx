@@ -89,7 +89,7 @@ const MARKETS = [
     queueTime: "~10 days",
     queueDetail:
       "Typical queued withdrawal; instant redemption may be available when Ether.fi has sufficient liquidity",
-    status: "Next",
+    status: "Soon",
     active: false,
     icon: "/icons/etherfi.png",
     iconAlt: "Ether.fi",
@@ -102,7 +102,7 @@ const MARKETS = [
     payout: "Vault asset",
     queueTime: "Vault-specific",
     queueDetail: "Each asynchronous vault defines its own settlement schedule",
-    status: "Planned",
+    status: "Soon",
     active: false,
     icon: "/icons/vault.svg",
     iconAlt: "Vault",
