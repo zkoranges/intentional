@@ -716,6 +716,12 @@ main {
   color: var(--muted);
 }
 
+.claimSelect.empty {
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: 0;
+}
+
 .tokenRow input::placeholder {
   color: #5f5f68;
 }

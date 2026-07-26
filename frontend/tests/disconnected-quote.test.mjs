@@ -34,7 +34,7 @@ test("the hero has two routes and an explicit asset selector inside Sell now", a
     /snapshot\?\.requests\.filter\(\(request\) => !request\.isClaimed\)/,
   );
   assert.match(page, /aria-label="Owned unstETH claim"/);
-  assert.match(page, /No unstETH claim found/);
+  assert.match(page, /No claims · Start a withdrawal/);
   assert.match(page, /Sell an unstETH claim/);
   assert.match(page, /The claim and WETH payment move atomically/);
   assert.match(page, /Signed firm offer/);

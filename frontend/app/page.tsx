@@ -1702,7 +1702,7 @@ export default function Home() {
                 </div>
                 <div className="tokenRow">
                   <select
-                    className="claimSelect"
+                    className={`claimSelect${selectedClaim ? "" : " empty"}`}
                     aria-label="Owned unstETH claim"
                     disabled={!selectedClaim || busy}
                     value={selectedClaim?.requestId.toString() ?? ""}
@@ -1724,7 +1724,7 @@ export default function Home() {
                         </option>
                       ))
                     ) : (
-                      <option value="">No unstETH claim found</option>
+                      <option value="">No claims · Start a withdrawal</option>
                     )}
                   </select>
                   <AssetSelect

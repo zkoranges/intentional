@@ -35,7 +35,7 @@ test("the shipped page is a wallet-ready withdrawal product", async () => {
     "Wait & claim",
     "Asset to sell",
     "Owned unstETH claim",
-    "No unstETH claim found",
+    "No claims · Start a withdrawal",
     "No estimate shown",
     "Claim notional",
     "Factoring discount",
