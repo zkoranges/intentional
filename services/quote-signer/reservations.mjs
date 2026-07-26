@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS reservations (
   request_id          TEXT,
   requested_steth_wei TEXT NOT NULL,
   payment_wei         TEXT NOT NULL,
+  envelope_json       TEXT,
   deadline_unix       INTEGER NOT NULL,
   created_unix        INTEGER NOT NULL,
   released_unix       INTEGER,
@@ -46,6 +47,7 @@ function toRow(record) {
     requestId: record.request_id === null ? null : BigInt(record.request_id),
     claimAmountWei: BigInt(record.requested_steth_wei),
     paymentWei: BigInt(record.payment_wei),
+    envelope: record.envelope_json === null ? null : JSON.parse(record.envelope_json),
     deadlineUnix: BigInt(record.deadline_unix),
     createdUnix: BigInt(record.created_unix),
   };
@@ -70,6 +72,9 @@ export class ReservationStore {
     if (!columns.has("request_id")) {
       this.#db.exec("ALTER TABLE reservations ADD COLUMN request_id TEXT;");
     }
+    if (!columns.has("envelope_json")) {
+      this.#db.exec("ALTER TABLE reservations ADD COLUMN envelope_json TEXT;");
+    }
   }
 
   /** Open, unexpired reservations — the ones that block a new quote. */
@@ -82,13 +87,44 @@ export class ReservationStore {
     return rows.map(toRow);
   }
 
+  /**
+   * Return the durable signed response for an identical active request.
+   * Different requests remain blocked by the global single-flight guard.
+   */
+  recover({ nowUnix, seller, mode, requestId, claimAmountWei }) {
+    const active = this.active(nowUnix);
+    if (active.length !== 1) return null;
+    const reservation = active[0];
+    const sameClaim =
+      mode === "existing-unsteth"
+        ? reservation.requestId === requestId
+        : reservation.requestId === null &&
+          reservation.claimAmountWei === claimAmountWei;
+    return reservation.envelope !== null &&
+      reservation.seller === seller &&
+      reservation.mode === mode &&
+      sameClaim
+      ? reservation.envelope
+      : null;
+  }
+
   /** Record a freshly signed quote. Throws on nonce collision (primary key). */
-  reserve({ nonce, seller, mode, requestId, claimAmountWei, paymentWei, deadlineUnix, nowUnix }) {
+  reserve({
+    nonce,
+    seller,
+    mode,
+    requestId,
+    claimAmountWei,
+    paymentWei,
+    envelope,
+    deadlineUnix,
+    nowUnix,
+  }) {
     this.#db
       .prepare(
         `INSERT INTO reservations
-           (nonce, seller, mode, request_id, requested_steth_wei, payment_wei, deadline_unix, created_unix)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           (nonce, seller, mode, request_id, requested_steth_wei, payment_wei, envelope_json, deadline_unix, created_unix)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         nonce.toString(),
@@ -97,6 +133,11 @@ export class ReservationStore {
         requestId === null ? null : requestId.toString(),
         claimAmountWei.toString(),
         paymentWei.toString(),
+        envelope === undefined
+          ? null
+          : JSON.stringify(envelope, (_, value) =>
+              typeof value === "bigint" ? value.toString() : value,
+            ),
         Number(deadlineUnix),
         Number(nowUnix),
       );

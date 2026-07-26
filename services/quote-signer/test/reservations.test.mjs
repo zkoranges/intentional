@@ -20,6 +20,15 @@ const RESERVATION = {
   requestId: 130880n,
   claimAmountWei: 5000000000000000n,
   paymentWei: 4987500000000000n,
+  envelope: {
+    version: "reservoir-v2-lido-1",
+    mode: "existing-unsteth",
+    quote: {
+      nonce: "123456789012345678901234567890",
+      paymentAmount: "4987500000000000",
+    },
+    factorSignature: "0x1234",
+  },
   deadlineUnix: NOW + 120n,
   nowUnix: NOW,
 };
@@ -42,7 +51,39 @@ test("a reservation survives a restart (reopen the same database file)", (t) => 
   assert.equal(active[0].requestId, RESERVATION.requestId);
   assert.equal(active[0].claimAmountWei, RESERVATION.claimAmountWei);
   assert.equal(active[0].paymentWei, RESERVATION.paymentWei);
+  assert.deepEqual(active[0].envelope, RESERVATION.envelope);
   second.close();
+});
+
+test("an identical request recovers the durable signed envelope", (t) => {
+  const { dir, path } = tempDbPath();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+
+  const store = new ReservationStore(path);
+  t.after(() => store.close());
+  store.reserve(RESERVATION);
+
+  assert.deepEqual(
+    store.recover({
+      nowUnix: NOW,
+      seller: RESERVATION.seller,
+      mode: RESERVATION.mode,
+      requestId: RESERVATION.requestId,
+      claimAmountWei: null,
+    }),
+    RESERVATION.envelope,
+  );
+  assert.equal(
+    store.recover({
+      nowUnix: NOW,
+      seller: RESERVATION.seller,
+      mode: RESERVATION.mode,
+      requestId: RESERVATION.requestId + 1n,
+      claimAmountWei: null,
+    }),
+    null,
+    "a different claim must remain blocked by single-flight",
+  );
 });
 
 test("an active reservation blocks a second quote (the 409 condition)", async (t) => {

@@ -385,6 +385,25 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
     });
   }
   if (swept.active.length > 0) {
+    const active = swept.active[0];
+    const recovered = reservations.recover({
+      nowUnix: nowSeconds,
+      seller,
+      mode,
+      requestId: requestId ?? null,
+      claimAmountWei: requestedStEth ?? null,
+    });
+    if (recovered !== null) {
+      await audit({
+        event: "quote_reused",
+        mode,
+        seller,
+        requestId: requestId?.toString() ?? null,
+        nonce: active.nonce.toString(),
+        deadline: active.deadlineUnix.toString(),
+      });
+      return recovered;
+    }
     throw quoteError("another quote is currently outstanding; retry shortly", 409, "SINGLE_FLIGHT");
   }
 
@@ -715,34 +734,7 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
     message: quote,
   });
 
-  // Durable single-flight: the reservation must survive a restart, so it is
-  // recorded before the envelope leaves the process.
-  reservations.reserve({
-    nonce,
-    seller,
-    mode,
-    requestId: requestId ?? null,
-    claimAmountWei: claimAmount,
-    paymentWei: paymentAmount,
-    deadlineUnix: deadline,
-    nowUnix: nowSeconds,
-  });
-
-  await audit({
-    event: "quote_signed",
-    mode,
-    seller,
-    requestId: requestId?.toString() ?? null,
-    claimAmountWei: claimAmount.toString(),
-    paymentAmount: paymentAmount.toString(),
-    spreadBps: SPREAD_BPS.toString(),
-    nonce: nonce.toString(),
-    deadline: deadline.toString(),
-    queueUnfinalizedStEthWei: unfinalizedStEth.toString(),
-    queueUnfinalizedRequests: unfinalizedRequests.toString(),
-  });
-
-  return {
+  const envelope = {
     version: "reservoir-v2-lido-1",
     mode,
     chainId: EXPECTED_CHAIN_ID,
@@ -765,6 +757,37 @@ async function buildQuote({ seller, mode, requestedStEth, requestId }) {
       ...(AQUA_PROOF_TX ? { aquaIntentProofTx: AQUA_PROOF_TX } : {}),
     },
   };
+
+  // Durable single-flight: the reservation and its signed response must
+  // survive a restart. An identical retry can therefore recover the exact
+  // same quote instead of trapping the user behind a 409 until expiry.
+  reservations.reserve({
+    nonce,
+    seller,
+    mode,
+    requestId: requestId ?? null,
+    claimAmountWei: claimAmount,
+    paymentWei: paymentAmount,
+    envelope,
+    deadlineUnix: deadline,
+    nowUnix: nowSeconds,
+  });
+
+  await audit({
+    event: "quote_signed",
+    mode,
+    seller,
+    requestId: requestId?.toString() ?? null,
+    claimAmountWei: claimAmount.toString(),
+    paymentAmount: paymentAmount.toString(),
+    spreadBps: SPREAD_BPS.toString(),
+    nonce: nonce.toString(),
+    deadline: deadline.toString(),
+    queueUnfinalizedStEthWei: unfinalizedStEth.toString(),
+    queueUnfinalizedRequests: unfinalizedRequests.toString(),
+  });
+
+  return envelope;
 }
 
 const server = createServer(async (request, response) => {
