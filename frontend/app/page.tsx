@@ -853,6 +853,13 @@ export default function Home() {
       <div className="gavelBackdrop" aria-hidden="true" />
       <header className="appHeader">
         <a className="brand" href="#top" aria-label="Intentional home">
+          <img
+            className="brandMark"
+            src="/icons/intentional-mark.svg"
+            alt=""
+            width="28"
+            height="28"
+          />
           <strong className="brandWordmark">
             intentional<span className="wordmarkDot">.</span>
             <span className="wordmarkTld">so</span>

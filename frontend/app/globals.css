@@ -117,8 +117,15 @@ a {
   display: inline-flex;
   width: fit-content;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   text-decoration: none;
+}
+
+.brandMark {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: block;
 }
 
 .brandWordmark {
